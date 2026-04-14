@@ -1,14 +1,22 @@
-# Financeiro
+# FINANCEIRO
 
-Core financeiro desacoplado do ecossistema.
+CORE FINANCEIRO DESACOPLADO DO ECOSSISTEMA ESCOLAR.
 
-Estrutura principal:
+## OBJETIVO
+
+REPOSITÓRIO OFICIAL DO MÓDULO FINANCEIRO, COM API E PAINEL PRÓPRIOS, INDEPENDENTES DA ESCOLA.
+
+## ESTRUTURA
 
 - `backend`: API financeira em `localhost:3002`
 - `frontend`: painel financeiro em `localhost:3003`
 
-Comandos principais:
+## COMANDOS PRINCIPAIS
 
 - `npm run setup`
 - `npm run dev`
 - `npm run build`
+
+## OBSERVAÇÃO
+
+O PROJETO FOI INICIADO COMO REPOSITÓRIO PRÓPRIO PARA EVOLUIR SEM MISTURAR HISTÓRICO COM A ESCOLA.
