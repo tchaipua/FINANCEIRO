@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                     String                  @id @default(uuid())
+  sourceSystem           String
+  sourceTenantId         String
+  name                   String
+  document               String?
+  status                 String                  @default("ACTIVE")
+  createdAt              DateTime                @default(now())
+  createdBy              String?
+  updatedAt              DateTime                @updatedAt
+  updatedBy              String?
+  canceledAt             DateTime?
+  canceledBy             String?
+  parties                Party[]
+  receivableBatches      ReceivableBatch[]
+  receivableTitles       ReceivableTitle[]
+  receivableInstallments ReceivableInstallment[]
+  cashSessions           CashSession[]
+  cashMovements          CashMovement[]
+  settlements            InstallmentSettlement[]
+
+  @@unique([sourceSystem, sourceTenantId])
+  @@index([name])
+  @@map("companies")
+}
+
+model Party {
+  id                 String    @id @default(uuid())
+  companyId          String
+  externalEntityType String
+  externalEntityId   String
+  name               String
+  document           String?
+  email              String?
+  phone              String?
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+  updatedBy          String?
+  canceledAt         DateTime?
+  canceledBy         String?
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  receivableTitles ReceivableTitle[]
+
+  @@unique([companyId, externalEntityType, externalEntityId])
+  @@index([companyId, name])
+  @@map("parties")
+}
+
+model ReceivableBatch {
+  id               String    @id @default(uuid())
+  companyId        String
+  sourceSystem     String
+  sourceTenantId   String
+  sourceBatchType  String
+  sourceBatchId    String
+  referenceDate    DateTime?
+  status           String    @default("PROCESSED")
+  itemCount        Int       @default(0)
+  processedCount   Int       @default(0)
+  duplicateCount   Int       @default(0)
+  errorCount       Int       @default(0)
+  payloadSnapshot  String?
+  metadataJson     String?
+  skippedItemsJson String?
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
+
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  receivableTitles       ReceivableTitle[]
+  receivableInstallments ReceivableInstallment[]
+
+  @@unique([companyId, sourceBatchId])
+  @@index([companyId, createdAt])
+  @@index([sourceSystem, sourceTenantId])
+  @@map("receivable_batches")
+}
+
+model ReceivableTitle {
+  id                    String    @id @default(uuid())
+  companyId             String
+  batchId               String
+  payerPartyId          String?
+  sourceEntityType      String
+  sourceEntityId        String
+  sourceEntityName      String?
+  classLabel            String?
+  businessKey           String
+  description           String
+  categoryCode          String?
+  totalAmount           Float     @default(0)
+  payerNameSnapshot     String
+  payerDocumentSnapshot String?
+  payerEmailSnapshot    String?
+  payerPhoneSnapshot    String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch        ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payerParty   Party?                  @relation(fields: [payerPartyId], references: [id], onDelete: SetNull)
+  installments ReceivableInstallment[]
+
+  @@unique([companyId, businessKey])
+  @@index([companyId, sourceEntityType, sourceEntityId])
+  @@index([batchId])
+  @@map("receivable_titles")
+}
+
+model ReceivableInstallment {
+  id                    String    @id @default(uuid())
+  companyId             String
+  batchId               String
+  titleId               String
+  sourceInstallmentKey  String
+  installmentNumber     Int
+  installmentCount      Int
+  dueDate               DateTime
+  amount                Float
+  openAmount            Float
+  paidAmount            Float     @default(0)
+  status                String    @default("OPEN")
+  settlementMethod      String?
+  settledAt             DateTime?
+  descriptionSnapshot   String
+  payerNameSnapshot     String
+  payerDocumentSnapshot String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch       ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  title       ReceivableTitle         @relation(fields: [titleId], references: [id], onDelete: Restrict)
+  settlements InstallmentSettlement[]
+
+  @@unique([companyId, sourceInstallmentKey])
+  @@index([companyId, status, dueDate])
+  @@index([titleId])
+  @@map("receivable_installments")
+}
+
+model CashSession {
+  id                    String    @id @default(uuid())
+  companyId             String
+  sourceSystem          String
+  sourceTenantId        String
+  cashierUserId         String
+  cashierDisplayName    String
+  status                String    @default("OPEN")
+  openingAmount         Float     @default(0)
+  totalReceivedAmount   Float     @default(0)
+  expectedClosingAmount Float     @default(0)
+  declaredClosingAmount Float?
+  openedAt              DateTime  @default(now())
+  closedAt              DateTime?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  movements   CashMovement[]
+  settlements InstallmentSettlement[]
+
+  @@index([companyId, cashierUserId, status])
+  @@index([companyId, openedAt])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id            String    @id @default(uuid())
+  companyId     String
+  cashSessionId String
+  movementType  String
+  direction     String
+  paymentMethod String?
+  amount        Float
+  description   String
+  occurredAt    DateTime
+  referenceType String?
+  referenceId   String?
+  createdAt     DateTime  @default(now())
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt
+  updatedBy     String?
+  canceledAt    DateTime?
+  canceledBy    String?
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, occurredAt])
+  @@index([cashSessionId])
+  @@map("cash_movements")
+}
+
+model InstallmentSettlement {
+  id             String    @id @default(uuid())
+  companyId      String
+  installmentId  String
+  cashSessionId  String
+  receivedAmount Float
+  discountAmount Float     @default(0)
+  interestAmount Float     @default(0)
+  penaltyAmount  Float     @default(0)
+  paymentMethod  String
+  settledAt      DateTime  @default(now())
+  requestedBy    String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  installment ReceivableInstallment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+  cashSession CashSession           @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, settledAt])
+  @@index([installmentId])
+  @@index([cashSessionId])
+  @@map("installment_settlements")
+}
