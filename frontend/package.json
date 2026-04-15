@@ -8,6 +8,7 @@
     "start": "next start --port 3003"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "financeiro-core": "file:..",
     "next": "16.1.6",
     "react": "19.2.3",

@@ -4,6 +4,7 @@ import { CompaniesModule } from "./modules/companies/companies.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { ReceivablesModule } from "./modules/receivables/receivables.module";
 import { CashSessionsModule } from "./modules/cash-sessions/cash-sessions.module";
+import { BanksModule } from "./modules/banks/banks.module";
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { CashSessionsModule } from "./modules/cash-sessions/cash-sessions.module
     DashboardModule,
     ReceivablesModule,
     CashSessionsModule,
+    BanksModule,
   ],
 })
 export class AppModule {}

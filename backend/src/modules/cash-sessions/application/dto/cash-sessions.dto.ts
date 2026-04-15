@@ -8,6 +8,10 @@ import {
 } from "class-validator";
 
 export class CurrentCashSessionQueryDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
   @IsString()
   sourceSystem!: string;
 
@@ -16,9 +20,17 @@ export class CurrentCashSessionQueryDto {
 
   @IsString()
   cashierUserId!: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
 }
 
 export class ListCashSessionsDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
   @IsOptional()
   @IsString()
   sourceSystem?: string;
@@ -34,6 +46,14 @@ export class ListCashSessionsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
 }
 
 export class OpenCashSessionDto {

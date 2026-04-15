@@ -3,6 +3,10 @@ import { IsOptional, IsString } from "class-validator";
 export class ListCompaniesDto {
   @IsOptional()
   @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
   search?: string;
 
   @IsOptional()
@@ -12,4 +16,12 @@ export class ListCompaniesDto {
   @IsOptional()
   @IsString()
   sourceTenantId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
 }

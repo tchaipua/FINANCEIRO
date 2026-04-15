@@ -126,6 +126,10 @@ export class CashSessionsService {
     const normalizedStatus = normalizeText(query.status);
     const normalizedSearch = normalizeText(query.search);
 
+    if (!normalizedSourceTenantId) {
+      return [];
+    }
+
     const sessions = await this.prisma.cashSession.findMany({
       where: {
         canceledAt: null,

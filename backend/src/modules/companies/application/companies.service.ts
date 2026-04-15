@@ -15,6 +15,10 @@ export class CompaniesService {
     const normalizedSourceSystem = normalizeText(query.sourceSystem);
     const normalizedSourceTenantId = normalizeText(query.sourceTenantId);
 
+    if (!normalizedSourceTenantId) {
+      return [];
+    }
+
     const companies = await this.prisma.company.findMany({
       where: {
         canceledAt: null,

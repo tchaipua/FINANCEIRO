@@ -1,10 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { API_BASE_URL, getJson } from '@/app/lib/api';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
-import { buildFinanceQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 
 type CashSessionItem = {
   id: string;
@@ -86,6 +87,7 @@ export default function FinanceiroCashPage() {
   const embeddedContextReady = !runtimeContext.embedded || Boolean(
     openForm.sourceSystem && openForm.sourceTenantId && openForm.cashierUserId,
   );
+  const runtimeTenantReady = Boolean(runtimeContext.sourceTenantId);
 
   useEffect(() => {
     setOpenForm(defaultOpenForm);
@@ -96,12 +98,18 @@ export default function FinanceiroCashPage() {
   }, [defaultCloseForm]);
 
   const loadSessions = useCallback(async () => {
+    if (!runtimeTenantReady) {
+      setSessions([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
-      setSessions(
+        setSessions(
         await getJson<CashSessionItem[]>(
-          `/cash-sessions${buildFinanceQueryString(runtimeContext)}`,
+          `/cash-sessions${buildFinanceApiQueryString(runtimeContext)}`,
         ),
       );
     } catch (currentError) {
@@ -115,7 +123,7 @@ export default function FinanceiroCashPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [runtimeContext]);
+  }, [runtimeContext, runtimeTenantReady]);
 
   useEffect(() => {
     void loadSessions();
@@ -224,7 +232,8 @@ export default function FinanceiroCashPage() {
     <div className="space-y-6">
       <section className={`${cardClass} overflow-hidden`}>
         <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
             <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">Operação de caixa</div>
             <h1 className="mt-2 text-3xl font-black tracking-tight">Sessões de Caixa</h1>
             <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
@@ -232,6 +241,13 @@ export default function FinanceiroCashPage() {
                 ? 'Abra e feche o caixa desta escola com o operador já identificado pelo sistema escolar.'
                 : 'Abra e feche caixas por operador e empresa de origem, mantendo o histórico financeiro centralizado.'}
             </p>
+            </div>
+            <Link
+              href="/"
+              className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
+            >
+              Voltar ao Menu
+            </Link>
           </div>
         </div>
         <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">

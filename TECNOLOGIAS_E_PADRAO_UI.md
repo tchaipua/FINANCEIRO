@@ -50,6 +50,25 @@ Registrar a stack oficial inicial do projeto `Financeiro` e a diretriz visual qu
 - Sempre que for possivel, reaproveitar os padroes documentados em `C:\Sistemas\IA\Escola\DOCUMENTACAO\AI\UI_PATTERNS.md`
 - O objetivo e manter familiaridade para o usuario e velocidade de desenvolvimento, sem acoplar o visual do `Financeiro` a uma vertical especifica
 
+## Padrao de grid aprovado
+
+- A tela de bancos passou a ser a referencia visual para futuras telas de listagem em grid no `Financeiro`
+- O padrao aprovado inclui:
+  - cabecalho com faixa azul em gradiente, titulo principal e acao de retorno ao menu
+  - barra de acoes com `Incluir` no canto esquerdo
+  - campo de busca central
+  - `Pesquisar` e `Limpar Consulta` na mesma linha
+  - `Limpar Consulta` visivel somente quando houver filtro preenchido
+  - botoes em formato icone quando fizer sentido
+  - cards brancos com borda suave e sombra discreta
+  - grid/tabela em card proprio, com cabecalho sutil e estado vazio padronizado
+  - rodape da grid com `Colunas` a esquerda, acao de exportacao/impressao e identificacao da tela com copiar a direita
+  - modal de colunas com overlay escurecido, painel grande, contagem de colunas visiveis, restaurar padrao, salvar/fechar, reordenacao, visibilidade e arraste
+  - persistencia por `sourceTenantId`, sem misturar empresas entre tenants
+  - exportacao respeitando filtros atuais e configuracao de colunas
+- O layout base reutilizavel foi documentado no frontend em `frontend/src/app/lib/grid-page-standards.ts`
+- Novas telas de grid devem seguir esse padrão, salvo se houver excecao explicita aprovada pelo usuario
+
 ## Regra de acesso
 
 - O `Financeiro` nao tera login humano proprio

@@ -18,6 +18,7 @@ import {
   serializeJson,
 } from "../../../common/finance-core.utils";
 import {
+  AssignBankToInstallmentsDto,
   ExistingBusinessKeysDto,
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
@@ -212,6 +213,18 @@ export class ReceivablesService {
     return where;
   }
 
+  private buildBankAccountLabel(bank: {
+    bankName: string;
+    branchNumber: string;
+    branchDigit?: string | null;
+    accountNumber: string;
+    accountDigit?: string | null;
+  }) {
+    const agencyLabel = `${bank.branchNumber}${bank.branchDigit ? `-${bank.branchDigit}` : ""}`;
+    const accountLabel = `${bank.accountNumber}${bank.accountDigit ? `-${bank.accountDigit}` : ""}`;
+    return `${bank.bankName} - AG ${agencyLabel} - CC ${accountLabel}`;
+  }
+
   private mapBatch(batch: any) {
     return {
       id: batch.id,
@@ -254,14 +267,18 @@ export class ReceivablesService {
                   id: installment.id,
                   sourceInstallmentKey: installment.sourceInstallmentKey,
                   installmentNumber: installment.installmentNumber,
-                  installmentCount: installment.installmentCount,
-                  dueDate: installment.dueDate.toISOString(),
-                  amount: installment.amount,
-                  descriptionSnapshot: installment.descriptionSnapshot,
-                  payerNameSnapshot: installment.payerNameSnapshot,
-                  payerDocumentSnapshot:
-                    installment.payerDocumentSnapshot || null,
-                }))
+                installmentCount: installment.installmentCount,
+                dueDate: installment.dueDate.toISOString(),
+                amount: installment.amount,
+                descriptionSnapshot: installment.descriptionSnapshot,
+                payerNameSnapshot: installment.payerNameSnapshot,
+                bankAccountId: installment.bankAccountId || null,
+                bankAccountLabel: installment.bankAccountLabel || null,
+                bankAssignedAt: installment.bankAssignedAt?.toISOString() || null,
+                bankAssignedBy: installment.bankAssignedBy || null,
+                payerDocumentSnapshot:
+                  installment.payerDocumentSnapshot || null,
+              }))
               : [],
           }))
         : undefined,
@@ -622,10 +639,12 @@ export class ReceivablesService {
   async listInstallments(query: ListReceivableInstallmentsDto) {
     const normalizedSourceSystem = normalizeText(query.sourceSystem);
     const normalizedSourceTenantId = normalizeText(query.sourceTenantId);
+    const normalizedBatchId = String(query.batchId || "").trim();
 
     const installments = await this.prisma.receivableInstallment.findMany({
       where: {
         ...this.buildInstallmentFilters(query),
+        ...(normalizedBatchId ? { batchId: normalizedBatchId } : {}),
         ...(normalizedSourceSystem || normalizedSourceTenantId
           ? {
               batch: {
@@ -640,7 +659,7 @@ export class ReceivablesService {
           : {}),
       },
       include: {
-        title: {
+      title: {
           select: {
             sourceEntityType: true,
             sourceEntityId: true,
@@ -676,8 +695,149 @@ export class ReceivablesService {
       status: installment.status,
       settlementMethod: installment.settlementMethod || null,
       settledAt: installment.settledAt?.toISOString() || null,
+      bankAccountId: installment.bankAccountId || null,
+      bankAccountLabel: installment.bankAccountLabel || null,
+      bankAssignedAt: installment.bankAssignedAt?.toISOString() || null,
+      bankAssignedBy: installment.bankAssignedBy || null,
       isOverdue:
         installment.status === "OPEN" && isOverdueDate(installment.dueDate),
     }));
+  }
+
+  async assignBankToInstallments(
+    batchId: string,
+    payload: AssignBankToInstallmentsDto,
+  ) {
+    const normalizedBatchId = String(batchId || "").trim();
+    if (!normalizedBatchId) {
+      throw new BadRequestException("Lote financeiro inválido.");
+    }
+
+    const normalizedSourceSystem = normalizeText(payload.sourceSystem);
+    const normalizedSourceTenantId = normalizeText(payload.sourceTenantId);
+    const normalizedBankAccountId = String(payload.bankAccountId || "").trim();
+    const installmentIds = Array.from(
+      new Set(
+        payload.installmentIds
+          .map((item) => String(item || "").trim())
+          .filter((item): item is string => Boolean(item)),
+      ),
+    );
+
+    if (!normalizedSourceSystem || !normalizedSourceTenantId) {
+      throw new BadRequestException(
+        "Informe o sistema e o tenant de origem para localizar o lote.",
+      );
+    }
+
+    if (!normalizedBankAccountId) {
+      throw new BadRequestException("Selecione o banco que enviará os boletos.");
+    }
+
+    if (!installmentIds.length) {
+      throw new BadRequestException(
+        "Selecione ao menos uma parcela para vincular ao banco.",
+      );
+    }
+
+    const batch = await this.prisma.receivableBatch.findFirst({
+      where: {
+        id: normalizedBatchId,
+        sourceSystem: normalizedSourceSystem,
+        sourceTenantId: normalizedSourceTenantId,
+        canceledAt: null,
+      },
+      select: {
+        id: true,
+        companyId: true,
+      },
+    });
+
+    if (!batch) {
+      throw new NotFoundException("LOTE NÃO ENCONTRADO.");
+    }
+
+    const bank = await this.prisma.bankAccount.findFirst({
+      where: {
+        id: normalizedBankAccountId,
+        companyId: batch.companyId,
+        status: "ACTIVE",
+        canceledAt: null,
+      },
+      select: {
+        id: true,
+        bankName: true,
+        branchNumber: true,
+        branchDigit: true,
+        accountNumber: true,
+        accountDigit: true,
+      },
+    });
+
+    if (!bank) {
+      throw new BadRequestException(
+        "Selecione um banco ativo válido para este lote financeiro.",
+      );
+    }
+
+    const installments = await this.prisma.receivableInstallment.findMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: batch.companyId,
+        batchId: batch.id,
+        canceledAt: null,
+      },
+      select: {
+        id: true,
+        status: true,
+        openAmount: true,
+      },
+    });
+
+    if (installments.length !== installmentIds.length) {
+      throw new BadRequestException(
+        "Uma ou mais parcelas selecionadas não pertencem a este lançamento.",
+      );
+    }
+
+    const blockedInstallments = installments.filter(
+      (installment) =>
+        installment.status !== "OPEN" || Number(installment.openAmount || 0) <= 0,
+    );
+
+    if (blockedInstallments.length) {
+      throw new BadRequestException(
+        "Selecione apenas parcelas em aberto para vincular ao banco de boletos.",
+      );
+    }
+
+    const bankAccountLabel = this.buildBankAccountLabel(bank);
+
+    const result = await this.prisma.receivableInstallment.updateMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: batch.companyId,
+        batchId: batch.id,
+        canceledAt: null,
+      },
+      data: {
+        bankAccountId: bank.id,
+        bankAccountLabel,
+        bankAssignedAt: new Date(),
+        bankAssignedBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return {
+      batchId: batch.id,
+      bankAccountId: bank.id,
+      bankAccountLabel,
+      updatedCount: result.count,
+      message:
+        result.count === 1
+          ? "1 parcela vinculada ao banco de envio de boletos."
+          : `${result.count} parcelas vinculadas ao banco de envio de boletos.`,
+    };
   }
 }

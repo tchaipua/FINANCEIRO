@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson } from '@/app/lib/api';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
-import { buildFinanceQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 
 type InstallmentItem = {
   id: string;
@@ -55,7 +55,7 @@ export default function FinanceiroInstallmentsPage() {
 
       setInstallments(
         await getJson<InstallmentItem[]>(
-          `/receivables/installments${buildFinanceQueryString(runtimeContext, {
+          `/receivables/installments${buildFinanceApiQueryString(runtimeContext, {
             status: nextFilters.status,
             studentName: nextFilters.studentName.trim()
               ? nextFilters.studentName.trim().toUpperCase()

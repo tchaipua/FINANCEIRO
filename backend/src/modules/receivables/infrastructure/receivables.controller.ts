@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ReceivablesService } from "../application/receivables.service";
 import {
+  AssignBankToInstallmentsDto,
   ExistingBusinessKeysDto,
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
@@ -46,6 +47,17 @@ export class ReceivablesController {
     @Query() query: ListReceivableBatchesDto,
   ) {
     return this.receivablesService.getBatch(batchId, query);
+  }
+
+  @Post("batches/:batchId/assign-bank")
+  @ApiOperation({
+    summary: "Vincula um banco ativo às parcelas selecionadas de um lote",
+  })
+  assignBankToInstallments(
+    @Param("batchId") batchId: string,
+    @Body() payload: AssignBankToInstallmentsDto,
+  ) {
+    return this.receivablesService.assignBankToInstallments(batchId, payload);
   }
 
   @Get("installments")

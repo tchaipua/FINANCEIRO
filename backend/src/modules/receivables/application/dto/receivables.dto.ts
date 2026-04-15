@@ -1,5 +1,6 @@
 import {
   Allow,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsInt,
@@ -154,6 +155,10 @@ export class ExistingBusinessKeysDto {
 export class ListReceivableBatchesDto {
   @IsOptional()
   @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
   sourceSystem?: string;
 
   @IsOptional()
@@ -163,9 +168,21 @@ export class ListReceivableBatchesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
 }
 
 export class ListReceivableInstallmentsDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
   @IsOptional()
   @IsString()
   sourceSystem?: string;
@@ -173,6 +190,10 @@ export class ListReceivableInstallmentsDto {
   @IsOptional()
   @IsString()
   sourceTenantId?: string;
+
+  @IsOptional()
+  @IsString()
+  batchId?: string;
 
   @IsOptional()
   @IsString()
@@ -189,4 +210,32 @@ export class ListReceivableInstallmentsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
+export class AssignBankToInstallmentsDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  bankAccountId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installmentIds!: string[];
 }

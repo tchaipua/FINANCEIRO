@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson } from '@/app/lib/api';
 import { formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
-import { buildFinanceQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 
 type BatchItem = {
   id: string;
@@ -40,7 +40,7 @@ export default function FinanceiroReceivableBatchesPage() {
 
       setBatches(
         await getJson<BatchItem[]>(
-          `/receivables/batches${buildFinanceQueryString(runtimeContext, {
+          `/receivables/batches${buildFinanceApiQueryString(runtimeContext, {
             search: currentSearch?.trim()
               ? currentSearch.trim().toUpperCase()
               : undefined,

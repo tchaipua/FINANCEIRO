@@ -20,6 +20,7 @@ model Company {
   updatedBy              String?
   canceledAt             DateTime?
   canceledBy             String?
+  bankAccounts           BankAccount[]
   parties                Party[]
   receivableBatches      ReceivableBatch[]
   receivableTitles       ReceivableTitle[]
@@ -31,6 +32,36 @@ model Company {
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
   @@map("companies")
+}
+
+model BankAccount {
+  id                  String   @id @default(uuid())
+  companyId           String
+  status              String   @default("ACTIVE")
+  bankCode            String
+  bankName            String
+  branchNumber        String
+  branchDigit         String   @default("")
+  accountNumber       String
+  accountDigit        String   @default("")
+  walletCode          String?
+  agreementCode       String?
+  pixKey              String?
+  beneficiaryName     String?
+  beneficiaryDocument String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  createdBy           String?
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, status, bankName])
+  @@unique([companyId, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
+  @@map("bank_accounts")
 }
 
 model Party {
@@ -130,6 +161,10 @@ model ReceivableInstallment {
   companyId             String
   batchId               String
   titleId               String
+  bankAccountId         String?
+  bankAccountLabel      String?
+  bankAssignedAt        DateTime?
+  bankAssignedBy        String?
   sourceInstallmentKey  String
   installmentNumber     Int
   installmentCount      Int
@@ -157,6 +192,7 @@ model ReceivableInstallment {
 
   @@unique([companyId, sourceInstallmentKey])
   @@index([companyId, status, dueDate])
+  @@index([companyId, bankAccountId, status])
   @@index([titleId])
   @@map("receivable_installments")
 }
