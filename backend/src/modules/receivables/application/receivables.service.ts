@@ -32,6 +32,7 @@ import {
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
   ReceivablesImportDto,
+  UpdateReceivableInstallmentDto,
 } from "./dto/receivables.dto";
 import { SicoobBillingService } from "./sicoob-billing.service";
 import {
@@ -1158,6 +1159,167 @@ export class ReceivablesService {
           installment.status === "OPEN" && isOverdueDate(installment.dueDate),
       };
     });
+  }
+
+  async updateInstallment(
+    installmentId: string,
+    payload: UpdateReceivableInstallmentDto,
+  ) {
+    const normalizedInstallmentId = String(installmentId || "").trim();
+    if (!normalizedInstallmentId) {
+      throw new BadRequestException("Parcela inválida.");
+    }
+
+    const normalizedSourceSystem = normalizeText(payload.sourceSystem);
+    const normalizedSourceTenantId = normalizeText(payload.sourceTenantId);
+    if (!normalizedSourceSystem || !normalizedSourceTenantId) {
+      throw new BadRequestException(
+        "Origem financeira da parcela não foi informada.",
+      );
+    }
+
+    if (!payload.dueDate && payload.amount === undefined) {
+      throw new BadRequestException(
+        "Informe pelo menos um campo para atualizar a parcela.",
+      );
+    }
+
+    const installment = await this.prisma.receivableInstallment.findFirst({
+      where: {
+        id: normalizedInstallmentId,
+        canceledAt: null,
+        batch: {
+          sourceSystem: normalizedSourceSystem,
+          sourceTenantId: normalizedSourceTenantId,
+        },
+      },
+      include: {
+        title: {
+          select: {
+            sourceEntityName: true,
+          },
+        },
+      },
+    });
+
+    if (!installment) {
+      throw new NotFoundException("Parcela não localizada no Financeiro.");
+    }
+
+    if (installment.status !== "OPEN" || Number(installment.openAmount || 0) <= 0) {
+      throw new BadRequestException(
+        "Somente parcelas em aberto podem ser alteradas.",
+      );
+    }
+
+    const dueDate = payload.dueDate
+      ? parseIsoDate(payload.dueDate, "a data de vencimento")
+      : installment.dueDate;
+
+    const nextAmount =
+      payload.amount !== undefined
+        ? roundMoney(Number(payload.amount || 0))
+        : roundMoney(Number(installment.amount || 0));
+
+    const paidAmount = roundMoney(Number(installment.paidAmount || 0));
+    if (nextAmount <= 0) {
+      throw new BadRequestException(
+        "O valor da parcela deve ser maior que zero.",
+      );
+    }
+
+    if (nextAmount < paidAmount) {
+      throw new BadRequestException(
+        "O valor da parcela não pode ficar menor que o valor já recebido.",
+      );
+    }
+
+    const openAmount = roundMoney(nextAmount - paidAmount);
+    if (openAmount <= 0) {
+      throw new BadRequestException(
+        "A parcela precisa permanecer em aberto após a alteração.",
+      );
+    }
+
+    const updatedInstallment = await this.prisma.receivableInstallment.update({
+      where: { id: installment.id },
+      data: {
+        dueDate,
+        amount: nextAmount,
+        openAmount,
+        updatedBy: payload.requestedBy || null,
+      },
+      include: {
+        company: {
+          select: {
+            interestRate: true,
+            interestGracePeriod: true,
+            penaltyRate: true,
+            penaltyValue: true,
+            penaltyGracePeriod: true,
+          },
+        },
+        title: {
+          select: {
+            sourceEntityType: true,
+            sourceEntityId: true,
+            sourceEntityName: true,
+            classLabel: true,
+            businessKey: true,
+          },
+        },
+      },
+    });
+
+    const financialSettings =
+      this.buildInstallmentFinancialSettingsSnapshot(updatedInstallment);
+    const settlementSuggestion = buildInstallmentSettlementSuggestion({
+      dueDate: updatedInstallment.dueDate,
+      openAmount: updatedInstallment.openAmount,
+      settings: financialSettings,
+    });
+
+    return {
+      id: updatedInstallment.id,
+      titleId: updatedInstallment.titleId,
+      batchId: updatedInstallment.batchId,
+      sourceEntityType: updatedInstallment.title.sourceEntityType,
+      sourceEntityId: updatedInstallment.title.sourceEntityId,
+      sourceEntityName:
+        updatedInstallment.title.sourceEntityName ||
+        updatedInstallment.title.sourceEntityId,
+      classLabel: updatedInstallment.title.classLabel || null,
+      businessKey: updatedInstallment.title.businessKey,
+      sourceInstallmentKey: updatedInstallment.sourceInstallmentKey,
+      description: updatedInstallment.descriptionSnapshot,
+      payerNameSnapshot: updatedInstallment.payerNameSnapshot,
+      payerDocumentSnapshot:
+        updatedInstallment.payerDocumentSnapshot || null,
+      installmentNumber: updatedInstallment.installmentNumber,
+      installmentCount: updatedInstallment.installmentCount,
+      dueDate: updatedInstallment.dueDate.toISOString(),
+      amount: updatedInstallment.amount,
+      openAmount: updatedInstallment.openAmount,
+      paidAmount: updatedInstallment.paidAmount,
+      interestRate: financialSettings.interestRate,
+      interestGracePeriod: financialSettings.interestGracePeriod,
+      penaltyRate: financialSettings.penaltyRate,
+      penaltyValue: financialSettings.penaltyValue,
+      penaltyGracePeriod: financialSettings.penaltyGracePeriod,
+      suggestedDiscountAmount: settlementSuggestion.suggestedDiscountAmount,
+      suggestedInterestAmount: settlementSuggestion.suggestedInterestAmount,
+      suggestedPenaltyAmount: settlementSuggestion.suggestedPenaltyAmount,
+      suggestedReceivedAmount: settlementSuggestion.suggestedReceivedAmount,
+      overdueDays: settlementSuggestion.overdueDays,
+      interestDays: settlementSuggestion.interestDays,
+      penaltyApplied: settlementSuggestion.penaltyApplied,
+      status: updatedInstallment.status,
+      settlementMethod: updatedInstallment.settlementMethod || null,
+      settledAt: updatedInstallment.settledAt?.toISOString() || null,
+      isOverdue:
+        updatedInstallment.status === "OPEN" &&
+        isOverdueDate(updatedInstallment.dueDate),
+    };
   }
 
   async assignBankToInstallments(

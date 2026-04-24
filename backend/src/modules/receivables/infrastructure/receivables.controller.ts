@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ReceivablesService } from "../application/receivables.service";
 import {
@@ -13,6 +13,7 @@ import {
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
   ReceivablesImportDto,
+  UpdateReceivableInstallmentDto,
 } from "../application/dto/receivables.dto";
 
 @ApiTags("Receivables")
@@ -83,6 +84,17 @@ export class ReceivablesController {
   })
   listInstallments(@Query() query: ListReceivableInstallmentsDto) {
     return this.receivablesService.listInstallments(query);
+  }
+
+  @Patch("installments/:installmentId")
+  @ApiOperation({
+    summary: "Atualiza vencimento e valor de uma parcela em aberto",
+  })
+  updateInstallment(
+    @Param("installmentId") installmentId: string,
+    @Body() payload: UpdateReceivableInstallmentDto,
+  ) {
+    return this.receivablesService.updateInstallment(installmentId, payload);
   }
 
   @Get("installments/:installmentId/bank-slip-pdf")

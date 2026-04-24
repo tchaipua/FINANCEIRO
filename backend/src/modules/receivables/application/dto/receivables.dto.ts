@@ -277,6 +277,28 @@ export class ListReceivableInstallmentsDto {
   cashierDisplayName?: string;
 }
 
+export class UpdateReceivableInstallmentDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+}
+
 export class AssignBankToInstallmentsDto {
   @IsOptional()
   @IsString()
