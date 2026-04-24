@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import GridExportModal from '@/app/components/grid-export-modal';
 import { API_BASE_URL, getJson } from '@/app/lib/api';
 import {
@@ -39,6 +39,31 @@ type BankItem = {
   pixKey?: string | null;
   beneficiaryName?: string | null;
   beneficiaryDocument?: string | null;
+  billingProvider?: string | null;
+  billingEnvironment?: string | null;
+  billingApiClientId?: string | null;
+  billingApiClientSecret?: string | null;
+  billingCertificateBase64?: string | null;
+  billingCertificatePassword?: string | null;
+  billingBeneficiaryCode?: string | null;
+  billingWalletVariation?: string | null;
+  billingContractNumber?: string | null;
+  billingModalityCode?: string | null;
+  billingDocumentSpeciesCode?: string | null;
+  billingAcceptanceCode?: string | null;
+  billingIssueTypeCode?: string | null;
+  billingDistributionTypeCode?: string | null;
+  billingNextBoletoNumber?: number | null;
+  billingRegisterPixCode?: number | null;
+  billingInstructionLine1?: string | null;
+  billingInstructionLine2?: string | null;
+  billingDefaultFinePercent?: number | null;
+  billingDefaultInterestPercent?: number | null;
+  billingDefaultDiscountPercent?: number | null;
+  billingProtestDays?: number | null;
+  billingNegativeDays?: number | null;
+  hasBillingApiCredentials?: boolean;
+  hasBillingCertificate?: boolean;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +89,29 @@ type BankFormState = {
   pixKey: string;
   beneficiaryName: string;
   beneficiaryDocument: string;
+  billingProvider: string;
+  billingEnvironment: string;
+  billingApiClientId: string;
+  billingApiClientSecret: string;
+  billingCertificateBase64: string;
+  billingCertificatePassword: string;
+  billingBeneficiaryCode: string;
+  billingWalletVariation: string;
+  billingContractNumber: string;
+  billingModalityCode: string;
+  billingDocumentSpeciesCode: string;
+  billingAcceptanceCode: string;
+  billingIssueTypeCode: string;
+  billingDistributionTypeCode: string;
+  billingNextBoletoNumber: string;
+  billingRegisterPixCode: string;
+  billingInstructionLine1: string;
+  billingInstructionLine2: string;
+  billingDefaultFinePercent: string;
+  billingDefaultInterestPercent: string;
+  billingDefaultDiscountPercent: string;
+  billingProtestDays: string;
+  billingNegativeDays: string;
   notes: string;
 };
 
@@ -248,6 +296,29 @@ function buildDefaultScope(
   };
 }
 
+function buildBankFormPath(queryString: string, bankId?: string | null) {
+  const params = new URLSearchParams(
+    queryString.startsWith('?') ? queryString.slice(1) : queryString,
+  );
+
+  if (String(bankId || '').trim()) {
+    params.set('edit', String(bankId).trim());
+  } else {
+    params.delete('edit');
+  }
+
+  const query = params.toString();
+  return `/bancos/novo${query ? `?${query}` : ''}`;
+}
+
+function formatOptionalNumericField(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  return String(value);
+}
+
 function buildEmptyBankForm(companyName = ''): BankFormState {
   return {
     id: null,
@@ -262,6 +333,29 @@ function buildEmptyBankForm(companyName = ''): BankFormState {
     pixKey: '',
     beneficiaryName: companyName,
     beneficiaryDocument: '',
+    billingProvider: '',
+    billingEnvironment: '',
+    billingApiClientId: '',
+    billingApiClientSecret: '',
+    billingCertificateBase64: '',
+    billingCertificatePassword: '',
+    billingBeneficiaryCode: '',
+    billingWalletVariation: '',
+    billingContractNumber: '',
+    billingModalityCode: '',
+    billingDocumentSpeciesCode: '',
+    billingAcceptanceCode: '',
+    billingIssueTypeCode: '',
+    billingDistributionTypeCode: '',
+    billingNextBoletoNumber: '',
+    billingRegisterPixCode: '',
+    billingInstructionLine1: '',
+    billingInstructionLine2: '',
+    billingDefaultFinePercent: '',
+    billingDefaultInterestPercent: '',
+    billingDefaultDiscountPercent: '',
+    billingProtestDays: '',
+    billingNegativeDays: '',
     notes: '',
   };
 }
@@ -280,12 +374,85 @@ function buildFormFromBank(bank: BankItem): BankFormState {
     pixKey: bank.pixKey || '',
     beneficiaryName: bank.beneficiaryName || '',
     beneficiaryDocument: bank.beneficiaryDocument || '',
+    billingProvider: bank.billingProvider || '',
+    billingEnvironment: bank.billingEnvironment || '',
+    billingApiClientId: bank.billingApiClientId || '',
+    billingApiClientSecret: bank.billingApiClientSecret || '',
+    billingCertificateBase64: bank.billingCertificateBase64 || '',
+    billingCertificatePassword: bank.billingCertificatePassword || '',
+    billingBeneficiaryCode: bank.billingBeneficiaryCode || '',
+    billingWalletVariation: bank.billingWalletVariation || '',
+    billingContractNumber: bank.billingContractNumber || '',
+    billingModalityCode: bank.billingModalityCode || '',
+    billingDocumentSpeciesCode: bank.billingDocumentSpeciesCode || '',
+    billingAcceptanceCode: bank.billingAcceptanceCode || '',
+    billingIssueTypeCode: bank.billingIssueTypeCode || '',
+    billingDistributionTypeCode: bank.billingDistributionTypeCode || '',
+    billingNextBoletoNumber: formatOptionalNumericField(
+      bank.billingNextBoletoNumber,
+    ),
+    billingRegisterPixCode: formatOptionalNumericField(
+      bank.billingRegisterPixCode,
+    ),
+    billingInstructionLine1: bank.billingInstructionLine1 || '',
+    billingInstructionLine2: bank.billingInstructionLine2 || '',
+    billingDefaultFinePercent: formatOptionalNumericField(
+      bank.billingDefaultFinePercent,
+    ),
+    billingDefaultInterestPercent: formatOptionalNumericField(
+      bank.billingDefaultInterestPercent,
+    ),
+    billingDefaultDiscountPercent: formatOptionalNumericField(
+      bank.billingDefaultDiscountPercent,
+    ),
+    billingProtestDays: formatOptionalNumericField(bank.billingProtestDays),
+    billingNegativeDays: formatOptionalNumericField(bank.billingNegativeDays),
     notes: bank.notes || '',
   };
 }
 
 function normalizeUppercase(value: string) {
   return value.trim().toUpperCase();
+}
+
+function normalizeOptionalDecimal(value: string, label: string) {
+  const normalized = value.replace(',', '.').trim();
+  if (!normalized) {
+    return {
+      value: undefined as number | undefined,
+    };
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return {
+      error: `Informe ${label} válida.`,
+    };
+  }
+
+  return {
+    value: Number(parsed.toFixed(2)),
+  };
+}
+
+function normalizeOptionalInteger(value: string, label: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return {
+      value: undefined as number | undefined,
+    };
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return {
+      error: `Informe ${label} válido.`,
+    };
+  }
+
+  return {
+    value: parsed,
+  };
 }
 
 function getBankGridStorageKey(tenantId: string | null) {
@@ -612,6 +779,7 @@ function BankGridConfigModal({
 
 export default function FinanceiroBanksPage() {
   const runtimeContext = useFinanceRuntimeContext();
+  const router = useRouter();
   const pathname = usePathname();
   const isCreateRoute = pathname.startsWith('/bancos/novo');
   const preservedQueryString = useMemo(
@@ -649,7 +817,9 @@ export default function FinanceiroBanksPage() {
   );
   const [banks, setBanks] = useState<BankItem[]>([]);
   const [schoolBaseUrl, setSchoolBaseUrl] = useState<string | null>(null);
+  const [editBankId, setEditBankId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingForm, setIsLoadingForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionBankId, setActionBankId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -669,6 +839,16 @@ export default function FinanceiroBanksPage() {
     scope.companyName.trim() ||
     runtimeContext.companyName ||
     'EMPRESA ATUAL';
+  const bankFormHref = useMemo(
+    () => buildBankFormPath(preservedQueryString),
+    [preservedQueryString],
+  );
+  const hasBillingCredentials = Boolean(
+    form.billingApiClientId.trim() && form.billingApiClientSecret.trim(),
+  );
+  const hasBillingCertificate = Boolean(
+    form.billingCertificateBase64.trim() && form.billingCertificatePassword.trim(),
+  );
 
   const scopeReady = Boolean(
     scope.sourceSystem.trim() && scope.sourceTenantId.trim(),
@@ -679,11 +859,101 @@ export default function FinanceiroBanksPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const syncEditBankId = () =>
+      setEditBankId(
+        String(new URLSearchParams(window.location.search).get('edit') || '').trim(),
+      );
+
+    syncEditBankId();
+    window.addEventListener('popstate', syncEditBankId);
+    window.addEventListener('hashchange', syncEditBankId);
+
+    return () => {
+      window.removeEventListener('popstate', syncEditBankId);
+      window.removeEventListener('hashchange', syncEditBankId);
+    };
+  }, [pathname]);
+
+  useEffect(() => {
     setScope(defaultScope);
     setForm((current) =>
       current.id ? current : buildEmptyBankForm(defaultScope.companyName),
     );
   }, [defaultScope]);
+
+  useEffect(() => {
+    if (!isCreateRoute) {
+      setIsLoadingForm(false);
+      return;
+    }
+
+    if (!editBankId) {
+      setIsLoadingForm(false);
+      setForm(buildEmptyBankForm(scope.companyName || defaultScope.companyName));
+      return;
+    }
+
+    if (!scopeReady) {
+      return;
+    }
+
+    let isActive = true;
+
+    const loadBankDetail = async () => {
+      try {
+        setIsLoadingForm(true);
+        setError(null);
+        setStatusMessage(null);
+
+        const bank = await getJson<BankItem>(
+          `/banks/${editBankId}${buildFinanceApiQueryString(runtimeContext, {
+            sourceSystem: normalizeUppercase(scope.sourceSystem),
+            sourceTenantId: normalizeUppercase(scope.sourceTenantId),
+          })}`,
+        );
+
+        if (!isActive) {
+          return;
+        }
+
+        setForm(buildFormFromBank(bank));
+      } catch (currentError) {
+        if (!isActive) {
+          return;
+        }
+
+        setError(
+          getFriendlyRequestErrorMessage(
+            currentError,
+            'Não foi possível carregar o banco para edição.',
+          ),
+        );
+      } finally {
+        if (isActive) {
+          setIsLoadingForm(false);
+        }
+      }
+    };
+
+    void loadBankDetail();
+
+    return () => {
+      isActive = false;
+    };
+  }, [
+    defaultScope.companyName,
+    editBankId,
+    isCreateRoute,
+    runtimeContext,
+    scope.companyName,
+    scope.sourceSystem,
+    scope.sourceTenantId,
+    scopeReady,
+  ]);
 
   useEffect(() => {
     const storedConfig = readStoredBankGridConfig(runtimeContext.sourceTenantId);
@@ -756,6 +1026,15 @@ export default function FinanceiroBanksPage() {
     Boolean(filters.search.trim()) || filters.status !== 'ACTIVE';
 
   function resetForm() {
+    setError(null);
+    setStatusMessage(null);
+
+    if (isCreateRoute && editBankId) {
+      setEditBankId('');
+      router.replace(bankFormHref);
+      return;
+    }
+
     setForm(buildEmptyBankForm(scope.companyName));
   }
 
@@ -792,6 +1071,69 @@ export default function FinanceiroBanksPage() {
       return;
     }
 
+    const finePercent = normalizeOptionalDecimal(
+      form.billingDefaultFinePercent,
+      'a multa padrão',
+    );
+    if (finePercent.error) {
+      setError(finePercent.error);
+      return;
+    }
+
+    const interestPercent = normalizeOptionalDecimal(
+      form.billingDefaultInterestPercent,
+      'o juro padrão',
+    );
+    if (interestPercent.error) {
+      setError(interestPercent.error);
+      return;
+    }
+
+    const discountPercent = normalizeOptionalDecimal(
+      form.billingDefaultDiscountPercent,
+      'o desconto padrão',
+    );
+    if (discountPercent.error) {
+      setError(discountPercent.error);
+      return;
+    }
+
+    const protestDays = normalizeOptionalInteger(
+      form.billingProtestDays,
+      'os dias de protesto',
+    );
+    if (protestDays.error) {
+      setError(protestDays.error);
+      return;
+    }
+
+    const negativeDays = normalizeOptionalInteger(
+      form.billingNegativeDays,
+      'os dias de negativação',
+    );
+    if (negativeDays.error) {
+      setError(negativeDays.error);
+      return;
+    }
+
+    const nextBoletoNumber = normalizeOptionalInteger(
+      form.billingNextBoletoNumber,
+      'o próximo boleto',
+    );
+    if (nextBoletoNumber.error) {
+      setError(nextBoletoNumber.error);
+      return;
+    }
+
+    const registerPixCode = normalizeOptionalInteger(
+      form.billingRegisterPixCode,
+      'o código de PIX',
+    );
+    if (registerPixCode.error) {
+      setError(registerPixCode.error);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError(null);
@@ -821,14 +1163,56 @@ export default function FinanceiroBanksPage() {
             pixKey: form.pixKey || undefined,
             beneficiaryName: form.beneficiaryName || undefined,
             beneficiaryDocument: form.beneficiaryDocument || undefined,
+            billingProvider: form.billingProvider || undefined,
+            billingEnvironment: form.billingEnvironment || undefined,
+            billingApiClientId: form.billingApiClientId || undefined,
+            billingApiClientSecret: form.billingApiClientSecret || undefined,
+            billingCertificateBase64:
+              form.billingCertificateBase64 || undefined,
+            billingCertificatePassword:
+              form.billingCertificatePassword || undefined,
+            billingBeneficiaryCode:
+              form.billingBeneficiaryCode || undefined,
+            billingWalletVariation:
+              form.billingWalletVariation || undefined,
+            billingContractNumber:
+              form.billingContractNumber || undefined,
+            billingModalityCode:
+              form.billingModalityCode || undefined,
+            billingDocumentSpeciesCode:
+              form.billingDocumentSpeciesCode || undefined,
+            billingAcceptanceCode:
+              form.billingAcceptanceCode || undefined,
+            billingIssueTypeCode:
+              form.billingIssueTypeCode || undefined,
+            billingDistributionTypeCode:
+              form.billingDistributionTypeCode || undefined,
+            billingNextBoletoNumber: nextBoletoNumber.value,
+            billingRegisterPixCode: registerPixCode.value,
+            billingInstructionLine1:
+              form.billingInstructionLine1 || undefined,
+            billingInstructionLine2:
+              form.billingInstructionLine2 || undefined,
+            billingDefaultFinePercent: finePercent.value,
+            billingDefaultInterestPercent: interestPercent.value,
+            billingDefaultDiscountPercent: discountPercent.value,
+            billingProtestDays: protestDays.value,
+            billingNegativeDays: negativeDays.value,
             notes: form.notes || undefined,
           }),
         },
       );
 
-      const payload = await response.json().catch(() => null);
+      const payload = (await response.json().catch(() => null)) as
+        | BankItem
+        | {
+            message?: string;
+          }
+        | null;
+      const errorMessage =
+        payload && 'message' in payload ? payload.message : undefined;
       if (!response.ok) {
-        throw new Error(payload?.message || 'Não foi possível salvar o banco.');
+        throw new Error(errorMessage || 'Não foi possível salvar o banco.');
       }
 
       setStatusMessage(
@@ -836,7 +1220,13 @@ export default function FinanceiroBanksPage() {
           ? 'Banco atualizado com sucesso no core financeiro.'
           : 'Banco cadastrado com sucesso no core financeiro.',
       );
-      resetForm();
+
+      if (form.id && payload && 'id' in payload) {
+        setForm(buildFormFromBank(payload));
+      } else {
+        setForm(buildEmptyBankForm(scope.companyName));
+      }
+
       await loadBanks();
     } catch (currentError) {
       setError(
@@ -1004,7 +1394,7 @@ export default function FinanceiroBanksPage() {
             className="grid gap-4 xl:grid-cols-[auto_1fr_auto_auto]"
           >
             <Link
-              href={`/bancos/novo${preservedQueryString}`}
+              href={bankFormHref}
               title="INCLUIR NOVO BANCO"
               aria-label="INCLUIR NOVO BANCO"
               className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
@@ -1095,11 +1485,37 @@ export default function FinanceiroBanksPage() {
         {isCreateRoute ? (
           <form onSubmit={handleSubmit} className={`${cardClass} p-6`}>
           <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
-            {form.id ? 'Editar banco' : 'Novo banco'}
+            {editBankId ? 'Editar banco' : 'Novo banco'}
           </div>
           <h2 className="mt-1 text-xl font-black text-slate-900">
-            {form.id ? 'Atualizar cadastro bancário' : 'Cadastrar banco e conta'}
+            {editBankId ? 'Atualizar cadastro bancário' : 'Cadastrar banco e conta'}
           </h2>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {isLoadingForm ? (
+              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-amber-700">
+                Carregando cadastro
+              </span>
+            ) : null}
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${
+                hasBillingCredentials
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-500'
+              }`}
+            >
+              {hasBillingCredentials ? 'Credenciais preenchidas' : 'Sem credenciais'}
+            </span>
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] ${
+                hasBillingCertificate
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-500'
+              }`}
+            >
+              {hasBillingCertificate ? 'Certificado preenchido' : 'Sem certificado'}
+            </span>
+          </div>
 
           <div className="mt-5 grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -1243,6 +1659,336 @@ export default function FinanceiroBanksPage() {
               />
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                Configuração de boleto
+              </div>
+              <div className="mt-1 text-sm font-semibold text-slate-600">
+                Preencha os dados bancários e as credenciais do provedor que emitirá os boletos.
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <select
+                value={form.billingProvider}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingProvider: event.target.value,
+                  }))
+                }
+                className={inputClass}
+              >
+                <option value="">PROVEDOR DE BOLETO</option>
+                <option value="SICOOB">SICOOB</option>
+                <option value="SICREDI">SICREDI</option>
+                <option value="BANCO DO BRASIL">BANCO DO BRASIL</option>
+                <option value="CAIXA">CAIXA</option>
+                <option value="BRADESCO">BRADESCO</option>
+                <option value="ITAU">ITAU</option>
+                <option value="SANTANDER">SANTANDER</option>
+                <option value="OUTRO">OUTRO</option>
+              </select>
+              <select
+                value={form.billingEnvironment}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingEnvironment: event.target.value,
+                  }))
+                }
+                className={inputClass}
+              >
+                <option value="">AMBIENTE DE EMISSÃO</option>
+                <option value="HOMOLOGACAO">HOMOLOGAÇÃO</option>
+                <option value="PRODUCAO">PRODUÇÃO</option>
+              </select>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.billingBeneficiaryCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingBeneficiaryCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="CÓDIGO DO BENEFICIÁRIO NO BANCO"
+              />
+              <input
+                value={form.billingWalletVariation}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingWalletVariation: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="VARIAÇÃO DA CARTEIRA"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.billingContractNumber}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingContractNumber: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="NÚMERO DO CONTRATO"
+              />
+              <input
+                value={form.billingModalityCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingModalityCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="MODALIDADE"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.billingDocumentSpeciesCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingDocumentSpeciesCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="ESPÉCIE DO DOCUMENTO"
+              />
+              <input
+                value={form.billingAcceptanceCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingAcceptanceCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="ACEITE (S/N)"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.billingIssueTypeCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingIssueTypeCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="IDENTIFICAÇÃO DE EMISSÃO"
+              />
+              <input
+                value={form.billingDistributionTypeCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingDistributionTypeCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="IDENTIFICAÇÃO DE DISTRIBUIÇÃO"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.billingApiClientId}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingApiClientId: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="CLIENT ID / APP KEY"
+              />
+              <input
+                type="password"
+                value={form.billingApiClientSecret}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingApiClientSecret: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="CLIENT SECRET"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.billingNextBoletoNumber}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingNextBoletoNumber: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="PRÓXIMO NÚMERO DO BOLETO"
+              />
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.billingRegisterPixCode}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingRegisterPixCode: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="CÓDIGO PARA CADASTRAR PIX"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <textarea
+                value={form.billingCertificateBase64}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingCertificateBase64: event.target.value,
+                  }))
+                }
+                className={textareaClass}
+                placeholder="CERTIFICADO EM BASE64"
+              />
+              <input
+                type="password"
+                value={form.billingCertificatePassword}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingCertificatePassword: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="SENHA DO CERTIFICADO"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                value={form.billingInstructionLine1}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingInstructionLine1: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="INSTRUÇÃO DE BOLETO 1"
+              />
+              <input
+                value={form.billingInstructionLine2}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingInstructionLine2: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="INSTRUÇÃO DE BOLETO 2"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.billingDefaultFinePercent}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingDefaultFinePercent: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="MULTA %"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.billingDefaultInterestPercent}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingDefaultInterestPercent: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="JUROS %"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.billingDefaultDiscountPercent}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingDefaultDiscountPercent: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="DESCONTO %"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.billingProtestDays}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingProtestDays: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="DIAS PARA PROTESTO"
+              />
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.billingNegativeDays}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    billingNegativeDays: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="DIAS PARA NEGATIVAÇÃO"
+              />
+            </div>
+
             <textarea
               value={form.notes}
               onChange={(event) =>
@@ -1258,7 +2004,7 @@ export default function FinanceiroBanksPage() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={isSubmitting || !scopeReady}
+                disabled={isSubmitting || isLoadingForm || !scopeReady}
                 className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:opacity-70"
               >
                 {isSubmitting
@@ -1270,7 +2016,7 @@ export default function FinanceiroBanksPage() {
                     : 'Cadastrar banco'}
               </button>
 
-              {form.id ? (
+              {editBankId ? (
                 <button
                   type="button"
                   onClick={resetForm}
@@ -1398,17 +2144,12 @@ export default function FinanceiroBanksPage() {
                     })}
                     <td className="px-4 py-4">
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setForm(buildFormFromBank(bank));
-                            setError(null);
-                            setStatusMessage(null);
-                          }}
+                        <Link
+                          href={buildBankFormPath(preservedQueryString, bank.id)}
                           className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-50"
                         >
                           Editar
-                        </button>
+                        </Link>
                         <button
                           type="button"
                           disabled={actionBankId === bank.id}

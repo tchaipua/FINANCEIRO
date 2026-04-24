@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { BanksService } from "../application/banks.service";
 import {
   ChangeBankStatusDto,
+  GetBankDto,
   ListBanksDto,
   SaveBankDto,
 } from "../application/dto/banks.dto";
@@ -18,6 +19,14 @@ export class BanksController {
   })
   list(@Query() query: ListBanksDto) {
     return this.banksService.list(query);
+  }
+
+  @Get(":bankId")
+  @ApiOperation({
+    summary: "Carrega o cadastro completo do banco informado",
+  })
+  get(@Param("bankId") bankId: string, @Query() query: GetBankDto) {
+    return this.banksService.get(bankId, query);
   }
 
   @Post()

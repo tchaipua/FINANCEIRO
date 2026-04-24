@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { getJson } from '@/app/lib/api';
+import { getJson, requestJson } from '@/app/lib/api';
 import { formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildDefaultExportColumns,
@@ -21,10 +21,23 @@ type CompanyItem = {
   name: string;
   document?: string | null;
   status: string;
+  interestRate?: number | null;
+  interestGracePeriod?: number | null;
+  penaltyRate?: number | null;
+  penaltyValue?: number | null;
+  penaltyGracePeriod?: number | null;
   createdAt: string;
   receivableTitleCount: number;
   installmentCount: number;
   cashSessionCount: number;
+};
+
+type CompanyFinancialFormState = {
+  interestRate: string;
+  interestGracePeriod: string;
+  penaltyRate: string;
+  penaltyValue: string;
+  penaltyGracePeriod: string;
 };
 
 type CompanyGridColumnKey =
@@ -60,6 +73,34 @@ const DEFAULT_COMPANY_GRID_CONFIG: CompanyGridConfig = {
   order: COMPANY_GRID_COLUMNS.map((column) => column.key),
   hidden: [],
 };
+
+function formatOptionalNumberInput(value?: number | null) {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+}
+
+function parseOptionalNumber(value: string, integer = false) {
+  const normalized = String(value || '').trim().replace(',', '.');
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = integer ? Number.parseInt(normalized, 10) : Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error('Informe apenas valores numéricos iguais ou maiores que zero.');
+  }
+
+  return integer ? Math.trunc(parsed) : Number(parsed.toFixed(2));
+}
+
+function buildCompanyFinancialForm(company: CompanyItem): CompanyFinancialFormState {
+  return {
+    interestRate: formatOptionalNumberInput(company.interestRate),
+    interestGracePeriod: formatOptionalNumberInput(company.interestGracePeriod),
+    penaltyRate: formatOptionalNumberInput(company.penaltyRate),
+    penaltyValue: formatOptionalNumberInput(company.penaltyValue),
+    penaltyGracePeriod: formatOptionalNumberInput(company.penaltyGracePeriod),
+  };
+}
 
 function getCompanyGridStorageKey(tenantId: string | null) {
   return `${COMPANY_GRID_STORAGE_PREFIX}${tenantId || 'default'}`;
@@ -355,14 +396,196 @@ function CompanyGridConfigModal({
   );
 }
 
+function CompanyFinancialSettingsModal({
+  company,
+  form,
+  isOpen,
+  isSaving,
+  error,
+  onClose,
+  onChange,
+  onSave,
+}: {
+  company: CompanyItem | null;
+  form: CompanyFinancialFormState;
+  isOpen: boolean;
+  isSaving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onChange: (field: keyof CompanyFinancialFormState, value: string) => void;
+  onSave: () => void;
+}) {
+  if (!isOpen || !company) {
+    return null;
+  }
+
+  const penaltyRateDisabled = Number(form.penaltyValue.replace(',', '.')) > 0;
+  const penaltyValueDisabled = Number(form.penaltyRate.replace(',', '.')) > 0;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-5">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              Configuração financeira
+            </div>
+            <h2 className="mt-1 text-2xl font-black text-slate-900">{company.name}</h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Ajuste as regras padrão que serão usadas nas novas parcelas desta empresa.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresa</div>
+                <div className="mt-1 text-base font-black text-slate-900">{company.name}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Documento</div>
+                <div className="mt-1 text-base font-black text-slate-900">{company.document || '---'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  % juros mensais
+                </label>
+                <input
+                  value={form.interestRate}
+                  onChange={(event) => onChange('interestRate', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  inputMode="decimal"
+                  placeholder="Ex: 5,5"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Dias de carência (juros)
+                </label>
+                <input
+                  value={form.interestGracePeriod}
+                  onChange={(event) => onChange('interestGracePeriod', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  inputMode="numeric"
+                  placeholder="Ex: 5"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-5 md:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  % multa
+                </label>
+                <input
+                  value={form.penaltyRate}
+                  onChange={(event) => {
+                    onChange('penaltyRate', event.target.value);
+                    if (Number(event.target.value.replace(',', '.')) > 0) {
+                      onChange('penaltyValue', '');
+                    }
+                  }}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  inputMode="decimal"
+                  placeholder="Ex: 2"
+                  disabled={penaltyRateDisabled}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  R$ valor fixo multa
+                </label>
+                <input
+                  value={form.penaltyValue}
+                  onChange={(event) => {
+                    onChange('penaltyValue', event.target.value);
+                    if (Number(event.target.value.replace(',', '.')) > 0) {
+                      onChange('penaltyRate', '');
+                    }
+                  }}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  inputMode="decimal"
+                  placeholder="Ex: 10"
+                  disabled={penaltyValueDisabled}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Dias de carência (multa)
+                </label>
+                <input
+                  value={form.penaltyGracePeriod}
+                  onChange={(event) => onChange('penaltyGracePeriod', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  inputMode="numeric"
+                  placeholder="Ex: 5"
+                />
+              </div>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              {error}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="rounded-2xl bg-blue-600 px-5 py-2 text-sm font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+          >
+            {isSaving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FinanceiroEmpresasPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [search, setSearch] = useState('');
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const runtimeTenantReady = Boolean(runtimeContext.sourceTenantId);
   const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<CompanyItem | null>(null);
+  const [financialForm, setFinancialForm] = useState<CompanyFinancialFormState>({
+    interestRate: '',
+    interestGracePeriod: '',
+    penaltyRate: '',
+    penaltyValue: '',
+    penaltyGracePeriod: '',
+  });
+  const [financialFormError, setFinancialFormError] = useState<string | null>(null);
+  const [isSavingFinancialSettings, setIsSavingFinancialSettings] = useState(false);
   const [columnOrder, setColumnOrder] = useState<CompanyGridColumnKey[]>(
     DEFAULT_COMPANY_GRID_CONFIG.order,
   );
@@ -435,6 +658,69 @@ export default function FinanceiroEmpresasPage() {
     void loadCompanies(search);
   }
 
+  function openFinancialSettings(company: CompanyItem) {
+    setEditingCompany(company);
+    setFinancialForm(buildCompanyFinancialForm(company));
+    setFinancialFormError(null);
+  }
+
+  function closeFinancialSettings() {
+    setEditingCompany(null);
+    setFinancialFormError(null);
+    setIsSavingFinancialSettings(false);
+  }
+
+  async function handleSaveFinancialSettings() {
+    if (!editingCompany) {
+      return;
+    }
+
+    try {
+      setIsSavingFinancialSettings(true);
+      setFinancialFormError(null);
+
+      const updatedCompany = await requestJson<CompanyItem>(
+        `/companies/${editingCompany.id}/financial-settings${buildFinanceApiQueryString(
+          runtimeContext,
+        )}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            requestedBy:
+              runtimeContext.sourceTenantId || runtimeContext.companyName || 'FINANCEIRO_EMPRESAS',
+            interestRate: parseOptionalNumber(financialForm.interestRate),
+            interestGracePeriod: parseOptionalNumber(
+              financialForm.interestGracePeriod,
+              true,
+            ),
+            penaltyRate: parseOptionalNumber(financialForm.penaltyRate),
+            penaltyValue: parseOptionalNumber(financialForm.penaltyValue),
+            penaltyGracePeriod: parseOptionalNumber(
+              financialForm.penaltyGracePeriod,
+              true,
+            ),
+          }),
+          fallbackMessage:
+            'Não foi possível salvar as configurações financeiras da empresa.',
+        },
+      );
+
+      setCompanies((current) =>
+        current.map((item) => (item.id === updatedCompany.id ? updatedCompany : item)),
+      );
+      setStatusMessage('Configurações financeiras da empresa atualizadas com sucesso.');
+      closeFinancialSettings();
+    } catch (currentError) {
+      setFinancialFormError(
+        getFriendlyRequestErrorMessage(
+          currentError,
+          'Não foi possível salvar as configurações financeiras da empresa.',
+        ),
+      );
+      setIsSavingFinancialSettings(false);
+    }
+  }
+
   const showClearSearchButton = Boolean(search.trim());
 
   return (
@@ -447,7 +733,7 @@ export default function FinanceiroEmpresasPage() {
               <h1 className="mt-2 text-3xl font-black tracking-tight">Empresas</h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
                 {runtimeContext.embedded
-                  ? 'A empresa financeira desta escola é mantida automaticamente no core financeiro.'
+                  ? 'A empresa financeira desta escola é mantida no core financeiro e tem as regras padrão ajustadas nesta tela.'
                   : 'Cada empresa é criada automaticamente a partir do sistema de origem e passa a operar no mesmo núcleo financeiro.'}
               </p>
             </div>
@@ -521,6 +807,12 @@ export default function FinanceiroEmpresasPage() {
         </section>
       ) : null}
 
+      {statusMessage ? (
+        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} border-emerald-200 bg-emerald-50 px-6 py-5 text-sm font-semibold text-emerald-700`}>
+          {statusMessage}
+        </section>
+      ) : null}
+
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
         <div className="border-b border-slate-100 px-6 py-5">
           <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresas ativas</div>
@@ -551,6 +843,13 @@ export default function FinanceiroEmpresasPage() {
                           <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                             {item.status}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => openFinancialSettings(item)}
+                            className="mt-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                          >
+                            Alterar financeiro
+                          </button>
                         </div>
                       ) : column.key === 'sourceSystem' ? (
                         <div>
@@ -633,6 +932,23 @@ export default function FinanceiroEmpresasPage() {
           setHiddenColumns(hidden);
         }}
         onClose={() => setIsColumnConfigOpen(false)}
+      />
+      <CompanyFinancialSettingsModal
+        isOpen={Boolean(editingCompany)}
+        company={editingCompany}
+        form={financialForm}
+        isSaving={isSavingFinancialSettings}
+        error={financialFormError}
+        onClose={closeFinancialSettings}
+        onChange={(field, value) => {
+          setFinancialForm((current) => ({
+            ...current,
+            [field]: value,
+          }));
+        }}
+        onSave={() => {
+          void handleSaveFinancialSettings();
+        }}
       />
       <GridExportModal
         isOpen={isExportModalOpen}

@@ -10,6 +10,7 @@ import {
 } from "../../../common/finance-core.utils";
 import {
   ChangeBankStatusDto,
+  GetBankDto,
   ListBanksDto,
   SaveBankDto,
 } from "./dto/banks.dto";
@@ -26,12 +27,40 @@ type NormalizedBankPayload = {
   pixKey: string | null;
   beneficiaryName: string | null;
   beneficiaryDocument: string | null;
+  billingProvider: string | null;
+  billingEnvironment: string | null;
+  billingApiClientId: string | null;
+  billingApiClientSecret: string | null;
+  billingCertificateBase64: string | null;
+  billingCertificatePassword: string | null;
+  billingBeneficiaryCode: string | null;
+  billingWalletVariation: string | null;
+  billingContractNumber: string | null;
+  billingModalityCode: string | null;
+  billingDocumentSpeciesCode: string | null;
+  billingAcceptanceCode: string | null;
+  billingIssueTypeCode: string | null;
+  billingDistributionTypeCode: string | null;
+  billingNextBoletoNumber: number | null;
+  billingRegisterPixCode: number | null;
+  billingInstructionLine1: string | null;
+  billingInstructionLine2: string | null;
+  billingDefaultFinePercent: number | null;
+  billingDefaultInterestPercent: number | null;
+  billingDefaultDiscountPercent: number | null;
+  billingProtestDays: number | null;
+  billingNegativeDays: number | null;
   notes: string | null;
 };
 
 @Injectable()
 export class BanksService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private normalizeOptionalRawText(value: string | null | undefined) {
+    const normalized = String(value || "").trim();
+    return normalized || null;
+  }
 
   private normalizeRequiredText(value: string | null | undefined, label: string) {
     const normalized = normalizeText(value);
@@ -49,6 +78,42 @@ export class BanksService {
     const normalized = normalizeDigits(value);
     if (!normalized) {
       throw new BadRequestException(`Informe ${label}.`);
+    }
+
+    return normalized;
+  }
+
+  private normalizeOptionalPercent(
+    value: number | null | undefined,
+    label: string,
+  ) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const normalized = Number(value);
+    if (!Number.isFinite(normalized) || normalized < 0) {
+      throw new BadRequestException(`Informe ${label} válida.`);
+    }
+
+    return Number(normalized.toFixed(2));
+  }
+
+  private normalizeOptionalInteger(
+    value: number | null | undefined,
+    label: string,
+  ) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const normalized = Number(value);
+    if (
+      !Number.isFinite(normalized) ||
+      !Number.isInteger(normalized) ||
+      normalized < 0
+    ) {
+      throw new BadRequestException(`Informe ${label} válido.`);
     }
 
     return normalized;
@@ -73,6 +138,60 @@ export class BanksService {
       pixKey: normalizeText(payload.pixKey),
       beneficiaryName: normalizeText(payload.beneficiaryName),
       beneficiaryDocument: normalizeDigits(payload.beneficiaryDocument),
+      billingProvider: normalizeText(payload.billingProvider),
+      billingEnvironment: normalizeText(payload.billingEnvironment),
+      billingApiClientId: this.normalizeOptionalRawText(payload.billingApiClientId),
+      billingApiClientSecret: this.normalizeOptionalRawText(
+        payload.billingApiClientSecret,
+      ),
+      billingCertificateBase64: this.normalizeOptionalRawText(
+        payload.billingCertificateBase64,
+      ),
+      billingCertificatePassword: this.normalizeOptionalRawText(
+        payload.billingCertificatePassword,
+      ),
+      billingBeneficiaryCode: normalizeText(payload.billingBeneficiaryCode),
+      billingWalletVariation: normalizeText(payload.billingWalletVariation),
+      billingContractNumber: normalizeText(payload.billingContractNumber),
+      billingModalityCode: normalizeText(payload.billingModalityCode),
+      billingDocumentSpeciesCode: normalizeText(
+        payload.billingDocumentSpeciesCode,
+      ),
+      billingAcceptanceCode: normalizeText(payload.billingAcceptanceCode),
+      billingIssueTypeCode: normalizeText(payload.billingIssueTypeCode),
+      billingDistributionTypeCode: normalizeText(
+        payload.billingDistributionTypeCode,
+      ),
+      billingNextBoletoNumber: this.normalizeOptionalInteger(
+        payload.billingNextBoletoNumber,
+        "o próximo boleto",
+      ),
+      billingRegisterPixCode: this.normalizeOptionalInteger(
+        payload.billingRegisterPixCode,
+        "o código de PIX",
+      ),
+      billingInstructionLine1: normalizeText(payload.billingInstructionLine1),
+      billingInstructionLine2: normalizeText(payload.billingInstructionLine2),
+      billingDefaultFinePercent: this.normalizeOptionalPercent(
+        payload.billingDefaultFinePercent,
+        "a multa padrão",
+      ),
+      billingDefaultInterestPercent: this.normalizeOptionalPercent(
+        payload.billingDefaultInterestPercent,
+        "o juro padrão",
+      ),
+      billingDefaultDiscountPercent: this.normalizeOptionalPercent(
+        payload.billingDefaultDiscountPercent,
+        "o desconto padrão",
+      ),
+      billingProtestDays: this.normalizeOptionalInteger(
+        payload.billingProtestDays,
+        "os dias de protesto",
+      ),
+      billingNegativeDays: this.normalizeOptionalInteger(
+        payload.billingNegativeDays,
+        "os dias de negativação",
+      ),
       notes: normalizeText(payload.notes),
     };
   }
@@ -130,7 +249,13 @@ export class BanksService {
     });
   }
 
-  private mapBank(bank: any) {
+  private mapBank(bank: any, includeSecrets = false) {
+    const normalizedProvider = normalizeText(bank.billingProvider);
+    const hasBillingApiCredentials =
+      normalizedProvider === "SICOOB"
+        ? Boolean(bank.billingApiClientId)
+        : Boolean(bank.billingApiClientId && bank.billingApiClientSecret);
+
     return {
       id: bank.id,
       companyId: bank.companyId,
@@ -149,6 +274,59 @@ export class BanksService {
       pixKey: bank.pixKey || null,
       beneficiaryName: bank.beneficiaryName || null,
       beneficiaryDocument: bank.beneficiaryDocument || null,
+      billingProvider: bank.billingProvider || null,
+      billingEnvironment: bank.billingEnvironment || null,
+      billingBeneficiaryCode: bank.billingBeneficiaryCode || null,
+      billingWalletVariation: bank.billingWalletVariation || null,
+      billingContractNumber: bank.billingContractNumber || null,
+      billingModalityCode: bank.billingModalityCode || null,
+      billingDocumentSpeciesCode: bank.billingDocumentSpeciesCode || null,
+      billingAcceptanceCode: bank.billingAcceptanceCode || null,
+      billingIssueTypeCode: bank.billingIssueTypeCode || null,
+      billingDistributionTypeCode: bank.billingDistributionTypeCode || null,
+      billingNextBoletoNumber:
+        typeof bank.billingNextBoletoNumber === "number"
+          ? bank.billingNextBoletoNumber
+          : null,
+      billingRegisterPixCode:
+        typeof bank.billingRegisterPixCode === "number"
+          ? bank.billingRegisterPixCode
+          : null,
+      billingInstructionLine1: bank.billingInstructionLine1 || null,
+      billingInstructionLine2: bank.billingInstructionLine2 || null,
+      billingDefaultFinePercent:
+        typeof bank.billingDefaultFinePercent === "number"
+          ? bank.billingDefaultFinePercent
+          : null,
+      billingDefaultInterestPercent:
+        typeof bank.billingDefaultInterestPercent === "number"
+          ? bank.billingDefaultInterestPercent
+          : null,
+      billingDefaultDiscountPercent:
+        typeof bank.billingDefaultDiscountPercent === "number"
+          ? bank.billingDefaultDiscountPercent
+          : null,
+      billingProtestDays:
+        typeof bank.billingProtestDays === "number"
+          ? bank.billingProtestDays
+          : null,
+      billingNegativeDays:
+        typeof bank.billingNegativeDays === "number"
+          ? bank.billingNegativeDays
+          : null,
+      hasBillingApiCredentials,
+      hasBillingCertificate: Boolean(
+        bank.billingCertificateBase64 && bank.billingCertificatePassword,
+      ),
+      ...(includeSecrets
+        ? {
+            billingApiClientId: bank.billingApiClientId || null,
+            billingApiClientSecret: bank.billingApiClientSecret || null,
+            billingCertificateBase64: bank.billingCertificateBase64 || null,
+            billingCertificatePassword:
+              bank.billingCertificatePassword || null,
+          }
+        : {}),
       notes: bank.notes || null,
       createdAt: bank.createdAt.toISOString(),
       createdBy: bank.createdBy || null,
@@ -275,6 +453,16 @@ export class BanksService {
     return banks.map((bank) => this.mapBank(bank));
   }
 
+  async get(bankId: string, query: GetBankDto) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      query.sourceSystem,
+      query.sourceTenantId,
+    );
+
+    return this.mapBank(bank, true);
+  }
+
   async create(payload: SaveBankDto) {
     const company = await this.resolveOrCreateCompany(payload);
     const normalizedPayload = this.buildNormalizedPayload(payload);
@@ -294,7 +482,7 @@ export class BanksService {
       },
     });
 
-    return this.mapBank(bank);
+    return this.mapBank(bank, true);
   }
 
   async update(bankId: string, payload: SaveBankDto) {
@@ -318,7 +506,7 @@ export class BanksService {
       },
     });
 
-    return this.mapBank(updatedBank);
+    return this.mapBank(updatedBank, true);
   }
 
   async activate(bankId: string, payload: ChangeBankStatusDto) {

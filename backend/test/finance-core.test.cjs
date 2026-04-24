@@ -24,8 +24,16 @@ const {
 const {
   BanksService,
 } = require("../dist/modules/banks/application/banks.service.js");
+const {
+  CompaniesService,
+} = require("../dist/modules/companies/application/companies.service.js");
+const {
+  evaluateBankReturnForInstallment,
+} = require("../dist/modules/receivables/application/bank-return.utils.js");
 
 async function resetDatabase(prisma) {
+  await prisma.bankReturnImportItem.deleteMany();
+  await prisma.bankReturnImport.deleteMany();
   await prisma.installmentSettlement.deleteMany();
   await prisma.cashMovement.deleteMany();
   await prisma.receivableInstallment.deleteMany();
@@ -44,9 +52,46 @@ async function main() {
   try {
     await resetDatabase(prisma);
 
+    const liquidatedOpenInstallment = evaluateBankReturnForInstallment({
+      movementStatus: "LIQUIDATED",
+      installment: {
+        id: "INST_001",
+        sourceInstallmentKey: "MENSALIDADE:ALUNO_001:2026-04:1",
+        status: "OPEN",
+        openAmount: 850,
+        paidAmount: 0,
+        settledAt: null,
+      },
+    });
+
+    assert.equal(liquidatedOpenInstallment.canApply, true);
+    assert.equal(
+      liquidatedOpenInstallment.noteText,
+      "VAI BAIXAR BOLETO.",
+    );
+
+    const writeOffInstallment = evaluateBankReturnForInstallment({
+      movementStatus: "WRITE_OFF",
+      installment: {
+        id: "INST_001",
+        sourceInstallmentKey: "MENSALIDADE:ALUNO_001:2026-04:1",
+        status: "OPEN",
+        openAmount: 850,
+        paidAmount: 0,
+        settledAt: null,
+      },
+    });
+
+    assert.equal(writeOffInstallment.canApply, false);
+    assert.equal(
+      writeOffInstallment.noteText,
+      "BOLETO BAIXADO NO BANCO - NÃO BAIXA PARCELA.",
+    );
+
     const receivablesService = new ReceivablesService(prisma);
     const cashSessionsService = new CashSessionsService(prisma);
     const banksService = new BanksService(prisma);
+    const companiesService = new CompaniesService(prisma);
 
     const createdBank = await banksService.create({
       requestedBy: "CODEX",
@@ -122,6 +167,13 @@ async function main() {
       requestedBy: "CODEX",
       companyName: "ESCOLA TESTE",
       companyDocument: "12345678000199",
+      financialSettings: {
+        interestRate: 5,
+        penaltyRate: 2,
+        penaltyValue: 0,
+        interestGracePeriod: 5,
+        penaltyGracePeriod: 5,
+      },
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_TESTE",
       sourceBatchType: "MENSALIDADE",
@@ -153,10 +205,17 @@ async function main() {
           installments: [
             {
               installmentNumber: 1,
-              installmentCount: 1,
+              installmentCount: 2,
               dueDate: "2026-04-10",
               amount: 850,
               sourceInstallmentKey: "MENSALIDADE:ALUNO_001:2026-04:1",
+            },
+            {
+              installmentNumber: 2,
+              installmentCount: 2,
+              dueDate: "2026-05-10",
+              amount: 150,
+              sourceInstallmentKey: "MENSALIDADE:ALUNO_001:2026-04:2",
             },
           ],
         },
@@ -164,7 +223,7 @@ async function main() {
     });
 
     assert.equal(importResult.importedTitles, 1);
-    assert.equal(importResult.importedInstallments, 1);
+    assert.equal(importResult.importedInstallments, 2);
 
     const boletoBank = await banksService.create({
       requestedBy: "CODEX",
@@ -194,8 +253,90 @@ async function main() {
       },
     );
 
-    assert.equal(installmentsBeforeSettlement.length, 1);
-    assert.equal(installmentsBeforeSettlement[0].openAmount, 850);
+    assert.equal(installmentsBeforeSettlement.length, 2);
+    const firstInstallment = installmentsBeforeSettlement.find(
+      (item) => item.sourceInstallmentKey === "MENSALIDADE:ALUNO_001:2026-04:1",
+    );
+    const secondInstallment = installmentsBeforeSettlement.find(
+      (item) => item.sourceInstallmentKey === "MENSALIDADE:ALUNO_001:2026-04:2",
+    );
+
+    assert.ok(firstInstallment);
+    assert.ok(secondInstallment);
+    assert.equal(firstInstallment.openAmount, 850);
+    assert.equal(secondInstallment.openAmount, 150);
+    assert.equal(firstInstallment.interestRate, 5);
+    assert.equal(firstInstallment.penaltyRate, 2);
+    assert.equal(firstInstallment.penaltyGracePeriod, 5);
+
+    const importedWithoutFinancialSettings = await receivablesService.import({
+      requestedBy: "CODEX",
+      companyName: "ESCOLA TESTE",
+      companyDocument: "12345678000199",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBatchType: "MENSALIDADE",
+      sourceBatchId: "LOTE_TESTE_002",
+      referenceDate: "2026-06-01",
+      metadata: {
+        scope: "ALL",
+      },
+      skippedItems: [],
+      items: [
+        {
+          sourceEntityType: "ALUNO",
+          sourceEntityId: "ALUNO_002",
+          sourceEntityName: "ALUNO TESTE 2",
+          classLabel: "6 ANO A",
+          businessKey:
+            "ESCOLA:TENANT_ESCOLA_TESTE:ALUNO:ALUNO_002:MENSALIDADE:2026-06",
+          description: "MENSALIDADE 06/2026",
+          categoryCode: "MENSALIDADE",
+          issueDate: "2026-06-01",
+          payer: {
+            externalEntityType: "RESPONSAVEL",
+            externalEntityId: "RESP_002",
+            name: "MARIA TESTE 2",
+            document: "12345678901",
+            email: "maria2@teste.com",
+            phone: "11999999998",
+          },
+          installments: [
+            {
+              installmentNumber: 1,
+              installmentCount: 1,
+              dueDate: "2026-06-10",
+              amount: 200,
+              sourceInstallmentKey: "MENSALIDADE:ALUNO_002:2026-06:1",
+            },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(importedWithoutFinancialSettings.importedInstallments, 1);
+
+    const preservedCompanySettings = await companiesService.list({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+    });
+    assert.equal(preservedCompanySettings.length, 1);
+    assert.equal(preservedCompanySettings[0].interestRate, 5);
+    assert.equal(preservedCompanySettings[0].penaltyRate, 2);
+
+    const thirdInstallment = (
+      await receivablesService.listInstallments({
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        batchId: importedWithoutFinancialSettings.batchId,
+        status: "OPEN",
+      })
+    )[0];
+
+    assert.ok(thirdInstallment);
+    assert.equal(thirdInstallment.interestRate, 5);
+    assert.equal(thirdInstallment.penaltyRate, 2);
+    assert.equal(thirdInstallment.penaltyGracePeriod, 5);
 
     const bankAssignment = await receivablesService.assignBankToInstallments(
       importResult.batchId,
@@ -204,11 +345,11 @@ async function main() {
         sourceSystem: "ESCOLA",
         sourceTenantId: "TENANT_ESCOLA_TESTE",
         bankAccountId: boletoBank.id,
-        installmentIds: [installmentsBeforeSettlement[0].id],
+        installmentIds: [firstInstallment.id, secondInstallment.id],
       },
     );
 
-    assert.equal(bankAssignment.updatedCount, 1);
+    assert.equal(bankAssignment.updatedCount, 2);
     assert.equal(bankAssignment.bankAccountId, boletoBank.id);
 
     const installmentsAfterAssignment = await receivablesService.listInstallments(
@@ -220,15 +361,12 @@ async function main() {
       },
     );
 
-    assert.equal(installmentsAfterAssignment.length, 1);
-    assert.equal(
-      installmentsAfterAssignment[0].bankAccountId,
-      boletoBank.id,
-    );
-    assert.match(
-      installmentsAfterAssignment[0].bankAccountLabel,
-      /ITAU/i,
-    );
+    assert.equal(installmentsAfterAssignment.length, 2);
+
+    for (const installment of installmentsAfterAssignment) {
+      assert.equal(installment.bankAccountId, boletoBank.id);
+      assert.match(installment.bankAccountLabel, /ITAU/i);
+    }
 
     const openedCashSession = await cashSessionsService.open({
       requestedBy: "CODEX",
@@ -243,19 +381,40 @@ async function main() {
     assert.equal(openedCashSession.status, "OPEN");
 
     const settlement = await cashSessionsService.settleInstallment(
-      installmentsBeforeSettlement[0].id,
+      firstInstallment.id,
       {
         requestedBy: "CODEX",
         sourceSystem: "ESCOLA",
         sourceTenantId: "TENANT_ESCOLA_TESTE",
         cashierUserId: "USR_CAIXA_001",
         cashierDisplayName: "CAIXA TESTE",
+        receivedAt: "2026-04-23T10:00:00.000Z",
         notes: "RECEBIMENTO TESTE",
       },
     );
 
     assert.equal(settlement.status, "PAID");
-    assert.equal(settlement.receivedAmount, 850);
+    assert.equal(settlement.interestAmount, 11.33);
+    assert.equal(settlement.penaltyAmount, 17);
+    assert.equal(settlement.receivedAmount, 878.33);
+
+    const pixSettlement = await cashSessionsService.settleManualInstallment(
+      secondInstallment.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        cashierUserId: "USR_CAIXA_001",
+        cashierDisplayName: "CAIXA TESTE",
+        paymentMethod: "PIX",
+        receivedAt: "2026-05-10T10:00:00.000Z",
+        notes: "RECEBIMENTO PIX",
+      },
+    );
+
+    assert.equal(pixSettlement.status, "PAID");
+    assert.equal(pixSettlement.receivedAmount, 150);
+    assert.equal(pixSettlement.paymentMethod, "PIX");
 
     const currentSession = await cashSessionsService.getCurrent({
       sourceSystem: "ESCOLA",
@@ -263,8 +422,13 @@ async function main() {
       cashierUserId: "USR_CAIXA_001",
     });
 
-    assert.equal(currentSession.totalReceivedAmount, 850);
-    assert.equal(currentSession.expectedClosingAmount, 950);
+    assert.equal(currentSession.totalReceivedAmount, 1028.33);
+    assert.equal(currentSession.expectedClosingAmount, 978.33);
+    assert.equal(currentSession.receivedByPaymentMethod.cash, 878.33);
+    assert.equal(currentSession.receivedByPaymentMethod.pix, 150);
+    assert.equal(currentSession.receivedByPaymentMethod.creditCard, 0);
+    assert.equal(currentSession.receivedByPaymentMethod.debitCard, 0);
+    assert.equal(currentSession.receivedByPaymentMethod.check, 0);
 
     const installmentsAfterSettlement = await receivablesService.listInstallments(
       {
@@ -274,8 +438,10 @@ async function main() {
       },
     );
 
-    assert.equal(installmentsAfterSettlement.length, 1);
-    assert.equal(installmentsAfterSettlement[0].status, "PAID");
+    assert.equal(installmentsAfterSettlement.length, 2);
+    assert.ok(
+      installmentsAfterSettlement.every((installment) => installment.status === "PAID"),
+    );
 
     console.log("TOTAL 1 TEST PASSING");
   } finally {

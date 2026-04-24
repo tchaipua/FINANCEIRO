@@ -7,6 +7,7 @@ import {
   ListCashSessionsDto,
   OpenCashSessionDto,
   SettleCashInstallmentDto,
+  SettleManualInstallmentDto,
 } from "../application/dto/cash-sessions.dto";
 
 @ApiTags("Cash Sessions")
@@ -55,5 +56,20 @@ export class CashSessionsController {
     @Body() payload: SettleCashInstallmentDto,
   ) {
     return this.cashSessionsService.settleInstallment(installmentId, payload);
+  }
+
+  @Post("receivables/installments/:installmentId/settle-manual")
+  @ApiOperation({
+    summary:
+      "Registra baixa manual na parcela informada usando a forma de recebimento selecionada",
+  })
+  settleManualInstallment(
+    @Param("installmentId") installmentId: string,
+    @Body() payload: SettleManualInstallmentDto,
+  ) {
+    return this.cashSessionsService.settleManualInstallment(
+      installmentId,
+      payload,
+    );
   }
 }

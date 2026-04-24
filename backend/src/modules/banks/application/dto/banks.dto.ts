@@ -1,4 +1,5 @@
-import { IsOptional, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class ListBanksDto {
   @IsOptional()
@@ -26,6 +27,26 @@ export class ListBanksDto {
   @IsOptional()
   @IsString()
   cashierDisplayName?: string;
+}
+
+export class ChangeBankStatusDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+}
+
+export class GetBankDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
 }
 
 export class SaveBankDto {
@@ -89,17 +110,111 @@ export class SaveBankDto {
 
   @IsOptional()
   @IsString()
-  notes?: string;
-}
+  billingProvider?: string;
 
-export class ChangeBankStatusDto {
   @IsOptional()
   @IsString()
-  requestedBy?: string;
+  billingEnvironment?: string;
 
+  @IsOptional()
   @IsString()
-  sourceSystem!: string;
+  billingApiClientId?: string;
 
+  @IsOptional()
   @IsString()
-  sourceTenantId!: string;
+  billingApiClientSecret?: string;
+
+  @IsOptional()
+  @IsString()
+  billingCertificateBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  billingCertificatePassword?: string;
+
+  @IsOptional()
+  @IsString()
+  billingBeneficiaryCode?: string;
+
+  @IsOptional()
+  @IsString()
+  billingWalletVariation?: string;
+
+  @IsOptional()
+  @IsString()
+  billingContractNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  billingModalityCode?: string;
+
+  @IsOptional()
+  @IsString()
+  billingDocumentSpeciesCode?: string;
+
+  @IsOptional()
+  @IsString()
+  billingAcceptanceCode?: string;
+
+  @IsOptional()
+  @IsString()
+  billingIssueTypeCode?: string;
+
+  @IsOptional()
+  @IsString()
+  billingDistributionTypeCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingNextBoletoNumber?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingRegisterPixCode?: number;
+
+  @IsOptional()
+  @IsString()
+  billingInstructionLine1?: string;
+
+  @IsOptional()
+  @IsString()
+  billingInstructionLine2?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingDefaultFinePercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingDefaultInterestPercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingDefaultDiscountPercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingProtestDays?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  billingNegativeDays?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

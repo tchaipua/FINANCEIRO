@@ -1,11 +1,20 @@
 import { Type } from "class-transformer";
 import {
   IsDateString,
+  IsIn,
   IsOptional,
   IsString,
   Min,
   IsNumber,
 } from "class-validator";
+
+export const CASH_SESSION_PAYMENT_METHODS = [
+  "CASH",
+  "PIX",
+  "CREDIT_CARD",
+  "DEBIT_CARD",
+  "CHECK",
+] as const;
 
 export class CurrentCashSessionQueryDto {
   @IsOptional()
@@ -113,7 +122,7 @@ export class CloseCurrentCashSessionDto {
   notes?: string;
 }
 
-export class SettleCashInstallmentDto {
+class BaseSettleInstallmentDto {
   @IsOptional()
   @IsString()
   requestedBy?: string;
@@ -155,4 +164,11 @@ export class SettleCashInstallmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+export class SettleCashInstallmentDto extends BaseSettleInstallmentDto {}
+
+export class SettleManualInstallmentDto extends BaseSettleInstallmentDto {
+  @IsIn(CASH_SESSION_PAYMENT_METHODS)
+  paymentMethod!: (typeof CASH_SESSION_PAYMENT_METHODS)[number];
 }
