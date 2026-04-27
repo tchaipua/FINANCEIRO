@@ -1,5 +1,6 @@
 import {
   Allow,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsInt,
@@ -52,6 +53,26 @@ export class ReceivablePayerImportDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  addressLine1?: string;
+
+  @IsOptional()
+  @IsString()
+  neighborhood?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  postalCode?: string;
 }
 
 export class ReceivableItemImportDto {
@@ -90,6 +111,38 @@ export class ReceivableItemImportDto {
   @ValidateNested({ each: true })
   @Type(() => ReceivableInstallmentImportDto)
   installments!: ReceivableInstallmentImportDto[];
+}
+
+export class CompanyFinancialSettingsImportDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  interestRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  penaltyRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  penaltyValue?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  interestGracePeriod?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  penaltyGracePeriod?: number;
 }
 
 export class ReceivablesImportDto {
@@ -133,6 +186,11 @@ export class ReceivablesImportDto {
   @Allow()
   skippedItems?: Array<Record<string, unknown>>;
 
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CompanyFinancialSettingsImportDto)
+  financialSettings?: CompanyFinancialSettingsImportDto;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ReceivableItemImportDto)
@@ -154,6 +212,10 @@ export class ExistingBusinessKeysDto {
 export class ListReceivableBatchesDto {
   @IsOptional()
   @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
   sourceSystem?: string;
 
   @IsOptional()
@@ -163,9 +225,21 @@ export class ListReceivableBatchesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
 }
 
 export class ListReceivableInstallmentsDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
   @IsOptional()
   @IsString()
   sourceSystem?: string;
@@ -173,6 +247,10 @@ export class ListReceivableInstallmentsDto {
   @IsOptional()
   @IsString()
   sourceTenantId?: string;
+
+  @IsOptional()
+  @IsString()
+  batchId?: string;
 
   @IsOptional()
   @IsString()
@@ -189,4 +267,137 @@ export class ListReceivableInstallmentsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
+export class UpdateReceivableInstallmentDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+}
+
+export class AssignBankToInstallmentsDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  bankAccountId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installmentIds!: string[];
+}
+
+export class IssueBankSlipsDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  bankAccountId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installmentIds!: string[];
+}
+
+export class GetInstallmentBankSlipPdfDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+}
+
+export class ListBankReturnImportsDto {
+  @IsOptional()
+  @IsString()
+  sourceSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceTenantId?: string;
+
+  @IsOptional()
+  @IsString()
+  bankAccountId?: string;
+}
+
+export class ImportBankReturnDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  bankAccountId!: string;
+
+  @IsDateString()
+  periodStart!: string;
+
+  @IsDateString()
+  periodEnd!: string;
+}
+
+export class GetBankReturnImportDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+}
+
+export class ApplyBankReturnLiquidationsDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
 }

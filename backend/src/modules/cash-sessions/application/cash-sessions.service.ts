@@ -10,16 +10,133 @@ import {
   roundMoney,
 } from "../../../common/finance-core.utils";
 import {
+  buildInstallmentSettlementSuggestion,
+  resolveFinancialRuleSettings,
+} from "../../../common/manual-settlement.utils";
+import {
   CloseCurrentCashSessionDto,
   CurrentCashSessionQueryDto,
   ListCashSessionsDto,
   OpenCashSessionDto,
   SettleCashInstallmentDto,
+  SettleManualInstallmentDto,
 } from "./dto/cash-sessions.dto";
+
+const CASH_SESSION_PAYMENT_METHOD_METADATA = {
+  CASH: {
+    label: "DINHEIRO",
+    affectsDrawer: true,
+    description: "BAIXA MANUAL DE PARCELA - DINHEIRO",
+    successMessage: "Baixa em dinheiro registrada com sucesso.",
+  },
+  PIX: {
+    label: "PIX",
+    affectsDrawer: false,
+    description: "BAIXA MANUAL DE PARCELA - PIX",
+    successMessage: "Baixa por pix registrada com sucesso.",
+  },
+  CREDIT_CARD: {
+    label: "CARTÃO DE CRÉDITO",
+    affectsDrawer: false,
+    description: "BAIXA MANUAL DE PARCELA - CARTÃO DE CRÉDITO",
+    successMessage: "Baixa por cartão de crédito registrada com sucesso.",
+  },
+  DEBIT_CARD: {
+    label: "CARTÃO DE DÉBITO",
+    affectsDrawer: false,
+    description: "BAIXA MANUAL DE PARCELA - CARTÃO DE DÉBITO",
+    successMessage: "Baixa por cartão de débito registrada com sucesso.",
+  },
+  CHECK: {
+    label: "CHEQUE",
+    affectsDrawer: true,
+    description: "BAIXA MANUAL DE PARCELA - CHEQUE",
+    successMessage: "Baixa por cheque registrada com sucesso.",
+  },
+} as const;
 
 @Injectable()
 export class CashSessionsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private buildInstallmentFinancialSettingsSnapshot(installment: any) {
+    return resolveFinancialRuleSettings({
+      interestRate:
+        installment.interestRate ?? installment.company?.interestRate ?? null,
+      interestGracePeriod:
+        installment.interestGracePeriod ??
+        installment.company?.interestGracePeriod ??
+        null,
+      penaltyRate:
+        installment.penaltyRate ?? installment.company?.penaltyRate ?? null,
+      penaltyValue:
+        installment.penaltyValue ?? installment.company?.penaltyValue ?? null,
+      penaltyGracePeriod:
+        installment.penaltyGracePeriod ??
+        installment.company?.penaltyGracePeriod ??
+        null,
+    });
+  }
+
+  private buildReceivedByPaymentMethod(session: any) {
+    const totals = {
+      cash: 0,
+      pix: 0,
+      creditCard: 0,
+      debitCard: 0,
+      check: 0,
+    };
+
+    if (!Array.isArray(session?.movements)) {
+      return totals;
+    }
+
+    for (const movement of session.movements) {
+      if (
+        movement?.movementType !== "SETTLEMENT" ||
+        movement?.direction !== "IN"
+      ) {
+        continue;
+      }
+
+      const normalizedPaymentMethod = normalizeText(movement?.paymentMethod);
+      const amount = roundMoney(Number(movement?.amount || 0));
+
+      if (normalizedPaymentMethod === "CASH") {
+        totals.cash = roundMoney(totals.cash + amount);
+      } else if (normalizedPaymentMethod === "PIX") {
+        totals.pix = roundMoney(totals.pix + amount);
+      } else if (normalizedPaymentMethod === "CREDIT_CARD") {
+        totals.creditCard = roundMoney(totals.creditCard + amount);
+      } else if (normalizedPaymentMethod === "DEBIT_CARD") {
+        totals.debitCard = roundMoney(totals.debitCard + amount);
+      } else if (normalizedPaymentMethod === "CHECK") {
+        totals.check = roundMoney(totals.check + amount);
+      }
+    }
+
+    return totals;
+  }
+
+  private resolvePaymentMethodMetadata(paymentMethod?: string | null) {
+    const normalizedPaymentMethod = normalizeText(paymentMethod);
+
+    if (
+      !normalizedPaymentMethod ||
+      !(normalizedPaymentMethod in CASH_SESSION_PAYMENT_METHOD_METADATA)
+    ) {
+      throw new BadRequestException(
+        "Informe uma forma de recebimento válida.",
+      );
+    }
+
+    return {
+      code: normalizedPaymentMethod,
+      ...CASH_SESSION_PAYMENT_METHOD_METADATA[
+        normalizedPaymentMethod as keyof typeof CASH_SESSION_PAYMENT_METHOD_METADATA
+      ],
+    };
+  }
 
   private async resolveCompany(sourceSystem: string, sourceTenantId: string) {
     const company = await this.prisma.company.findUnique({
@@ -71,6 +188,8 @@ export class CashSessionsService {
   private mapCashSession(session: any) {
     if (!session) return null;
 
+    const receivedByPaymentMethod = this.buildReceivedByPaymentMethod(session);
+
     return {
       id: session.id,
       companyId: session.companyId,
@@ -90,6 +209,7 @@ export class CashSessionsService {
       createdBy: session.createdBy || null,
       updatedAt: session.updatedAt.toISOString(),
       updatedBy: session.updatedBy || null,
+      receivedByPaymentMethod,
       movementCount: Array.isArray(session.movements) ? session.movements.length : 0,
       settlementCount: Array.isArray(session.settlements)
         ? session.settlements.length
@@ -125,6 +245,10 @@ export class CashSessionsService {
     const normalizedSourceTenantId = normalizeText(query.sourceTenantId);
     const normalizedStatus = normalizeText(query.status);
     const normalizedSearch = normalizeText(query.search);
+
+    if (!normalizedSourceTenantId) {
+      return [];
+    }
 
     const sessions = await this.prisma.cashSession.findMany({
       where: {
@@ -321,6 +445,16 @@ export class CashSessionsService {
     installmentId: string,
     payload: SettleCashInstallmentDto,
   ) {
+    return this.settleManualInstallment(installmentId, {
+      ...payload,
+      paymentMethod: "CASH",
+    });
+  }
+
+  async settleManualInstallment(
+    installmentId: string,
+    payload: SettleManualInstallmentDto,
+  ) {
     const normalizedInstallmentId = String(installmentId || "").trim();
     if (!normalizedInstallmentId) {
       throw new BadRequestException("Parcela inválida para baixa.");
@@ -344,6 +478,17 @@ export class CashSessionsService {
         companyId: company.id,
         canceledAt: null,
       },
+      include: {
+        company: {
+          select: {
+            interestRate: true,
+            interestGracePeriod: true,
+            penaltyRate: true,
+            penaltyValue: true,
+            penaltyGracePeriod: true,
+          },
+        },
+      },
     });
 
     if (!installment) {
@@ -354,9 +499,30 @@ export class CashSessionsService {
       throw new BadRequestException("A parcela informada já está liquidada.");
     }
 
-    const discountAmount = roundMoney(Number(payload.discountAmount || 0));
-    const interestAmount = roundMoney(Number(payload.interestAmount || 0));
-    const penaltyAmount = roundMoney(Number(payload.penaltyAmount || 0));
+    const paymentMethod = this.resolvePaymentMethodMetadata(
+      payload.paymentMethod,
+    );
+    const settledAt = payload.receivedAt
+      ? parseIsoDate(payload.receivedAt, "a data de recebimento")
+      : new Date();
+
+    const installmentFinancialSettings =
+      this.buildInstallmentFinancialSettingsSnapshot(installment);
+    const settlementSuggestion = buildInstallmentSettlementSuggestion({
+      dueDate: installment.dueDate,
+      openAmount: installment.openAmount,
+      referenceDate: settledAt,
+      settings: installmentFinancialSettings,
+    });
+    const discountAmount = roundMoney(
+      Number(payload.discountAmount ?? settlementSuggestion.suggestedDiscountAmount ?? 0),
+    );
+    const interestAmount = roundMoney(
+      Number(payload.interestAmount ?? settlementSuggestion.suggestedInterestAmount ?? 0),
+    );
+    const penaltyAmount = roundMoney(
+      Number(payload.penaltyAmount ?? settlementSuggestion.suggestedPenaltyAmount ?? 0),
+    );
     const receivedAmount = roundMoney(
       Number(installment.openAmount || 0) -
         discountAmount +
@@ -370,10 +536,6 @@ export class CashSessionsService {
       );
     }
 
-    const settledAt = payload.receivedAt
-      ? parseIsoDate(payload.receivedAt, "a data de recebimento")
-      : new Date();
-
     const settlement = await this.prisma.$transaction(async (tx: any) => {
       const createdSettlement = await tx.installmentSettlement.create({
         data: {
@@ -384,7 +546,7 @@ export class CashSessionsService {
           discountAmount,
           interestAmount,
           penaltyAmount,
-          paymentMethod: "CASH",
+          paymentMethod: paymentMethod.code,
           settledAt,
           requestedBy: payload.requestedBy || null,
           notes: normalizeText(payload.notes),
@@ -401,23 +563,28 @@ export class CashSessionsService {
             Number(installment.paidAmount || 0) + receivedAmount,
           ),
           status: "PAID",
-          settlementMethod: "CASH",
+          settlementMethod: paymentMethod.code,
           settledAt,
           updatedBy: payload.requestedBy || null,
         },
       });
 
+      const cashSessionUpdateData: any = {
+        totalReceivedAmount: {
+          increment: receivedAmount,
+        },
+        updatedBy: payload.requestedBy || null,
+      };
+
+      if (paymentMethod.affectsDrawer) {
+        cashSessionUpdateData.expectedClosingAmount = roundMoney(
+          Number(openSession.expectedClosingAmount || 0) + receivedAmount,
+        );
+      }
+
       await tx.cashSession.update({
         where: { id: openSession.id },
-        data: {
-          totalReceivedAmount: {
-            increment: receivedAmount,
-          },
-          expectedClosingAmount: roundMoney(
-            Number(openSession.expectedClosingAmount || 0) + receivedAmount,
-          ),
-          updatedBy: payload.requestedBy || null,
-        },
+        data: cashSessionUpdateData,
       });
 
       await tx.cashMovement.create({
@@ -426,9 +593,9 @@ export class CashSessionsService {
           cashSessionId: openSession.id,
           movementType: "SETTLEMENT",
           direction: "IN",
-          paymentMethod: "CASH",
+          paymentMethod: paymentMethod.code,
           amount: receivedAmount,
-          description: "BAIXA DE PARCELA EM DINHEIRO",
+          description: paymentMethod.description,
           occurredAt: settledAt,
           referenceType: "INSTALLMENT",
           referenceId: installment.id,
@@ -449,11 +616,11 @@ export class CashSessionsService {
       paidAmount: roundMoney(Number(installment.paidAmount || 0) + receivedAmount),
       receivedAmount,
       settledAt: settlement.settledAt.toISOString(),
-      paymentMethod: "CASH",
+      paymentMethod: paymentMethod.code,
       discountAmount,
       interestAmount,
       penaltyAmount,
-      message: "Baixa em dinheiro registrada com sucesso.",
+      message: paymentMethod.successMessage,
     };
   }
 }

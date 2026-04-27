@@ -7,6 +7,7 @@ export type FinanceRuntimeContext = {
   embedded: boolean;
   sourceSystem: string | null;
   sourceTenantId: string | null;
+  companyName: string | null;
   cashierUserId: string | null;
   cashierDisplayName: string | null;
 };
@@ -17,23 +18,23 @@ function normalizeQueryValue(value: string | null, uppercase = true) {
   return uppercase ? trimmed.toUpperCase() : trimmed;
 }
 
-function readRuntimeContext(): FinanceRuntimeContext {
-  if (typeof window === 'undefined') {
-    return {
-      embedded: false,
-      sourceSystem: null,
-      sourceTenantId: null,
-      cashierUserId: null,
-      cashierDisplayName: null,
-    };
-  }
+const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
+  embedded: false,
+  sourceSystem: null,
+  sourceTenantId: null,
+  companyName: null,
+  cashierUserId: null,
+  cashierDisplayName: null,
+};
 
-  const searchParams = new URLSearchParams(window.location.search);
+function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
+  const searchParams = new URLSearchParams(search);
 
   return {
     embedded: searchParams.get('embedded') === '1',
     sourceSystem: normalizeQueryValue(searchParams.get('sourceSystem')),
     sourceTenantId: normalizeQueryValue(searchParams.get('sourceTenantId')),
+    companyName: normalizeQueryValue(searchParams.get('companyName')),
     cashierUserId: normalizeQueryValue(searchParams.get('cashierUserId')),
     cashierDisplayName: normalizeQueryValue(
       searchParams.get('cashierDisplayName'),
@@ -44,16 +45,15 @@ function readRuntimeContext(): FinanceRuntimeContext {
 export function useFinanceRuntimeContext(): FinanceRuntimeContext {
   const pathname = usePathname();
   const [runtimeContext, setRuntimeContext] =
-    useState<FinanceRuntimeContext>(readRuntimeContext);
+    useState<FinanceRuntimeContext>(EMPTY_RUNTIME_CONTEXT);
 
   useEffect(() => {
-    setRuntimeContext(readRuntimeContext());
+    setRuntimeContext(readRuntimeContextFromSearch(window.location.search));
   }, [pathname]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const syncRuntimeContext = () => setRuntimeContext(readRuntimeContext());
+    const syncRuntimeContext = () =>
+      setRuntimeContext(readRuntimeContextFromSearch(window.location.search));
 
     window.addEventListener('popstate', syncRuntimeContext);
     window.addEventListener('hashchange', syncRuntimeContext);
@@ -67,9 +67,8 @@ export function useFinanceRuntimeContext(): FinanceRuntimeContext {
   return runtimeContext;
 }
 
-export function buildFinanceQueryString(
+export function buildFinanceNavigationQueryString(
   runtimeContext: FinanceRuntimeContext,
-  extraParams?: Record<string, string | number | null | undefined>,
 ) {
   const params = new URLSearchParams();
 
@@ -85,12 +84,34 @@ export function buildFinanceQueryString(
     params.set('sourceTenantId', runtimeContext.sourceTenantId);
   }
 
+  if (runtimeContext.companyName) {
+    params.set('companyName', runtimeContext.companyName);
+  }
+
   if (runtimeContext.cashierUserId) {
     params.set('cashierUserId', runtimeContext.cashierUserId);
   }
 
   if (runtimeContext.cashierDisplayName) {
     params.set('cashierDisplayName', runtimeContext.cashierDisplayName);
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function buildFinanceApiQueryString(
+  runtimeContext: FinanceRuntimeContext,
+  extraParams?: Record<string, string | number | null | undefined>,
+) {
+  const params = new URLSearchParams();
+
+  if (runtimeContext.sourceSystem) {
+    params.set('sourceSystem', runtimeContext.sourceSystem);
+  }
+
+  if (runtimeContext.sourceTenantId) {
+    params.set('sourceTenantId', runtimeContext.sourceTenantId);
   }
 
   Object.entries(extraParams || {}).forEach(([key, value]) => {

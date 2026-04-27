@@ -16,3 +16,9 @@ body {
 body[data-finance-embedded='1'] {
   background: #f8fafc;
 }
+
+body[data-finance-embedded='1'] .finance-shell {
+  max-width: none;
+  gap: 0;
+  padding: 0;
+}

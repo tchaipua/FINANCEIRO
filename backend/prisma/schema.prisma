@@ -14,16 +14,24 @@ model Company {
   name                   String
   document               String?
   status                 String                  @default("ACTIVE")
+  interestRate           Float?
+  interestGracePeriod    Int?
+  penaltyRate            Float?
+  penaltyValue           Float?
+  penaltyGracePeriod     Int?
   createdAt              DateTime                @default(now())
   createdBy              String?
   updatedAt              DateTime                @updatedAt
   updatedBy              String?
   canceledAt             DateTime?
   canceledBy             String?
+  bankAccounts           BankAccount[]
   parties                Party[]
   receivableBatches      ReceivableBatch[]
   receivableTitles       ReceivableTitle[]
   receivableInstallments ReceivableInstallment[]
+  bankReturnImports      BankReturnImport[]
+  bankReturnImportItems  BankReturnImportItem[]
   cashSessions           CashSession[]
   cashMovements          CashMovement[]
   settlements            InstallmentSettlement[]
@@ -31,6 +39,61 @@ model Company {
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
   @@map("companies")
+}
+
+model BankAccount {
+  id                  String   @id @default(uuid())
+  companyId           String
+  status              String   @default("ACTIVE")
+  bankCode            String
+  bankName            String
+  branchNumber        String
+  branchDigit         String   @default("")
+  accountNumber       String
+  accountDigit        String   @default("")
+  walletCode          String?
+  agreementCode       String?
+  pixKey              String?
+  beneficiaryName     String?
+  beneficiaryDocument String?
+  billingProvider              String?
+  billingEnvironment           String?
+  billingApiClientId           String?
+  billingApiClientSecret       String?
+  billingCertificateBase64     String?
+  billingCertificatePassword   String?
+  billingBeneficiaryCode       String?
+  billingWalletVariation       String?
+  billingContractNumber        String?
+  billingModalityCode          String?
+  billingDocumentSpeciesCode   String?
+  billingAcceptanceCode        String?
+  billingIssueTypeCode         String?
+  billingDistributionTypeCode  String?
+  billingNextBoletoNumber      Int?
+  billingRegisterPixCode       Int?
+  billingInstructionLine1      String?
+  billingInstructionLine2      String?
+  billingDefaultFinePercent    Float?
+  billingDefaultInterestPercent Float?
+  billingDefaultDiscountPercent Float?
+  billingProtestDays           Int?
+  billingNegativeDays          Int?
+  notes               String?
+  createdAt           DateTime @default(now())
+  createdBy           String?
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankReturnImports     BankReturnImport[]
+  bankReturnImportItems BankReturnImportItem[]
+
+  @@index([companyId, status, bankName])
+  @@unique([companyId, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
+  @@map("bank_accounts")
 }
 
 model Party {
@@ -42,6 +105,11 @@ model Party {
   document           String?
   email              String?
   phone              String?
+  addressLine1       String?
+  neighborhood       String?
+  city               String?
+  state              String?
+  postalCode         String?
   createdAt          DateTime  @default(now())
   createdBy          String?
   updatedAt          DateTime  @updatedAt
@@ -130,6 +198,23 @@ model ReceivableInstallment {
   companyId             String
   batchId               String
   titleId               String
+  bankAccountId         String?
+  bankAccountLabel      String?
+  bankAssignedAt        DateTime?
+  bankAssignedBy        String?
+  bankSlipStatus        String?
+  bankSlipMessage       String?
+  bankSlipProvider      String?
+  bankSlipOurNumber     String?
+  bankSlipYourNumber    String?
+  bankSlipDigitableLine String?
+  bankSlipBarcode       String?
+  bankSlipQrCode        String?
+  bankSlipPdfBase64     String?
+  bankSlipPayloadJson   String?
+  bankSlipResponseJson  String?
+  bankSlipIssuedAt      DateTime?
+  bankSlipIssuedBy      String?
   sourceInstallmentKey  String
   installmentNumber     Int
   installmentCount      Int
@@ -137,6 +222,11 @@ model ReceivableInstallment {
   amount                Float
   openAmount            Float
   paidAmount            Float     @default(0)
+  interestRate          Float?
+  interestGracePeriod   Int?
+  penaltyRate           Float?
+  penaltyValue          Float?
+  penaltyGracePeriod    Int?
   status                String    @default("OPEN")
   settlementMethod      String?
   settledAt             DateTime?
@@ -154,9 +244,11 @@ model ReceivableInstallment {
   batch       ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
   title       ReceivableTitle         @relation(fields: [titleId], references: [id], onDelete: Restrict)
   settlements InstallmentSettlement[]
+  bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemInstallment")
 
   @@unique([companyId, sourceInstallmentKey])
   @@index([companyId, status, dueDate])
+  @@index([companyId, bankAccountId, status])
   @@index([titleId])
   @@map("receivable_installments")
 }
@@ -242,9 +334,90 @@ model InstallmentSettlement {
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
   installment ReceivableInstallment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
   cashSession CashSession           @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemSettlement")
 
   @@index([companyId, settledAt])
   @@index([installmentId])
   @@index([cashSessionId])
   @@map("installment_settlements")
+}
+
+model BankReturnImport {
+  id                 String   @id @default(uuid())
+  companyId          String
+  bankAccountId      String
+  provider           String
+  periodStart        DateTime
+  periodEnd          DateTime
+  importedItemCount  Int      @default(0)
+  matchedItemCount   Int      @default(0)
+  liquidatedItemCount Int     @default(0)
+  bankClosedItemCount Int     @default(0)
+  readyToApplyCount  Int      @default(0)
+  appliedItemCount   Int      @default(0)
+  unmatchedItemCount Int      @default(0)
+  status             String   @default("IMPORTED")
+  requestSnapshotJson String?
+  summaryJson        String?
+  createdAt          DateTime @default(now())
+  createdBy          String?
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+  canceledAt         DateTime?
+  canceledBy         String?
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  items       BankReturnImportItem[]
+
+  @@index([companyId, createdAt])
+  @@index([bankAccountId, createdAt])
+  @@map("bank_return_imports")
+}
+
+model BankReturnImportItem {
+  id                  String    @id @default(uuid())
+  importId            String
+  companyId           String
+  bankAccountId       String
+  matchedInstallmentId String?
+  appliedSettlementId String?
+  movementTypeCode    String
+  movementStatus      String
+  externalRequestCode String?
+  externalFileId      String?
+  dueDate             DateTime?
+  movementDate        DateTime?
+  paymentDate         DateTime?
+  expectedCreditDate  DateTime?
+  ourNumber           String?
+  yourNumber          String?
+  barcode             String?
+  contractNumber      String?
+  amount              Float     @default(0)
+  settledAmount       Float?
+  discountAmount      Float?
+  interestAmount      Float?
+  feeAmount           Float?
+  rawPayloadJson      String
+  appliedAt           DateTime?
+  appliedBy           String?
+  appliedStatus       String?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  importSession      BankReturnImport       @relation(fields: [importId], references: [id], onDelete: Restrict)
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount        BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  matchedInstallment ReceivableInstallment? @relation("BankReturnImportItemInstallment", fields: [matchedInstallmentId], references: [id], onDelete: SetNull)
+  appliedSettlement  InstallmentSettlement? @relation("BankReturnImportItemSettlement", fields: [appliedSettlementId], references: [id], onDelete: SetNull)
+
+  @@index([importId, movementStatus])
+  @@index([companyId, bankAccountId, movementStatus])
+  @@index([matchedInstallmentId])
+  @@map("bank_return_import_items")
 }
