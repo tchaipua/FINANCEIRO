@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CashSessionsService } from "../application/cash-sessions.service";
 import {
   CloseCurrentCashSessionDto,
+  CreateCashMovementDto,
   CurrentCashSessionQueryDto,
   ListCashSessionsDto,
   OpenCashSessionDto,
@@ -31,6 +32,17 @@ export class CashSessionsController {
     return this.cashSessionsService.getCurrent(query);
   }
 
+  @Get("cash-sessions/:sessionId")
+  @ApiOperation({
+    summary: "Consulta uma sessão de caixa detalhada",
+  })
+  getById(
+    @Param("sessionId") sessionId: string,
+    @Query() query: ListCashSessionsDto,
+  ) {
+    return this.cashSessionsService.getById(sessionId, query);
+  }
+
   @Post("cash-sessions/open")
   @ApiOperation({
     summary: "Abre um novo caixa para o usuário na empresa informada",
@@ -45,6 +57,14 @@ export class CashSessionsController {
   })
   closeCurrent(@Body() payload: CloseCurrentCashSessionDto) {
     return this.cashSessionsService.closeCurrent(payload);
+  }
+
+  @Post("cash-sessions/current/movements")
+  @ApiOperation({
+    summary: "Lança entrada, saída ou ajuste no caixa aberto",
+  })
+  createMovement(@Body() payload: CreateCashMovementDto) {
+    return this.cashSessionsService.createMovement(payload);
   }
 
   @Post("receivables/installments/:installmentId/settle-cash")

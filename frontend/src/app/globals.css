@@ -22,3 +22,7 @@ body[data-finance-embedded='1'] .finance-shell {
   gap: 0;
   padding: 0;
 }
+
+body[data-finance-embedded='1'] .finance-shell-main {
+  width: 100%;
+}

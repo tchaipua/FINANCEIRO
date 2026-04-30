@@ -15,6 +15,7 @@ import {
 } from "../../../common/manual-settlement.utils";
 import {
   CloseCurrentCashSessionDto,
+  CreateCashMovementDto,
   CurrentCashSessionQueryDto,
   ListCashSessionsDto,
   OpenCashSessionDto,
@@ -240,11 +241,56 @@ export class CashSessionsService {
     return this.mapCashSession(session);
   }
 
+  async getById(sessionId: string, query: ListCashSessionsDto) {
+    const normalizedSessionId = String(sessionId || "").trim();
+    const normalizedSourceSystem = normalizeText(query.sourceSystem);
+    const normalizedSourceTenantId = normalizeText(query.sourceTenantId);
+
+    if (!normalizedSessionId || !normalizedSourceTenantId) {
+      throw new BadRequestException("Caixa inválido para consulta.");
+    }
+
+    const session = await this.prisma.cashSession.findFirst({
+      where: {
+        id: normalizedSessionId,
+        canceledAt: null,
+        ...(normalizedSourceSystem
+          ? { sourceSystem: normalizedSourceSystem }
+          : {}),
+        sourceTenantId: normalizedSourceTenantId,
+      },
+      include: {
+        company: {
+          select: {
+            name: true,
+          },
+        },
+        movements: {
+          where: { canceledAt: null },
+          orderBy: [{ occurredAt: "asc" }],
+        },
+        settlements: {
+          where: { canceledAt: null },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException("CAIXA NÃO ENCONTRADO.");
+    }
+
+    return {
+      ...this.mapCashSession(session),
+      companyName: session.company.name,
+    };
+  }
+
   async list(query: ListCashSessionsDto) {
     const normalizedSourceSystem = normalizeText(query.sourceSystem);
     const normalizedSourceTenantId = normalizeText(query.sourceTenantId);
     const normalizedStatus = normalizeText(query.status);
     const normalizedSearch = normalizeText(query.search);
+    const normalizedCashierUserId = normalizeText(query.cashierUserId);
 
     if (!normalizedSourceTenantId) {
       return [];
@@ -260,6 +306,9 @@ export class CashSessionsService {
           ? { sourceTenantId: normalizedSourceTenantId }
           : {}),
         ...(normalizedStatus ? { status: normalizedStatus as any } : {}),
+        ...(normalizedCashierUserId
+          ? { cashierUserId: normalizedCashierUserId }
+          : {}),
         ...(normalizedSearch
           ? {
               OR: [
@@ -423,6 +472,122 @@ export class CashSessionsService {
           },
         });
       }
+
+      const nextOpeningAmount =
+        declaredClosingAmount !== undefined
+          ? declaredClosingAmount
+          : openSession.expectedClosingAmount;
+
+      await tx.cashSession.create({
+        data: {
+          companyId: company.id,
+          sourceSystem: normalizeText(payload.sourceSystem)!,
+          sourceTenantId: normalizeText(payload.sourceTenantId)!,
+          cashierUserId: normalizeText(payload.cashierUserId)!,
+          cashierDisplayName: openSession.cashierDisplayName,
+          openingAmount: nextOpeningAmount,
+          totalReceivedAmount: 0,
+          expectedClosingAmount: nextOpeningAmount,
+          notes: null,
+          createdBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+
+      return tx.cashSession.findUnique({
+        where: { id: openSession.id },
+        include: {
+          movements: {
+            where: { canceledAt: null },
+            orderBy: [{ occurredAt: "asc" }],
+          },
+          settlements: {
+            where: { canceledAt: null },
+          },
+        },
+      });
+    });
+
+    return this.mapCashSession(session);
+  }
+
+  async createMovement(payload: CreateCashMovementDto) {
+    const company = await this.resolveCompany(
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+
+    const openSession = await this.loadOpenSession(company.id, payload.cashierUserId);
+
+    if (!openSession) {
+      throw new BadRequestException(
+        "Não existe caixa aberto para o usuário informado.",
+      );
+    }
+
+    const movementType = normalizeText(payload.movementType);
+    const direction = normalizeText(payload.direction);
+    const amount = roundMoney(Number(payload.amount || 0));
+
+    if (!["ENTRY", "EXIT", "ADJUSTMENT"].includes(movementType || "")) {
+      throw new BadRequestException("Tipo de movimento inválido.");
+    }
+
+    if (!["IN", "OUT"].includes(direction || "")) {
+      throw new BadRequestException("Direção de movimento inválida.");
+    }
+
+    if (movementType === "ENTRY" && direction !== "IN") {
+      throw new BadRequestException("Entrada de dinheiro deve somar no caixa.");
+    }
+
+    if (movementType === "EXIT" && direction !== "OUT") {
+      throw new BadRequestException("Saída de dinheiro deve subtrair do caixa.");
+    }
+
+    if (amount <= 0) {
+      throw new BadRequestException("Informe um valor maior que zero.");
+    }
+
+    const occurredAt = payload.occurredAt
+      ? parseIsoDate(payload.occurredAt, "a data do movimento")
+      : new Date();
+    const normalizedNotes = normalizeText(payload.notes);
+    const movementLabel =
+      movementType === "ENTRY"
+        ? "ENTRADA DINHEIRO"
+        : movementType === "EXIT"
+          ? "SAÍDA DINHEIRO"
+          : "AJUSTE CAIXA";
+    const expectedClosingDelta = direction === "OUT" ? -amount : amount;
+
+    const session = await this.prisma.$transaction(async (tx: any) => {
+      await tx.cashMovement.create({
+        data: {
+          companyId: company.id,
+          cashSessionId: openSession.id,
+          movementType,
+          direction,
+          paymentMethod: "CASH",
+          amount,
+          description: normalizedNotes
+            ? `${movementLabel} - ${normalizedNotes}`
+            : movementLabel,
+          occurredAt,
+          createdBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+
+      await tx.cashSession.update({
+        where: { id: openSession.id },
+        data: {
+          expectedClosingAmount: roundMoney(
+            Number(openSession.expectedClosingAmount || 0) + expectedClosingDelta,
+          ),
+          updatedBy: payload.requestedBy || null,
+        },
+      });
 
       return tx.cashSession.findUnique({
         where: { id: openSession.id },

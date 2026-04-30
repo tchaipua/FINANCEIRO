@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -119,6 +119,29 @@ const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const inputClass =
   'w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white';
 const textareaClass = `${inputClass} min-h-28 resize-y`;
+const gridActionButtonClass =
+  'inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-70';
+const gridActionToneClass = {
+  blue: 'bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800',
+  emerald: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800',
+  rose: 'bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-800',
+};
+const fieldLabelClass = 'mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500';
+
+function LabeledField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className={fieldLabelClass}>{label}</span>
+      {children}
+    </label>
+  );
+}
 
 type BankGridColumnKey =
   | 'bankName'
@@ -148,6 +171,16 @@ type BankGridConfig = {
   order: BankGridColumnKey[];
   hidden: BankGridColumnKey[];
 };
+
+type BankFormTabKey = 'bank' | 'beneficiary' | 'boleto' | 'credentials' | 'rules';
+
+const BANK_FORM_TABS: Array<{ key: BankFormTabKey; label: string }> = [
+  { key: 'bank', label: 'Dados Bancários' },
+  { key: 'beneficiary', label: 'Beneficiário' },
+  { key: 'boleto', label: 'Boleto' },
+  { key: 'credentials', label: 'Credenciais' },
+  { key: 'rules', label: 'Regras de Cobrança' },
+];
 
 const BANK_GRID_COLUMNS: BankGridColumnDefinition[] = [
   {
@@ -812,6 +845,7 @@ export default function FinanceiroBanksPage() {
   const [exportColumns, setExportColumns] = useState<Record<BankExportColumnKey, boolean>>(
     buildDefaultExportColumns(BANK_EXPORT_COLUMNS),
   );
+  const [activeBankFormTab, setActiveBankFormTab] = useState<BankFormTabKey>('bank');
   const [form, setForm] = useState<BankFormState>(
     buildEmptyBankForm(defaultScope.companyName),
   );
@@ -821,6 +855,7 @@ export default function FinanceiroBanksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingForm, setIsLoadingForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCertificatePasswordVisible, setIsCertificatePasswordVisible] = useState(false);
   const [actionBankId, setActionBankId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -849,10 +884,29 @@ export default function FinanceiroBanksPage() {
   const hasBillingCertificate = Boolean(
     form.billingCertificateBase64.trim() && form.billingCertificatePassword.trim(),
   );
+  const screenContextLabel = isCreateRoute
+    ? editBankId
+      ? 'PRINCIPAL_FINANCEIRO_BANCOS_EDICAO'
+      : 'PRINCIPAL_FINANCEIRO_BANCOS_CADASTRO'
+    : 'PRINCIPAL_FINANCEIRO_BANCOS';
 
   const scopeReady = Boolean(
     scope.sourceSystem.trim() && scope.sourceTenantId.trim(),
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.parent?.postMessage(
+      {
+        type: 'MSINFOR_SCREEN_CONTEXT',
+        screenId: screenContextLabel,
+      },
+      '*',
+    );
+  }, [screenContextLabel]);
 
   useEffect(() => {
     setSchoolBaseUrl(resolveSchoolBaseUrl());
@@ -1292,34 +1346,6 @@ export default function FinanceiroBanksPage() {
 
   return (
     <div className="space-y-6">
-      <section className={`${cardClass} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h1 className="text-3xl font-black tracking-tight">Controle de Bancos</h1>
-            </div>
-
-            {shouldReturnToSchoolMenu ? (
-              <a
-                href={backToMenuHref}
-                target="_top"
-                rel="noreferrer"
-                className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
-              >
-                Voltar ao Menu
-              </a>
-            ) : (
-              <Link
-                href={backToMenuHref}
-                className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
-              >
-                Voltar ao Menu
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
-
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} p-6`}>
           <div className="grid gap-4 md:grid-cols-3">
@@ -1359,17 +1385,6 @@ export default function FinanceiroBanksPage() {
           </div>
         </section>
       ) : null}
-
-      {!isCreateRoute ? null : (
-        <section className={`${cardClass} p-6`}>
-          <Link
-            href={`/bancos${preservedQueryString}`}
-            className="inline-flex rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-600 transition hover:bg-slate-50"
-          >
-            Voltar para a listagem
-          </Link>
-        </section>
-      )}
 
       {statusMessage ? (
         <section
@@ -1517,148 +1532,192 @@ export default function FinanceiroBanksPage() {
             </span>
           </div>
 
-          <div className="mt-5 grid gap-4">
+          <div className="mt-5">
+            <div className="mb-5 flex flex-wrap gap-2 border-b border-slate-200">
+              {BANK_FORM_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveBankFormTab(tab.key)}
+                  className={`rounded-t-xl border px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-colors ${
+                    activeBankFormTab === tab.key
+                      ? 'border-slate-200 border-b-white bg-white text-blue-700 shadow-sm'
+                      : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className={activeBankFormTab === 'bank' ? 'grid gap-4' : 'hidden'}>
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                required
-                value={form.bankCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    bankCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CÓDIGO DO BANCO"
-              />
-              <input
-                required
-                value={form.bankName}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    bankName: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="NOME DO BANCO"
-              />
+              <LabeledField label="Código do banco">
+                <input
+                  required
+                  value={form.bankCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      bankCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CÓDIGO DO BANCO"
+                />
+              </LabeledField>
+              <LabeledField label="Nome do banco">
+                <input
+                  required
+                  value={form.bankName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      bankName: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="NOME DO BANCO"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                required
-                value={form.branchNumber}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    branchNumber: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="AGÊNCIA"
-              />
-              <input
-                value={form.branchDigit}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    branchDigit: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="DÍGITO DA AGÊNCIA"
-              />
+              <LabeledField label="Agência">
+                <input
+                  required
+                  value={form.branchNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      branchNumber: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="AGÊNCIA"
+                />
+              </LabeledField>
+              <LabeledField label="Dígito da agência">
+                <input
+                  value={form.branchDigit}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      branchDigit: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="DÍGITO DA AGÊNCIA"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                required
-                value={form.accountNumber}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    accountNumber: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CONTA"
-              />
-              <input
-                value={form.accountDigit}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    accountDigit: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="DÍGITO DA CONTA"
-              />
+              <LabeledField label="Conta">
+                <input
+                  required
+                  value={form.accountNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      accountNumber: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CONTA"
+                />
+              </LabeledField>
+              <LabeledField label="Dígito da conta">
+                <input
+                  value={form.accountDigit}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      accountDigit: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="DÍGITO DA CONTA"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.walletCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    walletCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CARTEIRA"
-              />
-              <input
-                value={form.agreementCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    agreementCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CONVÊNIO"
-              />
+              <LabeledField label="Carteira">
+                <input
+                  value={form.walletCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      walletCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CARTEIRA"
+                />
+              </LabeledField>
+              <LabeledField label="Convênio">
+                <input
+                  value={form.agreementCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      agreementCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CONVÊNIO"
+                />
+              </LabeledField>
             </div>
 
-            <input
-              value={form.pixKey}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  pixKey: event.target.value,
-                }))
-              }
-              className={inputClass}
-              placeholder="CHAVE PIX"
-            />
+            <LabeledField label="Chave PIX">
+              <input
+                value={form.pixKey}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    pixKey: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                placeholder="CHAVE PIX"
+              />
+            </LabeledField>
+            </div>
 
+            <div className={activeBankFormTab === 'beneficiary' ? 'grid gap-4' : 'hidden'}>
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.beneficiaryName}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    beneficiaryName: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="NOME DO BENEFICIÁRIO"
-              />
-              <input
-                value={form.beneficiaryDocument}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    beneficiaryDocument: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CPF/CNPJ DO BENEFICIÁRIO"
-              />
+              <LabeledField label="Nome do beneficiário">
+                <input
+                  value={form.beneficiaryName}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      beneficiaryName: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="NOME DO BENEFICIÁRIO"
+                />
+              </LabeledField>
+              <LabeledField label="CPF/CNPJ do beneficiário">
+                <input
+                  value={form.beneficiaryDocument}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      beneficiaryDocument: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CPF/CNPJ DO BENEFICIÁRIO"
+                />
+              </LabeledField>
+            </div>
             </div>
 
+            <div className={activeBankFormTab === 'boleto' ? 'grid gap-4' : 'hidden'}>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                 Configuração de boleto
@@ -1669,339 +1728,415 @@ export default function FinanceiroBanksPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <select
-                value={form.billingProvider}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingProvider: event.target.value,
-                  }))
-                }
-                className={inputClass}
-              >
-                <option value="">PROVEDOR DE BOLETO</option>
-                <option value="SICOOB">SICOOB</option>
-                <option value="SICREDI">SICREDI</option>
-                <option value="BANCO DO BRASIL">BANCO DO BRASIL</option>
-                <option value="CAIXA">CAIXA</option>
-                <option value="BRADESCO">BRADESCO</option>
-                <option value="ITAU">ITAU</option>
-                <option value="SANTANDER">SANTANDER</option>
-                <option value="OUTRO">OUTRO</option>
-              </select>
-              <select
-                value={form.billingEnvironment}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingEnvironment: event.target.value,
-                  }))
-                }
-                className={inputClass}
-              >
-                <option value="">AMBIENTE DE EMISSÃO</option>
-                <option value="HOMOLOGACAO">HOMOLOGAÇÃO</option>
-                <option value="PRODUCAO">PRODUÇÃO</option>
-              </select>
+              <LabeledField label="Provedor de boleto">
+                <select
+                  value={form.billingProvider}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingProvider: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                >
+                  <option value="">PROVEDOR DE BOLETO</option>
+                  <option value="SICOOB">SICOOB</option>
+                  <option value="SICREDI">SICREDI</option>
+                  <option value="BANCO DO BRASIL">BANCO DO BRASIL</option>
+                  <option value="CAIXA">CAIXA</option>
+                  <option value="BRADESCO">BRADESCO</option>
+                  <option value="ITAU">ITAU</option>
+                  <option value="SANTANDER">SANTANDER</option>
+                  <option value="OUTRO">OUTRO</option>
+                </select>
+              </LabeledField>
+              <LabeledField label="Ambiente de emissão">
+                <select
+                  value={form.billingEnvironment}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingEnvironment: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                >
+                  <option value="">AMBIENTE DE EMISSÃO</option>
+                  <option value="HOMOLOGACAO">HOMOLOGAÇÃO</option>
+                  <option value="PRODUCAO">PRODUÇÃO</option>
+                </select>
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.billingBeneficiaryCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingBeneficiaryCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CÓDIGO DO BENEFICIÁRIO NO BANCO"
-              />
-              <input
-                value={form.billingWalletVariation}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingWalletVariation: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="VARIAÇÃO DA CARTEIRA"
-              />
+              <LabeledField label="Código do beneficiário no banco">
+                <input
+                  value={form.billingBeneficiaryCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingBeneficiaryCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CÓDIGO DO BENEFICIÁRIO NO BANCO"
+                />
+              </LabeledField>
+              <LabeledField label="Variação da carteira">
+                <input
+                  value={form.billingWalletVariation}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingWalletVariation: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="VARIAÇÃO DA CARTEIRA"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.billingContractNumber}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingContractNumber: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="NÚMERO DO CONTRATO"
-              />
-              <input
-                value={form.billingModalityCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingModalityCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="MODALIDADE"
-              />
+              <LabeledField label="Número do contrato">
+                <input
+                  value={form.billingContractNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingContractNumber: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="NÚMERO DO CONTRATO"
+                />
+              </LabeledField>
+              <LabeledField label="Modalidade">
+                <input
+                  value={form.billingModalityCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingModalityCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="MODALIDADE"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.billingDocumentSpeciesCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingDocumentSpeciesCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="ESPÉCIE DO DOCUMENTO"
-              />
-              <input
-                value={form.billingAcceptanceCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingAcceptanceCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="ACEITE (S/N)"
-              />
+              <LabeledField label="Espécie do documento">
+                <input
+                  value={form.billingDocumentSpeciesCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingDocumentSpeciesCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="ESPÉCIE DO DOCUMENTO"
+                />
+              </LabeledField>
+              <LabeledField label="Aceite (S/N)">
+                <input
+                  value={form.billingAcceptanceCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingAcceptanceCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="ACEITE (S/N)"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.billingIssueTypeCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingIssueTypeCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="IDENTIFICAÇÃO DE EMISSÃO"
-              />
-              <input
-                value={form.billingDistributionTypeCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingDistributionTypeCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="IDENTIFICAÇÃO DE DISTRIBUIÇÃO"
-              />
+              <LabeledField label="Identificação de emissão">
+                <input
+                  value={form.billingIssueTypeCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingIssueTypeCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="IDENTIFICAÇÃO DE EMISSÃO"
+                />
+              </LabeledField>
+              <LabeledField label="Identificação de distribuição">
+                <input
+                  value={form.billingDistributionTypeCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingDistributionTypeCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="IDENTIFICAÇÃO DE DISTRIBUIÇÃO"
+                />
+              </LabeledField>
+            </div>
+            </div>
+
+            <div className={activeBankFormTab === 'credentials' ? 'grid gap-4' : 'hidden'}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <LabeledField label="Client ID / App Key">
+                <input
+                  value={form.billingApiClientId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingApiClientId: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CLIENT ID / APP KEY"
+                />
+              </LabeledField>
+              <LabeledField label="Client Secret">
+                <input
+                  type="password"
+                  value={form.billingApiClientSecret}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingApiClientSecret: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CLIENT SECRET"
+                />
+              </LabeledField>
+            </div>
+            </div>
+
+            <div className={activeBankFormTab === 'rules' ? 'grid gap-4' : 'hidden'}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <LabeledField label="Próximo número do boleto">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.billingNextBoletoNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingNextBoletoNumber: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="PRÓXIMO NÚMERO DO BOLETO"
+                />
+              </LabeledField>
+              <LabeledField label="Código para cadastrar PIX">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.billingRegisterPixCode}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingRegisterPixCode: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="CÓDIGO PARA CADASTRAR PIX"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.billingApiClientId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingApiClientId: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CLIENT ID / APP KEY"
-              />
-              <input
-                type="password"
-                value={form.billingApiClientSecret}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingApiClientSecret: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CLIENT SECRET"
-              />
+              <LabeledField label="Certificado em Base64">
+                <textarea
+                  value={form.billingCertificateBase64}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingCertificateBase64: event.target.value,
+                    }))
+                  }
+                  className={textareaClass}
+                  placeholder="CERTIFICADO EM BASE64"
+                />
+              </LabeledField>
+              <LabeledField label="Senha do certificado">
+                <div className="relative">
+                  <input
+                    type={isCertificatePasswordVisible ? 'text' : 'password'}
+                    value={form.billingCertificatePassword}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        billingCertificatePassword: event.target.value,
+                      }))
+                    }
+                    className={`${inputClass} pr-12`}
+                    placeholder="SENHA DO CERTIFICADO"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsCertificatePasswordVisible((current) => !current)}
+                    title={isCertificatePasswordVisible ? 'Ocultar senha do certificado' : 'Mostrar senha do certificado'}
+                    aria-label={isCertificatePasswordVisible ? 'Ocultar senha do certificado' : 'Mostrar senha do certificado'}
+                    className="absolute inset-y-0 right-3 flex items-center text-slate-500 transition hover:text-slate-900"
+                  >
+                    {isCertificatePasswordVisible ? (
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 3l18 18" />
+                        <path d="M10.58 10.58A2 2 0 0 0 13.42 13.42" />
+                        <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c7 0 10 7 10 7a18.27 18.27 0 0 1-4.23 5.42" />
+                        <path d="M6.61 6.61C3.61 8.79 2 12 2 12s3 7 10 7a10.9 10.9 0 0 0 5.39-1.44" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.billingNextBoletoNumber}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingNextBoletoNumber: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="PRÓXIMO NÚMERO DO BOLETO"
-              />
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.billingRegisterPixCode}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingRegisterPixCode: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="CÓDIGO PARA CADASTRAR PIX"
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <textarea
-                value={form.billingCertificateBase64}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingCertificateBase64: event.target.value,
-                  }))
-                }
-                className={textareaClass}
-                placeholder="CERTIFICADO EM BASE64"
-              />
-              <input
-                type="password"
-                value={form.billingCertificatePassword}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingCertificatePassword: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="SENHA DO CERTIFICADO"
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <input
-                value={form.billingInstructionLine1}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingInstructionLine1: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="INSTRUÇÃO DE BOLETO 1"
-              />
-              <input
-                value={form.billingInstructionLine2}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingInstructionLine2: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="INSTRUÇÃO DE BOLETO 2"
-              />
+              <LabeledField label="Instrução de boleto 1">
+                <input
+                  value={form.billingInstructionLine1}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingInstructionLine1: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="INSTRUÇÃO DE BOLETO 1"
+                />
+              </LabeledField>
+              <LabeledField label="Instrução de boleto 2">
+                <input
+                  value={form.billingInstructionLine2}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingInstructionLine2: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="INSTRUÇÃO DE BOLETO 2"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.billingDefaultFinePercent}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingDefaultFinePercent: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="MULTA %"
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.billingDefaultInterestPercent}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingDefaultInterestPercent: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="JUROS %"
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.billingDefaultDiscountPercent}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingDefaultDiscountPercent: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="DESCONTO %"
-              />
+              <LabeledField label="Multa %">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.billingDefaultFinePercent}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingDefaultFinePercent: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="MULTA %"
+                />
+              </LabeledField>
+              <LabeledField label="Juros %">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.billingDefaultInterestPercent}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingDefaultInterestPercent: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="JUROS %"
+                />
+              </LabeledField>
+              <LabeledField label="Desconto %">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.billingDefaultDiscountPercent}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingDefaultDiscountPercent: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="DESCONTO %"
+                />
+              </LabeledField>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.billingProtestDays}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingProtestDays: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="DIAS PARA PROTESTO"
-              />
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.billingNegativeDays}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    billingNegativeDays: event.target.value,
-                  }))
-                }
-                className={inputClass}
-                placeholder="DIAS PARA NEGATIVAÇÃO"
-              />
+              <LabeledField label="Dias para protesto">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.billingProtestDays}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingProtestDays: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="DIAS PARA PROTESTO"
+                />
+              </LabeledField>
+              <LabeledField label="Dias para negativação">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.billingNegativeDays}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      billingNegativeDays: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  placeholder="DIAS PARA NEGATIVAÇÃO"
+                />
+              </LabeledField>
             </div>
 
-            <textarea
-              value={form.notes}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  notes: event.target.value,
-                }))
-              }
-              className={textareaClass}
-              placeholder="OBSERVAÇÕES DO CADASTRO BANCÁRIO"
-            />
+            <LabeledField label="Observações do cadastro bancário">
+              <textarea
+                value={form.notes}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                className={textareaClass}
+                placeholder="OBSERVAÇÕES DO CADASTRO BANCÁRIO"
+              />
+            </LabeledField>
+            </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
               <button
                 type="submit"
                 disabled={isSubmitting || isLoadingForm || !scopeReady}
@@ -2015,16 +2150,13 @@ export default function FinanceiroBanksPage() {
                     ? 'Atualizar banco'
                     : 'Cadastrar banco'}
               </button>
+              <Link
+                href={`/bancos${preservedQueryString}`}
+                className="rounded-2xl bg-rose-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700"
+              >
+                Retornar
+              </Link>
 
-              {editBankId ? (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-600 transition hover:bg-slate-50"
-                >
-                  Cancelar edição
-                </button>
-              ) : null}
             </div>
           </div>
           </form>
@@ -2146,12 +2278,18 @@ export default function FinanceiroBanksPage() {
                       <div className="flex flex-wrap gap-2">
                         <Link
                           href={buildBankFormPath(preservedQueryString, bank.id)}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-50"
+                          title="Editar banco"
+                          aria-label="Editar banco"
+                          className={`${gridActionButtonClass} ${gridActionToneClass.blue}`}
                         >
-                          Editar
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
                         </Link>
                         <button
                           type="button"
+                          title={bank.status === 'ACTIVE' ? 'Inativar banco' : 'Ativar banco'}
+                          aria-label={bank.status === 'ACTIVE' ? 'Inativar banco' : 'Ativar banco'}
                           disabled={actionBankId === bank.id}
                           onClick={() =>
                             void handleChangeStatus(
@@ -2159,17 +2297,21 @@ export default function FinanceiroBanksPage() {
                               bank.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
                             )
                           }
-                          className={`rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition disabled:opacity-70 ${
+                          className={`${gridActionButtonClass} ${
                             bank.status === 'ACTIVE'
-                              ? 'bg-rose-600 hover:bg-rose-700'
-                              : 'bg-emerald-600 hover:bg-emerald-700'
+                              ? gridActionToneClass.rose
+                              : gridActionToneClass.emerald
                           }`}
                         >
-                          {actionBankId === bank.id
-                            ? 'Processando...'
-                            : bank.status === 'ACTIVE'
-                              ? 'Inativar'
-                              : 'Ativar'}
+                          {bank.status === 'ACTIVE' ? (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-12.728 12.728M6 6l12 12" />
+                            </svg>
+                          ) : (
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
                         </button>
                       </div>
                     </td>

@@ -8,8 +8,11 @@ export type FinanceRuntimeContext = {
   sourceSystem: string | null;
   sourceTenantId: string | null;
   companyName: string | null;
+  logoUrl: string | null;
   cashierUserId: string | null;
   cashierDisplayName: string | null;
+  userRole: string | null;
+  permissions: string[];
 };
 
 function normalizeQueryValue(value: string | null, uppercase = true) {
@@ -23,9 +26,19 @@ const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
   sourceSystem: null,
   sourceTenantId: null,
   companyName: null,
+  logoUrl: null,
   cashierUserId: null,
   cashierDisplayName: null,
+  userRole: null,
+  permissions: [],
 };
+
+function normalizePermissions(value: string | null) {
+  return String(value || '')
+    .split(',')
+    .map((permission) => normalizeQueryValue(permission))
+    .filter((permission): permission is string => Boolean(permission));
+}
 
 function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
   const searchParams = new URLSearchParams(search);
@@ -35,10 +48,13 @@ function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
     sourceSystem: normalizeQueryValue(searchParams.get('sourceSystem')),
     sourceTenantId: normalizeQueryValue(searchParams.get('sourceTenantId')),
     companyName: normalizeQueryValue(searchParams.get('companyName')),
+    logoUrl: normalizeQueryValue(searchParams.get('logoUrl'), false),
     cashierUserId: normalizeQueryValue(searchParams.get('cashierUserId')),
     cashierDisplayName: normalizeQueryValue(
       searchParams.get('cashierDisplayName'),
     ),
+    userRole: normalizeQueryValue(searchParams.get('userRole')),
+    permissions: normalizePermissions(searchParams.get('permissions')),
   };
 }
 
@@ -88,12 +104,24 @@ export function buildFinanceNavigationQueryString(
     params.set('companyName', runtimeContext.companyName);
   }
 
+  if (runtimeContext.logoUrl) {
+    params.set('logoUrl', runtimeContext.logoUrl);
+  }
+
   if (runtimeContext.cashierUserId) {
     params.set('cashierUserId', runtimeContext.cashierUserId);
   }
 
   if (runtimeContext.cashierDisplayName) {
     params.set('cashierDisplayName', runtimeContext.cashierDisplayName);
+  }
+
+  if (runtimeContext.userRole) {
+    params.set('userRole', runtimeContext.userRole);
+  }
+
+  if (runtimeContext.permissions.length) {
+    params.set('permissions', runtimeContext.permissions.join(','));
   }
 
   const query = params.toString();

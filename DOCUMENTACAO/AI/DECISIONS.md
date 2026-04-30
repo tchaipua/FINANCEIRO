@@ -48,3 +48,20 @@ Decisao:
 ## D006 - Escola como primeira integracao
 
 A `Escola` sera a primeira vertical integradora e servira para validar o contrato canonico.
+
+## D007 - Padrao de auditoria visual por tela
+
+Toda tela do `Financeiro` deve ter no rodape o botao de copiar o nome tecnico da tela.
+
+Decisao:
+
+- ao clicar no botao, o sistema deve copiar o identificador tecnico da tela;
+- no mesmo clique, deve abrir um popup central com a "Logica Usada nessa Tela";
+- o popup deve apresentar tabelas fisicas, aliases, descricoes em portugues, relacionamentos, metricas/campos exibidos, filtros, ordenacao e SQL base;
+- o padrao visual de referencia e o modal validado em `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`.
+
+Motivo:
+
+- facilitar auditoria tecnica e suporte;
+- padronizar entendimento da origem dos dados;
+- permitir que qualquer tela criada futuramente ja documente sua propria logica operacional.

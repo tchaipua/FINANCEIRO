@@ -55,6 +55,8 @@ type CompanyGridConfig = {
   hidden: CompanyGridColumnKey[];
 };
 
+const EMBEDDED_COMPANY_SUCCESS_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_EMPRESA_SALVO_SUCESSO';
+
 const COMPANY_GRID_COLUMNS: GridColumnDefinition<CompanyItem, CompanyGridColumnKey>[] = [
   { key: 'name', label: 'Empresa', getValue: (item) => item.name },
   { key: 'sourceSystem', label: 'Origem', getValue: (item) => item.sourceSystem },
@@ -402,6 +404,7 @@ function CompanyFinancialSettingsModal({
   isOpen,
   isSaving,
   error,
+  embedded = false,
   onClose,
   onChange,
   onSave,
@@ -411,6 +414,7 @@ function CompanyFinancialSettingsModal({
   isOpen: boolean;
   isSaving: boolean;
   error: string | null;
+  embedded?: boolean;
   onClose: () => void;
   onChange: (field: keyof CompanyFinancialFormState, value: string) => void;
   onSave: () => void;
@@ -423,42 +427,43 @@ function CompanyFinancialSettingsModal({
   const penaltyValueDisabled = Number(form.penaltyRate.replace(',', '.')) > 0;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-5">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
-              Configuração financeira
-            </div>
-            <h2 className="mt-1 text-2xl font-black text-slate-900">{company.name}</h2>
-            <p className="mt-2 text-sm font-medium text-slate-500">
-              Ajuste as regras padrão que serão usadas nas novas parcelas desta empresa.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresa</div>
-                <div className="mt-1 text-base font-black text-slate-900">{company.name}</div>
+    <div
+      className={
+        embedded
+          ? 'w-full'
+          : 'fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm'
+      }
+    >
+      <div
+        className={
+          embedded
+            ? 'flex w-full flex-col overflow-visible rounded-[28px] border border-slate-200 bg-white shadow-sm'
+            : 'flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl'
+        }
+      >
+        {!embedded ? (
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-5">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+                Configuração financeira
               </div>
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Documento</div>
-                <div className="mt-1 text-base font-black text-slate-900">{company.document || '---'}</div>
-              </div>
+              <h2 className="mt-1 text-2xl font-black text-slate-900">{company.name}</h2>
+              <p className="mt-2 text-sm font-medium text-slate-500">
+                Ajuste as regras padrão que serão usadas nas novas parcelas desta empresa.
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+            >
+              ✕
+            </button>
           </div>
+        ) : null}
 
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
+        <div className={`p-6 ${embedded ? 'pb-6' : 'flex-1 overflow-y-auto'}`}>
+          <div className={`rounded-2xl border border-slate-200 bg-white p-5 ${embedded ? '' : 'mt-5'}`}>
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
@@ -486,7 +491,7 @@ function CompanyFinancialSettingsModal({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-5 md:grid-cols-3">
+            <div className="mt-5 grid gap-5 xl:grid-cols-3">
               <div>
                 <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   % multa
@@ -546,13 +551,15 @@ function CompanyFinancialSettingsModal({
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
-          >
-            Fechar
-          </button>
+          {!embedded ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
+            >
+              Fechar
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onSave}
@@ -594,6 +601,7 @@ export default function FinanceiroEmpresasPage() {
   );
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
+  const [showEmbeddedSuccess, setShowEmbeddedSuccess] = useState(false);
   const [exportColumns, setExportColumns] = useState<Record<CompanyGridColumnKey, boolean>>(
     buildDefaultExportColumns(COMPANY_GRID_COLUMNS),
   );
@@ -601,6 +609,8 @@ export default function FinanceiroEmpresasPage() {
     () => getVisibleCompanyColumns({ order: columnOrder, hidden: hiddenColumns }),
     [columnOrder, hiddenColumns],
   );
+  const embeddedSingleCompany = runtimeContext.embedded && companies.length === 1;
+  const embeddedCompany = embeddedSingleCompany ? companies[0] : null;
 
   const loadCompanies = useCallback(async (currentSearch?: string) => {
     if (!runtimeTenantReady) {
@@ -652,6 +662,19 @@ export default function FinanceiroEmpresasPage() {
       JSON.stringify({ order: columnOrder, hidden: hiddenColumns }),
     );
   }, [columnOrder, hiddenColumns, runtimeContext.sourceTenantId]);
+
+  useEffect(() => {
+    if (!runtimeContext.embedded || isLoading || companies.length !== 1) {
+      return;
+    }
+
+    const company = companies[0];
+    if (!company || editingCompany?.id === company.id) {
+      return;
+    }
+
+    openFinancialSettings(company);
+  }, [companies, editingCompany?.id, isLoading, runtimeContext.embedded]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -709,6 +732,9 @@ export default function FinanceiroEmpresasPage() {
         current.map((item) => (item.id === updatedCompany.id ? updatedCompany : item)),
       );
       setStatusMessage('Configurações financeiras da empresa atualizadas com sucesso.');
+      if (runtimeContext.embedded) {
+        setShowEmbeddedSuccess(true);
+      }
       closeFinancialSettings();
     } catch (currentError) {
       setFinancialFormError(
@@ -722,84 +748,151 @@ export default function FinanceiroEmpresasPage() {
   }
 
   const showClearSearchButton = Boolean(search.trim());
+  const embeddedCompanyScreenId = embeddedSingleCompany
+    ? 'FINANCEIRO_EMPRESA_EDITAR_ATUAL'
+    : 'FINANCEIRO_EMPRESAS_LISTAGEM_GERAL';
+  const successCompanyName =
+    editingCompany?.name || embeddedCompany?.name || runtimeContext.companyName || 'ESCOLA';
 
-  return (
-    <div className="space-y-6">
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">Cadastro operacional</div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">Empresas</h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
-                {runtimeContext.embedded
-                  ? 'A empresa financeira desta escola é mantida no core financeiro e tem as regras padrão ajustadas nesta tela.'
-                  : 'Cada empresa é criada automaticamente a partir do sistema de origem e passa a operar no mesmo núcleo financeiro.'}
+  function handleReturnAfterSave() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = '/';
+  }
+
+  const embeddedSuccessPopup =
+    runtimeContext.embedded && showEmbeddedSuccess ? (
+      <div className="absolute inset-0 z-[90] flex items-center justify-center bg-slate-900/20 p-6">
+        <section className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
+          <div className="bg-gradient-to-r from-[#166534] via-[#15803d] to-[#22c55e] px-6 py-8 text-white">
+            <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-lg">
+                {runtimeContext.logoUrl ? (
+                  <img
+                    src={runtimeContext.logoUrl}
+                    alt={`Logo de ${successCompanyName}`}
+                    className="h-full w-full object-contain p-2"
+                  />
+                ) : (
+                  <span className="text-xl font-black uppercase tracking-[0.25em] text-[#166534]">
+                    {String(successCompanyName || 'ESCOLA').slice(0, 3).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="mt-5 text-xs font-black uppercase tracking-[0.28em] text-emerald-100">
+                Informações salvas com sucesso
+              </div>
+              <h1 className="mt-3 text-4xl font-black tracking-tight">Cadastro atualizado</h1>
+              <p className="mt-3 max-w-2xl text-sm font-medium text-emerald-50/95">
+                As configurações financeiras da empresa foram salvas com sucesso.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = '/';
-              }}
-              className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
-            >
-              Voltar ao Menu
-            </button>
           </div>
-        </div>
-      </section>
 
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
-        <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[auto_1fr_auto_auto]">
-          <button
-            type="button"
-            title="INCLUIR"
-            aria-label="INCLUIR"
-            className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
-          </button>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className={FINANCE_GRID_PAGE_LAYOUT.input}
-            placeholder="PESQUISAR POR EMPRESA, DOCUMENTO OU TENANT"
-          />
-          <button
-            type="submit"
-            title="PESQUISAR"
-            aria-label="PESQUISAR"
-            className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-6 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-              <circle cx="11" cy="11" r="6" />
-              <path d="M20 20l-3.5-3.5" />
-            </svg>
-          </button>
-          {showClearSearchButton ? (
+          <div className="px-6 py-6">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+              <ScreenNameCopy
+                screenId={EMBEDDED_COMPANY_SUCCESS_SCREEN_ID}
+                className="justify-between text-slate-500"
+              />
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={handleReturnAfterSave}
+                className="rounded-2xl bg-blue-600 px-8 py-3 text-sm font-black uppercase tracking-[0.2em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+              >
+                Retornar
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    ) : null;
+
+  return (
+    <>
+    <div className={`space-y-6 ${runtimeContext.embedded ? 'relative' : ''}`}>
+      {!runtimeContext.embedded ? (
+        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">Cadastro operacional</div>
+                <h1 className="mt-2 text-3xl font-black tracking-tight">Empresas</h1>
+                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                  Cada empresa é criada automaticamente a partir do sistema de origem e passa a operar no mesmo núcleo financeiro.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/';
+                }}
+                className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
+              >
+                Voltar ao Menu
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {!runtimeContext.embedded ? (
+        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
+          <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[auto_1fr_auto_auto]">
             <button
               type="button"
-              title="LIMPAR CONSULTA"
-              aria-label="LIMPAR CONSULTA"
-              onClick={() => {
-                setSearch('');
-                void loadCompanies();
-              }}
-              className="inline-flex items-center justify-center rounded-2xl bg-rose-500 px-6 py-3 text-white shadow-lg shadow-rose-500/25 transition hover:bg-rose-600"
+              title="INCLUIR"
+              aria-label="INCLUIR"
+              className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-                <circle cx="12" cy="12" r="8" />
-                <path d="M9 9l6 6" />
-                <path d="M15 9l-6 6" />
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
               </svg>
             </button>
-          ) : null}
-        </form>
-      </section>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className={FINANCE_GRID_PAGE_LAYOUT.input}
+              placeholder="PESQUISAR POR EMPRESA, DOCUMENTO OU TENANT"
+            />
+            <button
+              type="submit"
+              title="PESQUISAR"
+              aria-label="PESQUISAR"
+              className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-6 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <circle cx="11" cy="11" r="6" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+            </button>
+            {showClearSearchButton ? (
+              <button
+                type="button"
+                title="LIMPAR CONSULTA"
+                aria-label="LIMPAR CONSULTA"
+                onClick={() => {
+                  setSearch('');
+                  void loadCompanies();
+                }}
+                className="inline-flex items-center justify-center rounded-2xl bg-rose-500 px-6 py-3 text-white shadow-lg shadow-rose-500/25 transition hover:bg-rose-600"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M9 9l6 6" />
+                  <path d="M15 9l-6 6" />
+                </svg>
+              </button>
+            ) : null}
+          </form>
+        </section>
+      ) : null}
 
       {error ? (
         <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} border-rose-200 bg-rose-50 px-6 py-5 text-sm font-semibold text-rose-700`}>
@@ -813,112 +906,137 @@ export default function FinanceiroEmpresasPage() {
         </section>
       ) : null}
 
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
-        <div className="border-b border-slate-100 px-6 py-5">
-          <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresas ativas</div>
-          <h2 className="mt-1 text-xl font-black text-slate-900">
-            {isLoading ? 'Carregando...' : `${companies.length} empresa(s) encontrada(s)`}
-          </h2>
-        </div>
+      {!runtimeContext.embedded ? (
+        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+          <div className="border-b border-slate-100 px-6 py-5">
+            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresas ativas</div>
+            <h2 className="mt-1 text-xl font-black text-slate-900">
+              {isLoading ? 'Carregando...' : `${companies.length} empresa(s) encontrada(s)`}
+            </h2>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-              <tr>
-                {visibleCompanyColumns.map((column) => (
-                  <th key={column.key} className="px-4 py-3">
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((item) => (
-                <tr key={item.id} className="border-t border-slate-100">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                <tr>
                   {visibleCompanyColumns.map((column) => (
-                    <td key={column.key} className="px-4 py-4">
-                      {column.key === 'name' ? (
-                        <div>
-                          <div className="font-black text-slate-900">{item.name}</div>
-                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            {item.status}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => openFinancialSettings(item)}
-                            className="mt-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
-                          >
-                            Alterar financeiro
-                          </button>
-                        </div>
-                      ) : column.key === 'sourceSystem' ? (
-                        <div>
-                          <div className="font-semibold text-slate-700">{item.sourceSystem}</div>
-                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            {item.sourceTenantId}
-                          </div>
-                        </div>
-                      ) : column.key === 'sourceTenantId' ? (
-                        <div className="font-semibold text-slate-700">{item.sourceTenantId}</div>
-                      ) : column.key === 'document' ? (
-                        <div className="font-semibold text-slate-700">{item.document || '---'}</div>
-                      ) : column.key === 'receivableTitleCount' ? (
-                        item.receivableTitleCount
-                      ) : column.key === 'installmentCount' ? (
-                        item.installmentCount
-                      ) : column.key === 'cashSessionCount' ? (
-                        item.cashSessionCount
-                      ) : (
-                        formatDateLabel(item.createdAt)
-                      )}
-                    </td>
+                    <th key={column.key} className="px-4 py-3">
+                      {column.label}
+                    </th>
                   ))}
                 </tr>
-              ))}
+              </thead>
+              <tbody>
+                {companies.map((item) => (
+                  <tr key={item.id} className="border-t border-slate-100">
+                    {visibleCompanyColumns.map((column) => (
+                      <td key={column.key} className="px-4 py-4">
+                        {column.key === 'name' ? (
+                          <div>
+                            <div className="font-black text-slate-900">{item.name}</div>
+                            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                              {item.status}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openFinancialSettings(item)}
+                              className="mt-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                            >
+                              Alterar financeiro
+                            </button>
+                          </div>
+                        ) : column.key === 'sourceSystem' ? (
+                          <div>
+                            <div className="font-semibold text-slate-700">{item.sourceSystem}</div>
+                            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                              {item.sourceTenantId}
+                            </div>
+                          </div>
+                        ) : column.key === 'sourceTenantId' ? (
+                          <div className="font-semibold text-slate-700">{item.sourceTenantId}</div>
+                        ) : column.key === 'document' ? (
+                          <div className="font-semibold text-slate-700">{item.document || '---'}</div>
+                        ) : column.key === 'receivableTitleCount' ? (
+                          item.receivableTitleCount
+                        ) : column.key === 'installmentCount' ? (
+                          item.installmentCount
+                        ) : column.key === 'cashSessionCount' ? (
+                          item.cashSessionCount
+                        ) : (
+                          formatDateLabel(item.createdAt)
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
 
-              {!isLoading && !companies.length ? (
-                <tr>
-                  <td colSpan={visibleCompanyColumns.length || 1} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                    {runtimeTenantReady
-                      ? 'Nenhuma empresa financeira foi localizada para o tenant atual.'
-                      : 'Nenhuma empresa pode ser exibida sem o tenant atual informado.'}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} border-slate-100 bg-slate-50 px-6 py-4`}>
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              title="COLUNAS"
-              aria-label="COLUNAS"
-              onClick={() => setIsColumnConfigOpen(true)}
-              className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              ☰ Colunas
-            </button>
-            <button
-              type="button"
-              title="IMPRIMIR"
-              aria-label="IMPRIMIR"
-              onClick={() => setIsExportModalOpen(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 9V4h12v5" />
-                <path d="M6 18h12v-6H6z" />
-                <path d="M8 14h8" />
-              </svg>
-            </button>
+                {!isLoading && !companies.length ? (
+                  <tr>
+                    <td colSpan={visibleCompanyColumns.length || 1} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                      {runtimeTenantReady
+                        ? 'Nenhuma empresa financeira foi localizada para o tenant atual.'
+                        : 'Nenhuma empresa pode ser exibida sem o tenant atual informado.'}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
-          <ScreenNameCopy screenId="FINANCEIRO_EMPRESAS_LISTAGEM_GERAL" className="justify-end" />
-        </div>
-      </section>
+        </section>
+      ) : null}
+
+      {runtimeContext.embedded && editingCompany ? (
+        <CompanyFinancialSettingsModal
+          isOpen
+          embedded
+          company={editingCompany}
+          form={financialForm}
+          isSaving={isSavingFinancialSettings}
+          error={financialFormError}
+          onClose={closeFinancialSettings}
+          onChange={(field, value) => {
+            setFinancialForm((current) => ({
+              ...current,
+              [field]: value,
+            }));
+          }}
+          onSave={() => {
+            void handleSaveFinancialSettings();
+          }}
+        />
+      ) : null}
+
+      {!runtimeContext.embedded ? (
+        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} border-slate-100 bg-slate-50 px-6 py-4`}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                title="COLUNAS"
+                aria-label="COLUNAS"
+                onClick={() => setIsColumnConfigOpen(true)}
+                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                ☰ Colunas
+              </button>
+              <button
+                type="button"
+                title="IMPRIMIR"
+                aria-label="IMPRIMIR"
+                onClick={() => setIsExportModalOpen(true)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9V4h12v5" />
+                  <path d="M6 18h12v-6H6z" />
+                  <path d="M8 14h8" />
+                </svg>
+              </button>
+            </div>
+            <ScreenNameCopy screenId={embeddedCompanyScreenId} className="justify-end" />
+          </div>
+        </section>
+      ) : null}
 
       <CompanyGridConfigModal
         isOpen={isColumnConfigOpen}
@@ -934,11 +1052,12 @@ export default function FinanceiroEmpresasPage() {
         onClose={() => setIsColumnConfigOpen(false)}
       />
       <CompanyFinancialSettingsModal
-        isOpen={Boolean(editingCompany)}
+        isOpen={!runtimeContext.embedded && Boolean(editingCompany)}
         company={editingCompany}
         form={financialForm}
         isSaving={isSavingFinancialSettings}
         error={financialFormError}
+        embedded={false}
         onClose={closeFinancialSettings}
         onChange={(field, value) => {
           setFinancialForm((current) => ({
@@ -990,5 +1109,7 @@ export default function FinanceiroEmpresasPage() {
         }}
       />
     </div>
+    {embeddedSuccessPopup}
+    </>
   );
 }

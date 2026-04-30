@@ -28,3 +28,22 @@
 
 - toda migracao futura da escola para o financeiro deve ocorrer por API ou script de importacao controlado
 - nao compartilhar tabelas fisicas entre produtos
+
+## Padrao obrigatorio de identificacao e auditoria visual de telas
+
+- Toda tela criada ou alterada deve manter no rodape o botao de copiar o nome tecnico da tela.
+- O nome tecnico deve seguir o contexto em que a tela aparece. Em telas embutidas em uma vertical, usar o identificador da tela principal da vertical quando aplicavel, como `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`.
+- Ao clicar no botao de copiar, alem de copiar o nome da tela, deve abrir um popup central de "Logica Usada nessa Tela".
+- O popup deve seguir o padrao validado na tela `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`:
+  - overlay escuro com blur e modal central moderno;
+  - card principal branco, bordas arredondadas grandes e sombra forte;
+  - cabecalho escuro em degradê, com `Auditoria SQL` como etiqueta e o identificador tecnico da tela logo abaixo;
+  - botao de fechar circular no canto superior direito do cabecalho;
+  - titulo central em formato de pill/etiqueta com `Logica Usada nessa Tela`;
+  - origem da tela logo abaixo do titulo, centralizada, em vermelho, contendo sistema dono e path completo do arquivo;
+  - area rolavel com estrutura, tabelas principais, relacionamentos, metricas/campos exibidos, filtros, ordenacao e SQL base;
+  - area do SQL em card branco com borda, sombra interna, fonte monoespacada e scroll proprio;
+  - nomes fisicos das tabelas destacados em negrito e com fonte um pouco maior;
+  - tabelas principais exibidas com alias entre parenteses e descricao em portugues, exemplo `cash_sessions (CS) - sessoes de caixa abertas/fechadas por operador.`;
+  - botoes modernos `Copiar SQL` e `Fechar`, centralizados abaixo da area do SQL.
+- Esse padrao deve ser considerado obrigatorio para novas telas do Financeiro e para telas embutidas em outros sistemas consumidores.

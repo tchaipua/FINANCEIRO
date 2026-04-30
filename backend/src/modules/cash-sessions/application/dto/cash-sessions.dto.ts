@@ -122,6 +122,48 @@ export class CloseCurrentCashSessionDto {
   notes?: string;
 }
 
+export const CASH_SESSION_MANUAL_MOVEMENT_TYPES = [
+  "ENTRY",
+  "EXIT",
+  "ADJUSTMENT",
+] as const;
+
+export const CASH_SESSION_MANUAL_MOVEMENT_DIRECTIONS = ["IN", "OUT"] as const;
+
+export class CreateCashMovementDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  cashierUserId!: string;
+
+  @IsIn(CASH_SESSION_MANUAL_MOVEMENT_TYPES)
+  movementType!: (typeof CASH_SESSION_MANUAL_MOVEMENT_TYPES)[number];
+
+  @IsIn(CASH_SESSION_MANUAL_MOVEMENT_DIRECTIONS)
+  direction!: (typeof CASH_SESSION_MANUAL_MOVEMENT_DIRECTIONS)[number];
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @IsOptional()
+  @IsDateString()
+  occurredAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 class BaseSettleInstallmentDto {
   @IsOptional()
   @IsString()
