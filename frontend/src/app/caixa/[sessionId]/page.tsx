@@ -62,7 +62,29 @@ const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CAIXA_DETALHE';
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const SCREEN_ORIGIN_TEXT =
   'Origem: Sistema Financeiro - C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\caixa\\[sessionId]\\page.tsx';
-const AUDIT_SQL_TEXT = `--- ESTRUTURA SQL: PRINCIPAL_FINANCEIRO_CAIXA_DETALHE ---
+function buildAuditSqlText({
+  sessionId,
+  sourceTenantId,
+  sourceSystem,
+  movementFilterLabel,
+}: {
+  sessionId?: string | null;
+  sourceTenantId?: string | null;
+  sourceSystem?: string | null;
+  movementFilterLabel?: string | null;
+}) {
+  const sessionFilterText = sessionId
+    ? `- Caixa atual por :sessionId (${sessionId})`
+    : '- Caixa atual por :sessionId';
+  const originContext = [sourceSystem, sourceTenantId].filter(Boolean).join(' / ');
+  const originFilterText = originContext
+    ? `- Empresa/escola por contexto de origem (${originContext})`
+    : '- Empresa/escola por contexto de origem';
+  const visualFilterText = movementFilterLabel
+    ? `- Filtros visuais por grupo, forma de pagamento ou descrição (${movementFilterLabel})`
+    : '- Filtros visuais por grupo, forma de pagamento ou descrição';
+
+  return `--- ESTRUTURA SQL: PRINCIPAL_FINANCEIRO_CAIXA_DETALHE ---
 TABELAS PRINCIPAIS:
 - cash_sessions (CS) - sessões de caixa abertas/fechadas por operador.
 - cash_movements (CM) - movimentos registrados no caixa, como recebimentos, entradas, saídas e ajustes.
@@ -90,9 +112,9 @@ MÉTRICAS / CAMPOS EXIBIDOS:
 - Movimentos: cash_movements.description, direction, amount, occurred_at
 
 FILTROS APLICADOS:
-- Caixa atual por :sessionId
-- Empresa/escola por contexto de origem
-- Filtros visuais por grupo, forma de pagamento ou descrição
+${sessionFilterText}
+${originFilterText}
+${visualFilterText}
 
 ORDENAÇÃO:
 - Movimentos exibidos conforme retorno da API do detalhe do caixa
@@ -118,6 +140,7 @@ LEFT JOIN cash_movements cm
   ON cm.cash_session_id = cs.id
 WHERE cs.id = :sessionId
 ORDER BY cm.occurred_at DESC;`;
+}
 
 function formatDateTimeLabel(value?: string | null) {
   if (!value) return '---';
@@ -185,10 +208,10 @@ async function copyText(value: string) {
   document.body.removeChild(textarea);
 }
 
-function AuditSqlContent() {
+function AuditSqlContent({ text }: { text: string }) {
   return (
     <>
-      {AUDIT_SQL_TEXT.split('\n').map((line, index) => {
+      {text.split('\n').map((line, index) => {
         const tableMatch = line.match(/^(-\s)(cash_sessions|cash_movements|installment_settlements|receivable_installments)(\s\([A-Z]+\))(\s-\s.*)$/);
         if (tableMatch) {
           return (
@@ -454,6 +477,20 @@ export default function FinanceiroCashDetailPage() {
     return movements.filter(movementFilter.predicate);
   }, [movementFilter, session]);
 
+  const auditSqlText = useMemo(() => {
+    return buildAuditSqlText({
+      sessionId,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      sourceSystem: runtimeContext.sourceSystem,
+      movementFilterLabel: movementFilter?.label || null,
+    });
+  }, [
+    movementFilter?.label,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    sessionId,
+  ]);
+
   function handleSetMovementFilter(filter: MovementFilter) {
     setMovementFilter((current) => (current?.label === filter.label ? null : filter));
   }
@@ -549,7 +586,7 @@ export default function FinanceiroCashDetailPage() {
 
   async function handleCopyAuditSql() {
     try {
-      await copyText(AUDIT_SQL_TEXT);
+      await copyText(auditSqlText);
       setAuditCopyStatus('copied');
     } catch {
       setAuditCopyStatus('error');
@@ -962,9 +999,16 @@ export default function FinanceiroCashDetailPage() {
             </div>
 
             <div className="bg-slate-100 px-6 py-6">
-              <div className="mb-5 text-center">
-                <div className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-blue-700 shadow-sm">
-                  Lógica Usada nessa Tela
+              <div className="mb-5">
+                <div className="mb-4 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                  <img
+                    src="/logo-msinfor.jpg"
+                    alt="MSINFOR Sistemas"
+                    className="h-24 w-24 rounded-full border-4 border-white object-contain shadow-lg shadow-slate-950/15"
+                  />
+                  <div className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-blue-700 shadow-sm">
+                    Lógica Usada nessa Tela
+                  </div>
                 </div>
                 <div className="mx-auto mt-3 max-w-4xl rounded-full border border-red-100 bg-red-50 px-4 py-2 text-center text-xs font-black text-red-700">
                   {SCREEN_ORIGIN_TEXT}
@@ -972,7 +1016,7 @@ export default function FinanceiroCashDetailPage() {
               </div>
 
               <div className="max-h-[55vh] overflow-auto rounded-2xl border border-slate-200 bg-white px-6 py-6 font-mono text-[12px] text-slate-950 shadow-inner">
-                <AuditSqlContent />
+                <AuditSqlContent text={auditSqlText} />
               </div>
               <div className="mt-6 flex flex-wrap justify-center gap-4">
                 <button
