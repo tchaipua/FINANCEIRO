@@ -1,0 +1,7 @@
+{
+  "sourceSystem": "TESTE",
+  "sourceTenantId": "TENANT_XML",
+  "companyName": "EMPRESA TESTE",
+  "requestedBy": "QA",
+  "xmlContent": "<nfeProc versao=\"4.00\" xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe35260512345678000123550010000001231000001234\" versao=\"4.00\"><ide><cUF>35</cUF><natOp>COMPRA DE MERCADORIA</natOp><mod>55</mod><serie>1</serie><nNF>123</nNF><dhEmi>2026-05-05T10:00:00-03:00</dhEmi></ide><emit><CNPJ>12345678000123</CNPJ><xNome>FORNECEDOR TESTE LTDA</xNome><xFant>FORNECEDOR TESTE</xFant><IE>123456789</IE></emit><det nItem=\"1\"><prod><cProd>ABC123</cProd><cEAN>7891234567890</cEAN><xProd>CANETA AZUL</xProd><NCM>96081000</NCM><CFOP>1102</CFOP><uCom>UN</uCom><qCom>10.0000</qCom><vUnCom>2.5000</vUnCom><vProd>25.00</vProd></prod></det><det nItem=\"2\"><prod><cProd>CAD001</cProd><cEAN></cEAN><xProd>CADERNO GRANDE</xProd><NCM>48202000</NCM><CFOP>1102</CFOP><uCom>UN</uCom><qCom>5.0000</qCom><vUnCom>15.0000</vUnCom><vProd>75.00</vProd></prod></det><total><ICMSTot><vProd>100.00</vProd><vNF>100.00</vNF></ICMSTot></total><cobr><dup><nDup>001</nDup><dVenc>2026-05-15</dVenc><vDup>40.00</vDup></dup><dup><nDup>002</nDup><dVenc>2026-06-15</dVenc><vDup>60.00</vDup></dup></cobr></infNFe></NFe><protNFe><infProt><chNFe>35260512345678000123550010000001231000001234</chNFe><cStat>100</cStat><nProt>123456789012345</nProt></infProt></protNFe></nfeProc>"
+}

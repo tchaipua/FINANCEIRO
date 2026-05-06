@@ -26,7 +26,14 @@ model Company {
   canceledAt             DateTime?
   canceledBy             String?
   bankAccounts           BankAccount[]
+  fiscalCertificates     FiscalCertificate[]
+  products               Product[]
+  suppliers              Supplier[]
   parties                Party[]
+  payableInvoiceImports  PayableInvoiceImport[]
+  payableTitles          PayableTitle[]
+  payableInstallments    PayableInstallment[]
+  stockMovements         StockMovement[]
   receivableBatches      ReceivableBatch[]
   receivableTitles       ReceivableTitle[]
   receivableInstallments ReceivableInstallment[]
@@ -39,6 +46,297 @@ model Company {
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
   @@map("companies")
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  companyId       String
+  status          String   @default("ACTIVE")
+  name            String
+  internalCode    String?
+  sku             String?
+  barcode         String?
+  unitCode        String   @default("UN")
+  productType     String   @default("GOODS")
+  tracksInventory Boolean  @default(true)
+  allowFraction   Boolean  @default(false)
+  currentStock    Float    @default(0)
+  minimumStock    Float    @default(0)
+  purchasePrice   Float?
+  salePrice       Float?
+  ncmCode         String?
+  cestCode        String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  createdBy       String?
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+  canceledAt      DateTime?
+  canceledBy      String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payableInvoiceImportItems PayableInvoiceImportItem[]
+  stockMovements            StockMovement[]
+
+  @@unique([companyId, internalCode])
+  @@unique([companyId, sku])
+  @@unique([companyId, barcode])
+  @@index([companyId, status, name])
+  @@index([companyId, productType, tracksInventory])
+  @@map("products")
+}
+
+model FiscalCertificate {
+  id                  String   @id @default(uuid())
+  companyId           String
+  status              String   @default("ACTIVE")
+  certificateType     String   @default("A1")
+  environment         String   @default("PRODUCTION")
+  purpose             String   @default("NFE_DFE")
+  isDefault           Boolean  @default(false)
+  aliasName           String
+  authorStateCode     String
+  holderName          String
+  holderDocument      String
+  serialNumber        String?
+  thumbprint          String?
+  validFrom           DateTime?
+  validTo             DateTime?
+  pfxEncryptedBase64  String
+  passwordEncrypted   String
+  lastNsu             String?
+  lastMaxNsu          String?
+  lastSyncAt          DateTime?
+  lastSyncStatus      String?
+  lastSyncMessage     String?
+  createdAt           DateTime @default(now())
+  createdBy           String?
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  company               Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payableInvoiceImports PayableInvoiceImport[]
+
+  @@index([companyId, status, environment, purpose, aliasName])
+  @@map("fiscal_certificates")
+}
+
+model Supplier {
+  id                String   @id @default(uuid())
+  companyId         String
+  status            String   @default("ACTIVE")
+  legalName         String
+  tradeName         String?
+  document          String?
+  stateRegistration String?
+  email             String?
+  phone             String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  createdBy         String?
+  updatedAt         DateTime @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  company               Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payableInvoiceImports PayableInvoiceImport[]
+  payableTitles         PayableTitle[]
+
+  @@unique([companyId, document])
+  @@index([companyId, status, legalName])
+  @@map("suppliers")
+}
+
+model PayableInvoiceImport {
+  id                  String   @id @default(uuid())
+  companyId           String
+  supplierId          String?
+  fiscalCertificateId String?
+  status              String   @default("PENDING_APPROVAL")
+  importType          String   @default("XML_UPLOAD")
+  documentModel       String
+  accessKey           String
+  invoiceNumber       String
+  series              String?
+  operationNature     String?
+  issueDate           DateTime
+  entryDate           DateTime?
+  totalProductsAmount Float    @default(0)
+  totalInvoiceAmount  Float    @default(0)
+  xmlHash             String
+  xmlContentBlob      Bytes
+  distributionNsu     String?
+  parsedSnapshotJson  String?
+  approvalNotes       String?
+  approvedAt          DateTime?
+  approvedBy          String?
+  createdAt           DateTime @default(now())
+  createdBy           String?
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  company     Company                      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier    Supplier?                    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  fiscalCertificate FiscalCertificate?     @relation(fields: [fiscalCertificateId], references: [id], onDelete: SetNull)
+  items       PayableInvoiceImportItem[]
+  installments PayableInvoiceImportInstallment[]
+  payableTitle PayableTitle?
+  stockMovements StockMovement[]
+
+  @@unique([companyId, accessKey])
+  @@unique([companyId, xmlHash])
+  @@index([companyId, status, issueDate])
+  @@index([companyId, invoiceNumber, series])
+  @@index([fiscalCertificateId, distributionNsu])
+  @@map("payable_invoice_imports")
+}
+
+model PayableInvoiceImportItem {
+  id                  String   @id @default(uuid())
+  invoiceImportId     String
+  productId           String?
+  lineNumber          Int
+  approvalAction      String?
+  supplierItemCode    String?
+  barcode             String?
+  description         String
+  ncmCode             String?
+  cfopCode            String?
+  unitCode            String?
+  quantity            Float    @default(0)
+  unitPrice           Float    @default(0)
+  totalPrice          Float    @default(0)
+  tracksInventory     Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  createdBy           String?
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  invoiceImport  PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
+  product        Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  stockMovements StockMovement[]
+
+  @@unique([invoiceImportId, lineNumber])
+  @@index([productId])
+  @@map("payable_invoice_import_items")
+}
+
+model PayableInvoiceImportInstallment {
+  id              String   @id @default(uuid())
+  invoiceImportId String
+  installmentLabel String?
+  installmentNumber Int
+  dueDate         DateTime
+  amount          Float    @default(0)
+  createdAt       DateTime @default(now())
+  createdBy       String?
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+  canceledAt      DateTime?
+  canceledBy      String?
+
+  invoiceImport PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceImportId, installmentNumber])
+  @@index([dueDate])
+  @@map("payable_invoice_import_installments")
+}
+
+model PayableTitle {
+  id                     String   @id @default(uuid())
+  companyId              String
+  supplierId             String?
+  sourceDocumentType     String
+  sourceDocumentId       String   @unique
+  status                 String   @default("OPEN")
+  documentNumber         String
+  description            String
+  issueDate              DateTime
+  totalAmount            Float    @default(0)
+  supplierNameSnapshot   String
+  supplierDocumentSnapshot String?
+  createdAt              DateTime @default(now())
+  createdBy              String?
+  updatedAt              DateTime @updatedAt
+  updatedBy              String?
+  canceledAt             DateTime?
+  canceledBy             String?
+
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  sourceImport PayableInvoiceImport @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
+  installments PayableInstallment[]
+
+  @@unique([companyId, sourceDocumentType, sourceDocumentId])
+  @@index([companyId, status, issueDate])
+  @@map("payable_titles")
+}
+
+model PayableInstallment {
+  id                    String   @id @default(uuid())
+  companyId             String
+  titleId               String
+  installmentNumber     Int
+  installmentCount      Int
+  dueDate               DateTime
+  amount                Float    @default(0)
+  openAmount            Float    @default(0)
+  paidAmount            Float    @default(0)
+  status                String   @default("OPEN")
+  descriptionSnapshot   String
+  supplierNameSnapshot  String
+  supplierDocumentSnapshot String?
+  createdAt             DateTime @default(now())
+  createdBy             String?
+  updatedAt             DateTime @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  title   PayableTitle @relation(fields: [titleId], references: [id], onDelete: Restrict)
+
+  @@unique([titleId, installmentNumber])
+  @@index([companyId, status, dueDate])
+  @@map("payable_installments")
+}
+
+model StockMovement {
+  id                String   @id @default(uuid())
+  companyId         String
+  productId         String
+  sourceImportId    String
+  sourceImportItemId String
+  movementType      String
+  quantity          Float    @default(0)
+  previousStock     Float    @default(0)
+  resultingStock    Float    @default(0)
+  unitCost          Float?
+  notes             String?
+  occurredAt        DateTime
+  createdAt         DateTime @default(now())
+  createdBy         String?
+  updatedAt         DateTime @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  company        Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product        Product                  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceImport   PayableInvoiceImport     @relation(fields: [sourceImportId], references: [id], onDelete: Restrict)
+  sourceImportItem PayableInvoiceImportItem @relation(fields: [sourceImportItemId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, occurredAt])
+  @@index([productId, occurredAt])
+  @@index([sourceImportId])
+  @@map("stock_movements")
 }
 
 model BankAccount {

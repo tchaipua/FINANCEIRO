@@ -83,7 +83,13 @@ export default function ScreenAuditModal({
   auditText = DEFAULT_AUDIT_TEXT,
   onClose,
 }: ScreenAuditModalProps) {
-  const effectiveOriginText = originText || `Origem: ${systemName} - caminho fisico nao mapeado para esta tela.`;
+  const effectivePathText = originText
+    ? originText
+        .replace(/^Origem:\s*Sistema\s+[^-]+-\s*/i, '')
+        .replace(/^Origem:\s*[^-]+-\s*/i, '')
+        .replace(/^caminho\s+f[ií]sico:\s*/i, '')
+        .trim()
+    : 'caminho fisico nao mapeado para esta tela.';
 
   return (
     <div className="fixed inset-0 z-[94] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-md">
@@ -112,11 +118,11 @@ export default function ScreenAuditModal({
                 className="h-24 w-24 rounded-full border-4 border-white object-contain shadow-lg shadow-slate-950/15"
               />
               <div className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-blue-700 shadow-sm">
-                Lógica Usada nessa Tela
+                {`ORIGEM: SISTEMA ${String(systemName || '').toUpperCase().replace(/^SISTEMA\s+/i, '')}`}
               </div>
             </div>
             <div className="mx-auto mt-3 max-w-4xl rounded-full border border-red-100 bg-red-50 px-4 py-2 text-center text-xs font-black text-red-700">
-              {effectiveOriginText}
+              {effectivePathText}
             </div>
           </div>
 

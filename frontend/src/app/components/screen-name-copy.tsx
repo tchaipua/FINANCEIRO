@@ -11,6 +11,8 @@ type ScreenNameCopyProps = {
   screenId: string;
   label?: string;
   className?: string;
+  originText?: string;
+  auditText?: string;
 };
 
 function copyTextWithLegacyCommand(value: string) {
@@ -42,6 +44,8 @@ export default function ScreenNameCopy({
   screenId,
   label = 'Tela',
   className = '',
+  originText,
+  auditText,
 }: ScreenNameCopyProps) {
   const [status, setStatus] = useState<CopyStatus>('idle');
   const [isAuditOpen, setIsAuditOpen] = useState(false);
@@ -113,6 +117,8 @@ export default function ScreenNameCopy({
         <ScreenAuditModal
           screenId={screenId}
           systemName="Sistema Financeiro"
+          originText={originText}
+          auditText={auditText}
           onClose={() => setIsAuditOpen(false)}
         />
       ) : null}

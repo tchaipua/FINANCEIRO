@@ -32,6 +32,15 @@ const {
 } = require("../dist/modules/receivables/application/bank-return.utils.js");
 
 async function resetDatabase(prisma) {
+  await prisma.stockMovement.deleteMany();
+  await prisma.payableInstallment.deleteMany();
+  await prisma.payableTitle.deleteMany();
+  await prisma.payableInvoiceImportInstallment.deleteMany();
+  await prisma.payableInvoiceImportItem.deleteMany();
+  await prisma.payableInvoiceImport.deleteMany();
+  await prisma.fiscalCertificate.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.supplier.deleteMany();
   await prisma.bankReturnImportItem.deleteMany();
   await prisma.bankReturnImport.deleteMany();
   await prisma.installmentSettlement.deleteMany();

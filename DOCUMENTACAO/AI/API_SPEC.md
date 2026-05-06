@@ -38,6 +38,201 @@ Uso:
 
 - girar chave tecnica de integracao
 
+## Products
+
+### GET `/products`
+
+Uso:
+
+- listar produtos da empresa financeira do tenant informado
+
+Query string esperada:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `status` opcional: `ACTIVE | INACTIVE | ALL`
+- `search` opcional
+
+### GET `/products/:productId`
+
+Uso:
+
+- carregar o cadastro completo do produto informado
+
+### POST `/products`
+
+Uso:
+
+- criar o cadastro base de produto compartilhado no `Financeiro`
+
+### PATCH `/products/:productId`
+
+Uso:
+
+- atualizar o cadastro do produto informado
+
+### POST `/products/:productId/activate`
+
+Uso:
+
+- reativar produto inativo
+
+### POST `/products/:productId/inactivate`
+
+Uso:
+
+- inativar produto com soft delete
+
+## Fiscal Certificates
+
+### GET `/fiscal-certificates`
+
+Uso:
+
+- listar os certificados fiscais da empresa financeira informada
+
+Query string esperada:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `status` opcional: `ACTIVE | INACTIVE | ALL`
+
+### POST `/fiscal-certificates`
+
+Uso:
+
+- cadastrar um certificado fiscal A1
+- gravar PFX e senha criptografados no Financeiro
+
+Body esperado:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "TENANT_001",
+  "companyName": "ESCOLA MODELO",
+  "requestedBy": "CAIXA 01",
+  "aliasName": "CERTIFICADO PRINCIPAL",
+  "authorStateCode": "35",
+  "environment": "PRODUCTION",
+  "purpose": "NFE_DFE",
+  "isDefault": true,
+  "pfxBase64": "BASE64_DO_PFX",
+  "certificatePassword": "SENHA_DO_PFX"
+}
+```
+
+### PATCH `/fiscal-certificates/:certificateId`
+
+Uso:
+
+- atualizar metadados do certificado
+- opcionalmente substituir o PFX e a senha
+
+### POST `/fiscal-certificates/:certificateId/set-default`
+
+Uso:
+
+- definir o certificado padrão por ambiente e finalidade
+
+### POST `/fiscal-certificates/:certificateId/sync-dfe`
+
+Uso:
+
+- consultar a SEFAZ no serviço de distribuição DF-e
+- importar notas completas no contas a pagar quando o XML integral estiver disponível
+
+Body esperado:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "TENANT_001",
+  "requestedBy": "CAIXA 01",
+  "maxBatches": 5
+}
+```
+
+## Payables
+
+### GET `/payables/invoice-imports`
+
+Uso:
+
+- listar as notas de entrada importadas no contas a pagar
+
+Query string esperada:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `status` opcional: `PENDING_APPROVAL | APPROVED | ALL`
+- `search` opcional
+
+### GET `/payables/invoice-imports/:importId`
+
+Uso:
+
+- carregar a nota importada para conferencia e aprovacao
+
+### POST `/payables/invoice-imports/from-xml`
+
+Uso:
+
+- importar uma NF-e de entrada a partir do XML
+
+Body esperado:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "TENANT_001",
+  "companyName": "ESCOLA MODELO",
+  "requestedBy": "CAIXA 01",
+  "xmlContent": "<nfeProc>...</nfeProc>"
+}
+```
+
+### POST `/payables/invoice-imports/:importId/approve`
+
+Uso:
+
+- aprovar a nota importada
+- gerar duplicatas do contas a pagar
+- gerar entrada de estoque quando houver item controlado
+
+Body esperado:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "TENANT_001",
+  "requestedBy": "CAIXA 01",
+  "approvalNotes": "ENTRADA CONFERIDA",
+  "items": [
+    {
+      "itemId": "uuid-do-item",
+      "action": "LINK_EXISTING",
+      "productId": "uuid-do-produto"
+    },
+    {
+      "itemId": "uuid-do-item-2",
+      "action": "CREATE_PRODUCT",
+      "productName": "CANETA AZUL",
+      "internalCode": "00045",
+      "barcode": "7890000000001",
+      "unitCode": "UN",
+      "tracksInventory": true,
+      "minimumStock": 5
+    }
+  ]
+}
+```
+
+Regra atual:
+
+- o XML da nota importada fica gravado em campo `blob` no proprio registro da nota dentro do `Financeiro`
+- quando a nota vem da SEFAZ, o sistema guarda o `certificateId` e o `NSU` da distribuicao
+
 ## Receivables
 
 ### POST `/receivables/import`

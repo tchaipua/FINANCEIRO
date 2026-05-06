@@ -21,7 +21,7 @@ O `Financeiro` e um backend independente, sem login humano proprio, consumido po
 
 ## Regra soberana de dominio
 
-O core financeiro nao pode depender de entidades especificas como:
+O core financeiro de recebiveis/pagamentos nao pode depender de entidades especificas como:
 
 - aluno
 - professor
@@ -44,6 +44,21 @@ O core deve conhecer somente conceitos financeiros genericos, como:
 - conta bancaria
 - cobranca
 - documento fiscal
+
+## Evolucao controlada do mesmo produto
+
+O produto `Financeiro` pode hospedar, no mesmo repositorio e no mesmo deploy, modulos compartilhados de apoio operacional, como:
+
+- produtos
+- estoque
+- vendas
+- notas de entrada
+- certificados fiscais
+
+Condicao obrigatoria:
+
+- esses modulos nao podem contaminar o core financeiro com regras especificas de uma vertical;
+- o cadastro compartilhado pode existir no mesmo sistema, mas o dominio de recebiveis/pagamentos deve continuar desacoplado.
 
 ## Principios obrigatorios
 
