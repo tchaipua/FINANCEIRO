@@ -9,7 +9,6 @@ import {
   useMemo,
   useState,
 } from 'react';
-import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
   formatCurrency,
@@ -84,6 +83,18 @@ type SyncResult = {
   otherDocuments: number;
   message: string;
   importedNoteIds: string[];
+  resetNsu?: boolean;
+};
+
+type SefazSyncModalState = {
+  isOpen: boolean;
+  phase: 'loading' | 'success' | 'warning';
+  certificateAlias: string;
+  searchedDateLabel: string;
+  foundNotes: number;
+  message: string;
+  mode: 'standard' | 'historical';
+  retryAtLabel: string | null;
 };
 
 const emptyCertificateForm: CertificateFormState = {
@@ -97,6 +108,148 @@ const emptyCertificateForm: CertificateFormState = {
   certificatePassword: '',
   fileName: '',
 };
+
+function buildTodaySearchLabel() {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date());
+}
+
+function buildDateTimeLabel(value: Date) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(value);
+}
+
+function getSefazRetryAt(certificate: FiscalCertificateItem) {
+  if (certificate.lastSyncStatus !== '656' || !certificate.lastSyncAt) {
+    return null;
+  }
+
+  const lastSyncDate = new Date(certificate.lastSyncAt);
+  if (Number.isNaN(lastSyncDate.getTime())) {
+    return null;
+  }
+
+  return new Date(lastSyncDate.getTime() + 60 * 60 * 1000);
+}
+
+function SefazSyncProgressModal({
+  state,
+  logoUrl,
+  companyName,
+  onClose,
+}: {
+  state: SefazSyncModalState;
+  logoUrl: string | null;
+  companyName: string | null;
+  onClose: () => void;
+}) {
+  if (!state.isOpen) {
+    return null;
+  }
+
+  const isLoading = state.phase === 'loading';
+  const isHistorical = state.mode === 'historical';
+  const isWarning = state.phase === 'warning';
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-5 text-white">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/10 shadow-lg">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={companyName || 'Empresa'}
+                  className="h-full w-full object-contain p-2"
+                />
+              ) : (
+                <span className="text-sm font-black uppercase tracking-[0.18em] text-white">
+                  SEFAZ
+                </span>
+              )}
+            </div>
+
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.26em] text-cyan-200">
+                {isHistorical ? 'Varredura histórica SEFAZ' : 'Consulta SEFAZ'}
+              </div>
+              <div className="mt-1 text-2xl font-black">
+                {isWarning
+                  ? 'Consulta temporariamente bloqueada'
+                  : isLoading
+                  ? isHistorical
+                    ? 'Buscando histórico...'
+                    : 'Buscando notas...'
+                  : 'Importação concluída'}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-blue-100/90">
+                Certificado: {state.certificateAlias}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-6 py-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                {isHistorical ? 'Busca iniciada em' : 'Dia consultado'}
+              </div>
+              <div className="mt-2 text-lg font-black text-slate-900">
+                {state.searchedDateLabel}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Notas encontradas
+              </div>
+              <div className="mt-2 text-lg font-black text-slate-900">
+                {state.foundNotes}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-600">
+            {state.message}
+          </div>
+
+          {state.retryAtLabel ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-bold text-amber-800">
+              Nova consulta liberada a partir de: {state.retryAtLabel}
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm font-bold text-blue-700">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+              <span>Aguarde enquanto a SEFAZ retorna os documentos.</span>
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-500"
+              >
+                Fechar
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function getStatusClass(status: string) {
   return status === 'APPROVED'
@@ -344,6 +497,16 @@ export default function FinanceiroImportacaoNotasPage() {
   const [savingCertificate, setSavingCertificate] = useState(false);
   const [syncingCertificateId, setSyncingCertificateId] = useState<string | null>(null);
   const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
+  const [sefazSyncModal, setSefazSyncModal] = useState<SefazSyncModalState>({
+    isOpen: false,
+    phase: 'loading',
+    certificateAlias: '',
+    searchedDateLabel: '',
+    foundNotes: 0,
+    message: '',
+    mode: 'standard',
+    retryAtLabel: null,
+  });
   const [certificateForm, setCertificateForm] = useState<CertificateFormState>(
     emptyCertificateForm,
   );
@@ -616,13 +779,47 @@ export default function FinanceiroImportacaoNotasPage() {
   );
 
   const handleSyncCertificate = useCallback(
-    async (certificate: FiscalCertificateItem) => {
+    async (
+      certificate: FiscalCertificateItem,
+      options?: { historical?: boolean },
+    ) => {
       if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
+      const historical = Boolean(options?.historical);
+      const retryAt = getSefazRetryAt(certificate);
+
+      if (retryAt && retryAt.getTime() > Date.now()) {
+        setSefazSyncModal({
+          isOpen: true,
+          phase: 'warning',
+          certificateAlias: certificate.aliasName,
+          searchedDateLabel: buildTodaySearchLabel(),
+          foundNotes: 0,
+          message:
+            'A SEFAZ pediu aguardo de 1 hora antes da próxima consulta. Esta tentativa foi bloqueada localmente para evitar consumo indevido.',
+          mode: historical ? 'historical' : 'standard',
+          retryAtLabel: buildDateTimeLabel(retryAt),
+        });
+        setErrorMessage(null);
+        setSuccessMessage(null);
+        return;
+      }
 
       setSyncingCertificateId(certificate.id);
       setErrorMessage(null);
       setSuccessMessage(null);
       setImportResult(null);
+      setSefazSyncModal({
+        isOpen: true,
+        phase: 'loading',
+        certificateAlias: certificate.aliasName,
+        searchedDateLabel: buildTodaySearchLabel(),
+        foundNotes: 0,
+        message: historical
+          ? `Iniciando a varredura histórica da SEFAZ com o certificado ${certificate.aliasName}.`
+          : `Consultando a SEFAZ com o certificado ${certificate.aliasName}.`,
+        mode: historical ? 'historical' : 'standard',
+        retryAtLabel: null,
+      });
 
       try {
         const response = await requestJson<SyncResult>(
@@ -636,7 +833,8 @@ export default function FinanceiroImportacaoNotasPage() {
                 runtimeContext.cashierDisplayName ||
                 runtimeContext.userRole ||
                 'OPERADOR',
-              maxBatches: 5,
+              maxBatches: historical ? 20 : 5,
+              resetNsu: historical,
             }),
             fallbackMessage:
               'Não foi possível consultar a SEFAZ com este certificado.',
@@ -644,9 +842,31 @@ export default function FinanceiroImportacaoNotasPage() {
         );
 
         setSyncResult(response);
-        setSuccessMessage(response.message);
+        setSuccessMessage(
+          response.importedNotes > 0
+            ? `${response.message} Importação concluída com sucesso.`
+            : response.message,
+        );
+        setSefazSyncModal((current) => ({
+          ...current,
+          isOpen: true,
+          phase: 'success',
+          foundNotes: response.importedNotes + response.duplicateNotes,
+          message:
+            response.importedNotes > 0
+              ? `${response.message} Importação concluída com sucesso.`
+              : response.message,
+          retryAtLabel:
+            response.statusCode === '656'
+              ? buildDateTimeLabel(new Date(Date.now() + 60 * 60 * 1000))
+              : null,
+        }));
         await Promise.all([loadRecentImports(), loadCertificates()]);
       } catch (error) {
+        setSefazSyncModal((current) => ({
+          ...current,
+          isOpen: false,
+        }));
         setErrorMessage(
           getFriendlyRequestErrorMessage(
             error,
@@ -674,53 +894,29 @@ export default function FinanceiroImportacaoNotasPage() {
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
-      <section className={FINANCE_GRID_PAGE_LAYOUT.card}>
-        <div className="border-b border-slate-200 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
-                Contas a pagar
-              </div>
-              <h1 className="mt-1 text-2xl font-black text-slate-900">
-                Importação de Notas
-              </h1>
-              <p className="mt-2 text-sm font-medium text-slate-500">
-                Importe notas por XML manual ou consulte a SEFAZ com certificado fiscal A1.
-              </p>
-            </div>
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+        <SefazSyncProgressModal
+          state={sefazSyncModal}
+          logoUrl={runtimeContext.logoUrl}
+          companyName={runtimeContext.companyName}
+          onClose={() =>
+            setSefazSyncModal((current) => ({
+              ...current,
+              isOpen: false,
+            }))
+          }
+        />
 
-            <Link
-              href={`/contas-a-pagar${navigationQuery}`}
-              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              Voltar
-            </Link>
-          </div>
-        </div>
-
-        <div className="grid gap-6 p-6 xl:grid-cols-[1.22fr_0.78fr]">
+        <div className="grid gap-6 bg-slate-100 p-6 xl:grid-cols-[1.22fr_0.78fr]">
           <div className="space-y-6">
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                    Importação automática pela SEFAZ
-                  </div>
-                  <div className="mt-1 text-sm font-medium text-slate-500">
-                    Use o certificado fiscal A1 da empresa para buscar DF-e e importar NF-e completas.
-                  </div>
+              <div className="mb-4">
+                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+                  Importação automática pela SEFAZ
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCertificateForm(emptyCertificateForm);
-                    setIsCertificateModalOpen(true);
-                  }}
-                  className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-                >
-                  Novo certificado
-                </button>
+                <div className="mt-1 text-sm font-medium text-slate-500">
+                  Use o certificado fiscal A1 da empresa para buscar DF-e e importar NF-e completas.
+                </div>
               </div>
 
               {defaultCertificate ? (
@@ -779,17 +975,6 @@ export default function FinanceiroImportacaoNotasPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-3">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCertificateForm(buildCertificateForm(certificate));
-                              setIsCertificateModalOpen(true);
-                            }}
-                            className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-                          >
-                            Editar
-                          </button>
-
                           {!certificate.isDefault ? (
                             <button
                               type="button"
@@ -813,6 +998,24 @@ export default function FinanceiroImportacaoNotasPage() {
                             {syncingCertificateId === certificate.id
                               ? 'Consultando...'
                               : 'Importar SEFAZ'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleSyncCertificate(certificate, {
+                                historical: true,
+                              })
+                            }
+                            disabled={
+                              syncingCertificateId === certificate.id ||
+                              certificate.status !== 'ACTIVE' ||
+                              certificate.expired
+                            }
+                            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {syncingCertificateId === certificate.id
+                              ? 'Buscando...'
+                              : 'Buscar histórico'}
                           </button>
                         </div>
                       </div>
@@ -890,43 +1093,6 @@ export default function FinanceiroImportacaoNotasPage() {
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
                 {successMessage}
               </div>
-            ) : null}
-
-            {syncResult ? (
-              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                      Resultado da última sincronização SEFAZ
-                    </div>
-                    <div className="mt-1 text-xl font-black text-slate-900">
-                      Status {syncResult.statusCode}
-                    </div>
-                    <div className="mt-2 text-sm font-semibold text-slate-500">
-                      {syncResult.statusMessage}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Notas importadas</div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">{syncResult.importedNotes}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Duplicadas</div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">{syncResult.duplicateNotes}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Somente resumo</div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">{syncResult.summaryOnlyDocuments}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Outros documentos</div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">{syncResult.otherDocuments}</div>
-                  </div>
-                </div>
-              </section>
             ) : null}
 
             {importResult ? (
@@ -1056,14 +1222,6 @@ export default function FinanceiroImportacaoNotasPage() {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-              <ScreenNameCopy
-                screenId={SCREEN_ID}
-                className="justify-end"
-                originText="Origem: Sistema Financeiro - frontend/src/app/contas-a-pagar/importacao-notas/page.tsx"
-                auditText={auditText}
-              />
-            </section>
           </aside>
         </div>
       </section>

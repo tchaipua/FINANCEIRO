@@ -1,6 +1,4 @@
 'use client';
-
-import Link from 'next/link';
 import {
   ChangeEvent,
   FormEvent,
@@ -25,7 +23,6 @@ import {
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
   buildFinanceApiQueryString,
-  buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import type { FiscalCertificateItem } from '../payables-types';
@@ -465,7 +462,6 @@ function CertificateModal({
 
 export default function FinanceiroCertificadosDigitaisPage() {
   const runtimeContext = useFinanceRuntimeContext();
-  const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
   const [items, setItems] = useState<FiscalCertificateItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -810,88 +806,85 @@ export default function FinanceiroCertificadosDigitaisPage() {
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
       <section className={FINANCE_GRID_PAGE_LAYOUT.card}>
-        <div className="border-b border-slate-200 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
-                Contas a pagar
-              </div>
-              <h1 className="mt-1 text-2xl font-black text-slate-900">
-                Certificados Digitais
-              </h1>
-              <p className="mt-2 text-sm font-medium text-slate-500">
-                Cadastre e mantenha os certificados A1 usados na integração fiscal do
-                Financeiro.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleOpenCreate}
-                className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-              >
-                Incluir
-              </button>
-              <Link
-                href={`/contas-a-pagar${navigationQuery}`}
-                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                Voltar
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-6 p-6">
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="grid gap-6 p-6">
+          <div className="grid justify-center gap-4 md:grid-cols-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Certificados</div>
               <div className="mt-1 text-2xl font-black text-slate-900">{summary.total}</div>
             </div>
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">Ativos</div>
               <div className="mt-1 text-2xl font-black text-emerald-800">{summary.active}</div>
             </div>
-            <div className="rounded-3xl border border-blue-200 bg-blue-50 px-5 py-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-blue-200 bg-blue-50 px-5 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">Padrão</div>
               <div className="mt-1 text-2xl font-black text-blue-800">{summary.defaults}</div>
             </div>
-            <div className="rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-600">Vencidos</div>
               <div className="mt-1 text-2xl font-black text-rose-800">{summary.expired}</div>
             </div>
           </div>
 
           <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <form className="grid gap-4 xl:grid-cols-[1fr_auto_auto]">
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  Buscar certificado
-                </span>
-                <input
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="APELIDO, TITULAR, DOCUMENTO..."
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                />
-              </label>
-
+            <form className="grid gap-4 xl:grid-cols-[auto_minmax(0,1.35fr)] xl:items-end">
               <button
                 type="button"
-                onClick={() => void loadCertificates()}
-                className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                onClick={handleOpenCreate}
+                aria-label="INCLUIR NOVO CERTIFICADO"
+                title="INCLUIR NOVO CERTIFICADO"
+                className="inline-flex h-[50px] w-[50px] shrink-0 items-center justify-center self-end rounded-2xl border border-blue-200 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
               >
-                Aplicar
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsExportModalOpen(true)}
-                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                Exportar
-              </button>
+              <div className="min-w-0">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    Buscar certificado
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      placeholder="APELIDO, TITULAR, DOCUMENTO..."
+                      className={`${FINANCE_GRID_PAGE_LAYOUT.input} flex-1`}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => void loadCertificates()}
+                      aria-label="Buscar certificados"
+                      title="Buscar certificados"
+                      className="inline-flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-5 w-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
+                    </button>
+                  </div>
+                </label>
+              </div>
             </form>
           </section>
 

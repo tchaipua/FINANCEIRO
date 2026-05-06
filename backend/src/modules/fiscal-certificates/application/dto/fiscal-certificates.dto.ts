@@ -125,4 +125,9 @@ export class SyncFiscalCertificateDfeDto {
   @Min(1)
   @Max(20)
   maxBatches?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  resetNsu?: boolean;
 }

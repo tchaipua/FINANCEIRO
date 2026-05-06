@@ -18,7 +18,18 @@ export type FinanceRuntimeContext = {
 function normalizeQueryValue(value: string | null, uppercase = true) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return null;
-  return uppercase ? trimmed.toUpperCase() : trimmed;
+
+  const normalized = /[ÃÂâ]/.test(trimmed)
+    ? (() => {
+        try {
+          return decodeURIComponent(escape(trimmed));
+        } catch {
+          return trimmed;
+        }
+      })()
+    : trimmed;
+
+  return uppercase ? normalized.toUpperCase() : normalized;
 }
 
 const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {

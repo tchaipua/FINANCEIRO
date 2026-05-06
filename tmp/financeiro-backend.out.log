@@ -363,3 +363,863 @@
 [32m[Nest] 23668  - [39m05/05/2026, 18:40:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
 [32m[Nest] 23668  - [39m05/05/2026, 18:40:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
 [32m[Nest] 23668  - [39m05/05/2026, 18:40:43 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m07:36:06[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:07[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:07[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:07[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:07[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:07[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:08[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:08[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:08[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:08[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:09[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:09[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:09[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:09[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +9ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 29608  - [39m06/05/2026, 07:36:10 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m07:36:10[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:10[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +11ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 24068  - [39m06/05/2026, 07:36:11 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m07:36:13[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:14[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +11ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 27996  - [39m06/05/2026, 07:36:14 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m07:36:15[0m] File change detected. Starting incremental compilation...
+
+[[90m07:36:15[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m07:36:16[0m] File change detected. Starting incremental compilation...
+
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +10ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +4ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +17ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 46252  - [39m06/05/2026, 07:36:16 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+[[90m07:36:16[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +9ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 16324  - [39m06/05/2026, 07:36:17 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+[2J[3J[H[[90m07:57:17[0m] File change detected. Starting incremental compilation...
+
+[96msrc/modules/fiscal-certificates/application/fiscal-certificates.service.ts[0m:[93m16[0m:[93m34[0m - [91merror[0m[90m TS2307: [0mCannot find module './fiscal-certificate-metadata' or its corresponding type declarations.
+
+[7m16[0m import { parsePfxMetadata } from "./fiscal-certificate-metadata";
+[7m  [0m [91m                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[[90m07:57:17[0m] Found 1 error. Watching for file changes.
+
+[2J[3J[H[[90m07:57:51[0m] File change detected. Starting incremental compilation...
+
+[96msrc/modules/fiscal-certificates/application/fiscal-certificate-metadata.ts[0m:[93m133[0m:[93m5[0m - [91merror[0m[90m TS2345: [0mArgument of type 'PrivateKey' is not assignable to parameter of type 'PrivateKey | null'.
+  Type 'Buffer<ArrayBufferLike>' is missing the following properties from type 'PrivateKey': n, e, d, p, and 6 more.
+
+[7m133[0m     privateKey,
+[7m   [0m [91m    ~~~~~~~~~~[0m
+
+[[90m07:57:51[0m] Found 1 error. Watching for file changes.
+
+[2J[3J[H[[90m07:58:10[0m] File change detected. Starting incremental compilation...
+
+[96msrc/modules/fiscal-certificates/application/fiscal-certificate-metadata.ts[0m:[93m133[0m:[93m5[0m - [91merror[0m[90m TS2345: [0mArgument of type 'PrivateKey' is not assignable to parameter of type 'PrivateKey | null'.
+  Type 'Buffer<ArrayBufferLike>' is missing the following properties from type 'PrivateKey': n, e, d, p, and 6 more.
+
+[7m133[0m     privateKey,
+[7m   [0m [91m    ~~~~~~~~~~[0m
+
+[[90m07:58:10[0m] Found 1 error. Watching for file changes.
+
+[2J[3J[H[[90m07:58:36[0m] File change detected. Starting incremental compilation...
+
+[[90m07:58:36[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +10ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 6372  - [39m06/05/2026, 07:58:37 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m08:15:40[0m] File change detected. Starting incremental compilation...
+
+[[90m08:15:40[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +9ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 14076  - [39m06/05/2026, 08:15:41 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m09:52:49[0m] File change detected. Starting incremental compilation...
+
+[[90m09:52:49[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +11ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +18ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 3032  - [39m06/05/2026, 09:52:50 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+[2J[3J[H[[90m09:52:50[0m] File change detected. Starting incremental compilation...
+
+[[90m09:52:50[0m] Found 0 errors. Watching for file changes.
+
+[2J[3J[H[[90m09:52:51[0m] File change detected. Starting incremental compilation...
+
+[[90m09:52:51[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +10ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 43760  - [39m06/05/2026, 09:52:52 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+[2J[3J[H[[90m09:52:59[0m] File change detected. Starting incremental compilation...
+
+[[90m09:53:00[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +10ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +2ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 41376  - [39m06/05/2026, 09:53:00 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+[2J[3J[H[[90m09:53:41[0m] File change detected. Starting incremental compilation...
+
+[[90m09:53:42[0m] Found 0 errors. Watching for file changes.
+
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +11ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCompaniesModule dependencies initialized[39m[38;5;3m +3ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDashboardModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mReceivablesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mCashSessionsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mBanksModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mProductsModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPayablesModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mFiscalCertificatesModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCompaniesController {/api/v1/companies}:[39m[38;5;3m +16ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/sync-financial-settings, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/companies/:id/financial-settings, PATCH} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDashboardController {/api/v1/dashboard}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/dashboard/overview, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mReceivablesController {/api/v1/receivables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/import, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/existing-business-keys, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/assign-bank, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/batches/:batchId/issue-bank-slips, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/bank-slip-pdf, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/bank-return-imports/:importId/apply-liquidations, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCashSessionsController {/api/v1}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/:sessionId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/open, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/close-current, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/cash-sessions/current/movements, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-cash, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/receivables/installments/:installmentId/settle-manual, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mBanksController {/api/v1/banks}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/activate, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/banks/:bankId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mProductsController {/api/v1/products}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/products/:productId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mPayablesController {/api/v1/payables}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/from-xml, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/payables/invoice-imports/:importId/approve, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mFiscalCertificatesController {/api/v1/fiscal-certificates}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId, PATCH} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/activate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/inactivate, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/set-default, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/v1/fiscal-certificates/:certificateId/sync-dfe, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 51760  - [39m06/05/2026, 09:53:43 [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m

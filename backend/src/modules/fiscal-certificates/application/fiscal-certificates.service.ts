@@ -13,7 +13,10 @@ import {
   SaveFiscalCertificateDto,
   SyncFiscalCertificateDfeDto,
 } from "./dto/fiscal-certificates.dto";
-import { parsePfxMetadata } from "./fiscal-certificate-metadata";
+import {
+  normalizePfxBase64ForNodeTls,
+  parsePfxMetadata,
+} from "./fiscal-certificate-metadata";
 import { fetchDfeDistributionBatch } from "./nfe-dfe-distribution.client";
 import { PayablesService } from "../../payables/application/payables.service";
 
@@ -281,7 +284,14 @@ export class FiscalCertificatesService {
       );
     }
 
-    const metadata = parsePfxMetadata(payload.pfxBase64, payload.certificatePassword);
+    const tlsCompatiblePfxBase64 = normalizePfxBase64ForNodeTls(
+      payload.pfxBase64,
+      payload.certificatePassword,
+    );
+    const metadata = parsePfxMetadata(
+      tlsCompatiblePfxBase64,
+      payload.certificatePassword,
+    );
     const environment = this.normalizeEnvironment(payload.environment);
     const purpose = this.normalizePurpose(payload.purpose);
 
@@ -307,7 +317,7 @@ export class FiscalCertificatesService {
           thumbprint: metadata.thumbprint,
           validFrom: metadata.validFrom,
           validTo: metadata.validTo,
-          pfxEncryptedBase64: encryptSecret(payload.pfxBase64!),
+          pfxEncryptedBase64: encryptSecret(tlsCompatiblePfxBase64),
           passwordEncrypted: encryptSecret(payload.certificatePassword!),
           createdBy: payload.requestedBy || null,
           updatedBy: payload.requestedBy || null,
@@ -342,8 +352,14 @@ export class FiscalCertificatesService {
       );
     }
 
-    const metadata = shouldReplacePfx
-      ? parsePfxMetadata(payload.pfxBase64!, payload.certificatePassword!)
+    const tlsCompatiblePfxBase64 = shouldReplacePfx
+      ? normalizePfxBase64ForNodeTls(
+          payload.pfxBase64!,
+          payload.certificatePassword!,
+        )
+      : null;
+    const metadata = tlsCompatiblePfxBase64
+      ? parsePfxMetadata(tlsCompatiblePfxBase64, payload.certificatePassword!)
       : null;
 
     const updated = await this.prisma.$transaction(async (tx: any) => {
@@ -381,7 +397,7 @@ export class FiscalCertificatesService {
                 thumbprint: metadata.thumbprint,
                 validFrom: metadata.validFrom,
                 validTo: metadata.validTo,
-                pfxEncryptedBase64: encryptSecret(payload.pfxBase64!),
+                pfxEncryptedBase64: encryptSecret(tlsCompatiblePfxBase64!),
                 passwordEncrypted: encryptSecret(payload.certificatePassword!),
               }
             : {}),
@@ -493,12 +509,30 @@ export class FiscalCertificatesService {
       );
     }
 
-    const pfxBase64 = decryptSecret(certificate.pfxEncryptedBase64);
+    const storedPfxBase64 = decryptSecret(certificate.pfxEncryptedBase64);
     const passphrase = decryptSecret(certificate.passwordEncrypted);
-    const pfxBuffer = Buffer.from(pfxBase64, "base64");
-    const maxBatches = Math.max(1, Math.min(20, Number(payload.maxBatches || 5)));
+    const tlsCompatiblePfxBase64 = normalizePfxBase64ForNodeTls(
+      storedPfxBase64,
+      passphrase,
+    );
 
-    let runningLastNsu = certificate.lastNsu || "000000000000000";
+    if (tlsCompatiblePfxBase64 !== storedPfxBase64) {
+      await this.prisma.fiscalCertificate.update({
+        where: { id: certificate.id },
+        data: {
+          pfxEncryptedBase64: encryptSecret(tlsCompatiblePfxBase64),
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+    }
+
+    const pfxBuffer = Buffer.from(tlsCompatiblePfxBase64, "base64");
+    const maxBatches = Math.max(1, Math.min(20, Number(payload.maxBatches || 5)));
+    const resetNsu = Boolean(payload.resetNsu);
+
+    let runningLastNsu = resetNsu
+      ? "000000000000000"
+      : certificate.lastNsu || "000000000000000";
     let finalMaxNsu = certificate.lastMaxNsu || runningLastNsu;
     let finalStatusCode = "137";
     let finalStatusMessage = "Nenhum documento localizado.";
@@ -515,8 +549,7 @@ export class FiscalCertificatesService {
             | "PRODUCTION"
             | "HOMOLOGATION",
           authorStateCode: certificate.authorStateCode,
-          interestedDocument:
-            company.document || certificate.holderDocument,
+          interestedDocument: certificate.holderDocument,
           lastNsu: runningLastNsu,
           pfxBuffer,
           passphrase,
@@ -606,12 +639,17 @@ export class FiscalCertificatesService {
         summaryOnlyDocuments,
         otherDocuments,
         importedNoteIds,
+        resetNsu,
         message:
           importedNotes > 0
-            ? `${importedNotes} nota(s) completas foram importadas da SEFAZ.`
+            ? resetNsu
+              ? `${importedNotes} nota(s) completas foram importadas da SEFAZ na varredura histórica.`
+              : `${importedNotes} nota(s) completas foram importadas da SEFAZ.`
             : summaryOnlyDocuments > 0
               ? "A SEFAZ retornou apenas resumos de NF-e. O XML completo depende da disponibilidade do DF-e para o destinatário."
-              : "Nenhuma nova NF-e completa foi importada nesta consulta.",
+              : resetNsu
+                ? "A varredura histórica foi iniciada, mas nenhuma nova NF-e completa foi importada nesta etapa."
+                : "Nenhuma nova NF-e completa foi importada nesta consulta.",
       };
     } catch (error) {
       await this.prisma.fiscalCertificate.update({
