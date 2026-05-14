@@ -30,7 +30,7 @@ import type {
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS';
 
 const auditText = `--- LOGICA DA TELA ---
-Esta tela centraliza a importação de notas do contas a pagar por XML manual e por consulta automática na SEFAZ.
+Esta tela centraliza a importação de notas do contas a pagar por consulta automática na SEFAZ e o acesso ao fluxo manual em tela dedicada.
 
 TABELAS PRINCIPAIS:
 - fiscal_certificates (FC) - certificados fiscais A1 da empresa financeira.
@@ -50,7 +50,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - certificados disponíveis
 - última sincronização DF-e
 - notas pendentes de aprovação
-- prévia da última nota importada
+- atalho para importação manual por XML
 
 FILTROS APLICADOS:
 - company resolvida por sourceSystem + sourceTenantId
@@ -255,6 +255,10 @@ function getStatusClass(status: string) {
   return status === 'APPROVED'
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-amber-200 bg-amber-50 text-amber-700';
+}
+
+function getSemaphoreClass(semaphore: 'GREEN' | 'YELLOW') {
+  return semaphore === 'GREEN' ? 'bg-emerald-500' : 'bg-amber-400';
 }
 
 function getCertificateStatusClass(certificate: FiscalCertificateItem) {
@@ -907,7 +911,7 @@ export default function FinanceiroImportacaoNotasPage() {
           }
         />
 
-        <div className="grid gap-6 bg-slate-100 p-6 xl:grid-cols-[1.22fr_0.78fr]">
+        <div className="space-y-6 bg-slate-100 p-6">
           <div className="space-y-6">
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <div className="mb-4">
@@ -931,7 +935,7 @@ export default function FinanceiroImportacaoNotasPage() {
                     Carregando certificados fiscais...
                   </div>
                 ) : certificates.length ? (
-                  certificates.map((certificate) => (
+                  certificates.map((certificate, index) => (
                     <div
                       key={certificate.id}
                       className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -974,7 +978,7 @@ export default function FinanceiroImportacaoNotasPage() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-3">
+                        <div className="flex flex-wrap items-start justify-end gap-3">
                           {!certificate.isDefault ? (
                             <button
                               type="button"
@@ -985,38 +989,51 @@ export default function FinanceiroImportacaoNotasPage() {
                             </button>
                           ) : null}
 
-                          <button
-                            type="button"
-                            onClick={() => void handleSyncCertificate(certificate)}
-                            disabled={
-                              syncingCertificateId === certificate.id ||
-                              certificate.status !== 'ACTIVE' ||
-                              certificate.expired
-                            }
-                            className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-                          >
-                            {syncingCertificateId === certificate.id
-                              ? 'Consultando...'
-                              : 'Importar SEFAZ'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void handleSyncCertificate(certificate, {
-                                historical: true,
-                              })
-                            }
-                            disabled={
-                              syncingCertificateId === certificate.id ||
-                              certificate.status !== 'ACTIVE' ||
-                              certificate.expired
-                            }
-                            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {syncingCertificateId === certificate.id
-                              ? 'Buscando...'
-                              : 'Buscar histórico'}
-                          </button>
+                          <div className="flex flex-col items-start gap-3">
+                            <div className="flex flex-wrap gap-3">
+                              <button
+                                type="button"
+                                onClick={() => void handleSyncCertificate(certificate)}
+                                disabled={
+                                  syncingCertificateId === certificate.id ||
+                                  certificate.status !== 'ACTIVE' ||
+                                  certificate.expired
+                                }
+                                className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                              >
+                                {syncingCertificateId === certificate.id
+                                  ? 'Consultando...'
+                                  : 'Importar SEFAZ'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleSyncCertificate(certificate, {
+                                    historical: true,
+                                  })
+                                }
+                                disabled={
+                                  syncingCertificateId === certificate.id ||
+                                  certificate.status !== 'ACTIVE' ||
+                                  certificate.expired
+                                }
+                                className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {syncingCertificateId === certificate.id
+                                  ? 'Buscando...'
+                                  : 'Buscar histórico'}
+                              </button>
+                            </div>
+
+                            {(certificate.isDefault || (!defaultCertificate && index === 0)) ? (
+                              <Link
+                                href={`/contas-a-pagar/importacao-notas/manual${navigationQuery}`}
+                                className="rounded-2xl border border-rose-400 bg-white px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-rose-600 shadow-sm transition hover:bg-rose-50"
+                              >
+                                Importar Manualmente
+                              </Link>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1028,60 +1045,6 @@ export default function FinanceiroImportacaoNotasPage() {
                 )}
               </div>
             </section>
-
-            <form onSubmit={handleImportXml} className="space-y-6">
-              <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                      Importação manual por XML
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-slate-500">
-                      Você pode colar o XML ou selecionar um arquivo quando precisar importar manualmente.
-                    </div>
-                  </div>
-
-                  <label className="inline-flex cursor-pointer items-center rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100">
-                    Selecionar XML
-                    <input
-                      type="file"
-                      accept=".xml,text/xml"
-                      className="hidden"
-                      onChange={handleXmlFileSelected}
-                    />
-                  </label>
-                </div>
-
-                <textarea
-                  value={xmlContent}
-                  onChange={(event) => setXmlContent(event.target.value)}
-                  placeholder="<nfeProc>...</nfeProc>"
-                  className="min-h-[280px] w-full rounded-3xl border border-slate-300 bg-white px-4 py-4 font-mono text-xs text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                />
-
-                <div className="mt-5 flex flex-wrap justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setXmlContent('');
-                      setImportResult(null);
-                      setSuccessMessage(null);
-                      setErrorMessage(null);
-                    }}
-                    className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-                  >
-                    Limpar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingXml || !xmlContent.trim()}
-                    className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-                  >
-                    {savingXml ? 'Importando...' : 'Importar XML'}
-                  </button>
-                </div>
-              </section>
-            </form>
 
             {errorMessage ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -1095,134 +1058,127 @@ export default function FinanceiroImportacaoNotasPage() {
               </div>
             ) : null}
 
-            {importResult ? (
-              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                      Última nota importada
-                    </div>
-                    <div className="mt-1 text-xl font-black text-slate-900">
-                      NF-e {importResult.invoiceNumber}
-                      {importResult.series ? ` / Série ${importResult.series}` : ''}
-                    </div>
-                  </div>
-
-                  <span className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.18em] ${getStatusClass(importResult.status)}`}>
-                    {importResult.statusLabel}
-                  </span>
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Fornecedor
-                    </div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">
-                      {importResult.supplierName || '---'}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Emissão
-                    </div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">
-                      {formatDateLabel(importResult.issueDate)}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Itens
-                    </div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">
-                      {importResult.itemsCount}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Valor total
-                    </div>
-                    <div className="mt-1 text-sm font-bold text-slate-800">
-                      {formatCurrency(importResult.totalInvoiceAmount)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap justify-end gap-3">
-                  <Link
-                    href={`/contas-a-pagar/notas-importadas/${importResult.id}${navigationQuery}`}
-                    className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-                  >
-                    Abrir para Aprovação
-                  </Link>
-                </div>
-              </section>
-            ) : null}
           </div>
 
-          <aside className="space-y-6">
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                    Pendentes de aprovação
-                  </div>
-                  <div className="mt-1 text-sm font-medium text-slate-500">
-                    Últimas notas aguardando estoque e duplicatas.
-                  </div>
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+                  Pendentes de aprovação
                 </div>
-
-                <Link
-                  href={`/contas-a-pagar/notas-importadas${navigationQuery}`}
-                  className="text-sm font-bold uppercase tracking-[0.14em] text-blue-600"
-                >
-                  Consultar tudo
-                </Link>
+                <div className="mt-1 text-sm font-medium text-slate-500">
+                  Últimas notas aguardando estoque e duplicatas.
+                </div>
               </div>
 
-              <div className="mt-4 space-y-3">
-                {loadingRecent ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-500">
-                    Carregando notas pendentes...
-                  </div>
-                ) : recentImports.length ? (
-                  recentImports.map((item) => (
-                    <Link
-                      key={item.id}
-                      href={`/contas-a-pagar/notas-importadas/${item.id}${navigationQuery}`}
-                      className="block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-blue-200 hover:bg-blue-50"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-black text-slate-800">
-                            NF-e {item.invoiceNumber}
-                            {item.series ? ` / ${item.series}` : ''}
-                          </div>
-                          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            {item.supplierName || 'FORNECEDOR'}
-                          </div>
-                        </div>
-                        <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getStatusClass(item.status)}`}>
-                          {item.statusLabel}
-                        </span>
-                      </div>
+              <Link
+                href={`/contas-a-pagar/notas-importadas${navigationQuery}`}
+                className="text-sm font-bold uppercase tracking-[0.14em] text-blue-600"
+              >
+                Consultar tudo
+              </Link>
+            </div>
 
-                      <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
-                        <span>{formatDateLabel(item.issueDate)}</span>
-                        <span>{formatCurrency(item.totalInvoiceAmount)}</span>
-                        <span>{item.installmentsCount} duplicata(s)</span>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-500">
-                    Nenhuma nota pendente encontrada para este tenant.
-                  </div>
-                )}
+            <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Semáforo
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Nota fiscal
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Fornecedor
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Emissão
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Valor total
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Duplicatas
+                      </th>
+                      <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {loadingRecent ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                          Carregando notas pendentes...
+                        </td>
+                      </tr>
+                    ) : recentImports.length ? (
+                      recentImports.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/80">
+                          <td className="px-4 py-4 align-top">
+                            <div className="flex items-center gap-3">
+                              <span className={`inline-flex h-3.5 w-3.5 rounded-full ${getSemaphoreClass(item.semaphore)}`} />
+                              <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getStatusClass(item.status)}`}>
+                                {item.statusLabel}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
+                            <div className="font-black text-slate-900">
+                              NF-e {item.invoiceNumber}
+                              {item.series ? ` / ${item.series}` : ''}
+                            </div>
+                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {item.accessKey}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
+                            <div>{item.supplierName || '---'}</div>
+                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {item.supplierDocument || 'SEM DOCUMENTO'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
+                            {formatDateLabel(item.issueDate)}
+                          </td>
+                          <td className="px-4 py-4 align-top text-sm font-black text-slate-900">
+                            {formatCurrency(item.totalInvoiceAmount)}
+                          </td>
+                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
+                            {item.installmentsCount}
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            <div className="flex justify-end">
+                              <Link
+                                href={`/contas-a-pagar/notas-importadas/${item.id}${navigationQuery}`}
+                                className="rounded-xl bg-blue-50 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+                              >
+                                Abrir
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                          Nenhuma nota pendente encontrada para este tenant.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            </section>
 
-          </aside>
+              <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {recentImports.length} registro(s) no resultado
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 

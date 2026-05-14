@@ -194,36 +194,38 @@ export default function FinanceiroBankReturnsPage() {
 
   return (
     <div className="space-y-6">
-      <section className={`${cardClass} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
-                Contas a receber
+      {!runtimeContext.embedded ? (
+        <section className={`${cardClass} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                  Contas a receber
+                </div>
+                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                  Retorno bancario
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                  Importe os boletos liquidados e baixados do banco, confira as
+                  observacoes e so depois efetive a baixa manual nas parcelas do sistema.
+                </p>
               </div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">
-                Retorno bancario
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
-                Importe os boletos liquidados e baixados do banco, confira as
-                observacoes e so depois efetive a baixa manual nas parcelas do sistema.
-              </p>
-            </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/recebiveis/lotes${preservedQueryString}`}
-                className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
-              >
-                Voltar aos lotes
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/recebiveis/lotes${preservedQueryString}`}
+                  className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
+                >
+                  Voltar aos lotes
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
-        </div>
-      </section>
+          <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <section className={`${cardClass} border-rose-200 bg-rose-50 px-6 py-5 text-sm font-semibold text-rose-700`}>

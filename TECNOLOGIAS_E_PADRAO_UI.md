@@ -44,6 +44,11 @@ Registrar a stack oficial inicial do projeto `Financeiro` e a diretriz visual qu
   - as telas financeiras da escola continuam com o layout da escola
   - as telas financeiras do petshop continuam com o layout do petshop
   - a experiencia pode reaproveitar os mesmos padroes estruturais aprovados, sem criar uma marca visual unica obrigatoria do `Financeiro`
+- Em telas embutidas dentro de outra vertical:
+  - a barra lateral, o cabecalho principal e o rodape tecnico visivel continuam sendo da vertical consumidora
+  - o `Financeiro` entrega apenas o conteudo funcional da area central
+  - deve existir apenas um nome tecnico visivel por tela
+  - o identificador visivel deve ser o da vertical consumidora, nunca uma duplicidade entre hospedeiro e iframe
 
 ## Diretriz de consistencia
 

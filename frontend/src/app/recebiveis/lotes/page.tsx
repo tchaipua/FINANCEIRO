@@ -120,24 +120,24 @@ export default function FinanceiroReceivableBatchesPage() {
 
   return (
     <div className="space-y-6">
-      <section className={`${cardClass} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
-              Contas a receber
+      {!runtimeContext.embedded ? (
+        <section className={`${cardClass} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                Contas a receber
+              </div>
+              <h1 className="mt-2 text-3xl font-black tracking-tight">Lotes recebidos</h1>
+              <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                Cada lote representa um agrupamento de títulos e parcelas importados para o core financeiro.
+              </p>
             </div>
-            <h1 className="mt-2 text-3xl font-black tracking-tight">Lotes recebidos</h1>
-            <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
-              {runtimeContext.embedded
-                ? 'Acompanhe os lotes financeiros desta escola e abra cada lote para consultar as parcelas geradas.'
-                : 'Cada lote representa um agrupamento de títulos e parcelas importados para o core financeiro.'}
-            </p>
           </div>
-        </div>
-        <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
-        </div>
-      </section>
+          <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+          </div>
+        </section>
+      ) : null}
 
       <section className={`${cardClass} p-6`}>
         <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-[1fr_auto_auto]">

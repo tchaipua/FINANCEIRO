@@ -65,3 +65,20 @@ Motivo:
 - facilitar auditoria tecnica e suporte;
 - padronizar entendimento da origem dos dados;
 - permitir que qualquer tela criada futuramente ja documente sua propria logica operacional.
+
+## D008 - Cabecalho soberano integrado com a Escola
+
+O `Financeiro` adota como referencia visual soberana do cabecalho de programas o mesmo encaixe aprovado em `PRINCIPAL_PROFESSORES` no sistema `Escola`.
+
+Decisao:
+
+- o bloco direito com card branco do usuario e botao `VOLTAR` deve seguir esse mesmo desenho base;
+- o reaproveitamento no `Financeiro` fica registrado em documentacao e no mapa tecnico;
+- a aplicacao em telas existentes nao deve acontecer em lote;
+- qualquer ajuste futuro deve ser feito manualmente, tela por tela, somente apos validacao explicita do usuario.
+
+Motivo:
+
+- evitar divergencia visual entre `Escola` e `Financeiro`;
+- preservar o padrao aprovado como patrimonio compartilhado entre os dois sistemas;
+- reduzir regressao em futuras manutencoes de header.

@@ -82,36 +82,35 @@ export default function FinanceiroResumoPage() {
 
   return (
     <div className="space-y-6">
-      <section className={`${cardClass} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
-                Financeiro desacoplado
+      {!runtimeContext.embedded ? (
+        <section className={`${cardClass} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                  Financeiro desacoplado
+                </div>
+                <h1 className="mt-2 text-3xl font-black tracking-tight">Resumo Geral</h1>
+                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                  Acompanhe a operação centralizada do core financeiro para escolas, petshops e
+                  outros sistemas de origem.
+                </p>
               </div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">
-                {runtimeContext.embedded ? 'Resumo do Financeiro' : 'Resumo Geral'}
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
-                {runtimeContext.embedded
-                  ? 'Acompanhe a operação financeira da escola atual sem sair do sistema escolar.'
-                  : 'Acompanhe a operação centralizada do core financeiro para escolas, petshops e outros sistemas de origem.'}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-blue-50">
-              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100">
-                Status da carga
-              </div>
-              <div className="mt-1 text-base font-black">
-                {isLoading ? 'CARREGANDO...' : error ? 'INDISPONÍVEL' : 'OPERACIONAL'}
+              <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-blue-50">
+                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100">
+                  Status da carga
+                </div>
+                <div className="mt-1 text-base font-black">
+                  {isLoading ? 'CARREGANDO...' : error ? 'INDISPONÍVEL' : 'OPERACIONAL'}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
-        </div>
-      </section>
+          <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <section className={`${cardClass} border-rose-200 bg-rose-50 px-6 py-5 text-sm font-semibold text-rose-700`}>

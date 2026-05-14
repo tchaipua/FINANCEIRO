@@ -33,6 +33,9 @@
 
 - Toda tela criada ou alterada deve manter no rodape o botao de copiar o nome tecnico da tela.
 - O nome tecnico deve seguir o contexto em que a tela aparece. Em telas embutidas em uma vertical, usar o identificador da tela principal da vertical quando aplicavel, como `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`.
+- Em telas do `Financeiro` abertas dentro de outra vertical, como a `Escola`, a navegacao lateral, o cabecalho institucional e a moldura principal devem continuar sendo da vertical consumidora.
+- Nesses casos, a tela interna do `Financeiro` deve renderizar somente o conteudo funcional da area central, sem abrir em modo pagina cheia por padrao.
+- Em modo embutido, deve existir apenas um nome tecnico visivel para a tela: o identificador da vertical consumidora. O identificador interno do `Financeiro` pode existir para codigo e auditoria, mas nao deve aparecer duplicado na interface.
 - Ao clicar no botao de copiar, alem de copiar o nome da tela, deve abrir um popup central de "Logica Usada nessa Tela".
 - O popup deve seguir o padrao validado na tela `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`:
   - overlay escuro com blur e modal central moderno;
