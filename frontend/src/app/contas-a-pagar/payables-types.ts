@@ -61,7 +61,15 @@ export type PayableInvoiceImportInstallment = {
   installmentLabel?: string | null;
   installmentNumber: number;
   dueDate: string;
+  originalAmount: number;
+  additionAmount: number;
+  discountAmount: number;
+  finalAmount: number;
   amount: number;
+  status: string;
+  paymentMethod?: string | null;
+  settledAt?: string | null;
+  notes?: string | null;
 };
 
 export type PayableTitleInstallment = {
@@ -69,9 +77,17 @@ export type PayableTitleInstallment = {
   installmentNumber: number;
   installmentCount: number;
   dueDate: string;
+  originalAmount?: number;
+  additionAmount?: number;
+  discountAmount?: number;
+  finalAmount?: number;
   amount: number;
   openAmount: number;
+  paidAmount?: number;
   status: string;
+  paymentMethod?: string | null;
+  settledAt?: string | null;
+  notes?: string | null;
 };
 
 export type PayableTitleSnapshot = {

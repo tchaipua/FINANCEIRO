@@ -70,3 +70,18 @@ Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Fina
   - `DOCUMENTACAO/AI/UI_PATTERNS.md`
   - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
 - Status: aprovado
+
+### UIP-0006
+
+- Data: 2026-05-15
+- Padrao: popup/modal com logotipo, identificador exclusivo e auditoria SQL obrigatorios desde a criacao
+- Contexto: necessidade de consolidar no `Financeiro` que todo novo popup ja nasca com o mesmo padrao aprovado de identidade visual e rastreabilidade tecnica
+- Alteracao: registro oficial da obrigatoriedade de logotipo no cabecalho, nome tecnico exclusivo, bloco `Tela:` isolado no rodape e abertura da logica usada com SQL/base logica, tabelas, relacionamentos, filtros e ordenacao
+- Componentes/Telas:
+  - `frontend/src/app/components/screen-name-copy.tsx`
+  - `frontend/src/app/components/screen-audit-modal.tsx`
+  - `frontend/src/app/lib/ui-standards.ts`
+  - `frontend/src/app/contas-a-pagar/importacao-notas/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/CODING_RULES.md`
+- Status: aprovado

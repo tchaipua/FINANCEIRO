@@ -94,3 +94,27 @@ Arquivos de referencia tecnica no Financeiro:
 - `frontend/src/app/components/financeiro-resumo-page.tsx`
 - `frontend/src/app/bancos/page.tsx`
 - `frontend/src/app/lib/runtime-context.ts`
+
+### PAT-017 - Popup/modal com logotipo, identificador exclusivo e auditoria SQL
+
+- todo novo popup/modal do `Financeiro` deve nascer por padrao com logotipo institucional no cabecalho
+- o popup/modal deve ter um nome tecnico exclusivo, estavel e nao reutilizavel em outro fluxo visual
+- o rodape deve reservar um bloco proprio para `Tela:` e para o identificador tecnico do popup
+- o identificador deve reutilizar `ScreenNameCopy` ou o mesmo comportamento visual/funcional homologado
+- ao acionar o bloco de copia/auditoria, deve abrir a logica usada na tela com:
+  - origem do arquivo
+  - tabelas envolvidas
+  - relacionamentos
+  - filtros
+  - ordenacao
+  - SQL/base logica correspondente
+- o bloco do identificador nao deve disputar a mesma linha dos botoes principais do popup
+- a regra vale tanto para popup aberto em tela cheia do `Financeiro` quanto para popup interno de uma tela embutida em outra vertical
+- em tela embutida, continua valendo a regra de nao duplicar o identificador principal da vertical hospedeira no corpo da pagina; essa excecao nao impede o uso do identificador tecnico proprio dentro de popup interno do `Financeiro`
+
+Arquivos de referencia tecnica no Financeiro:
+
+- `frontend/src/app/components/screen-name-copy.tsx`
+- `frontend/src/app/components/screen-audit-modal.tsx`
+- `frontend/src/app/lib/grid-page-standards.ts`
+- `frontend/src/app/contas-a-pagar/importacao-notas/page.tsx`

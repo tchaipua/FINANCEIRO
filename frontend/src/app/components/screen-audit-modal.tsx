@@ -1,12 +1,19 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 type ScreenAuditModalProps = {
   screenId: string;
   systemName: string;
   originText?: string;
   auditText?: string;
+  sqlText?: string;
   onClose: () => void;
 };
+
+const COPY_FEEDBACK_TIMEOUT = 1800;
+
+type CopyStatus = 'idle' | 'copied' | 'error';
 
 const DEFAULT_AUDIT_TEXT = `--- LOGICA DA TELA ---
 Esta tela nao possui acesso direto ao banco de dados mapeado neste ponto.
@@ -81,8 +88,40 @@ export default function ScreenAuditModal({
   systemName,
   originText,
   auditText = DEFAULT_AUDIT_TEXT,
+  sqlText,
   onClose,
 }: ScreenAuditModalProps) {
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetCopyStatus = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => setCopyStatus('idle'), COPY_FEEDBACK_TIMEOUT);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopySql = useCallback(async () => {
+    const effectiveSqlText = (sqlText && sqlText.trim()) || auditText;
+    try {
+      await copyText(effectiveSqlText);
+      setCopyStatus('copied');
+    } catch (error) {
+      console.error('Falha ao copiar SQL da auditoria', error);
+      setCopyStatus('error');
+    } finally {
+      resetCopyStatus();
+    }
+  }, [auditText, resetCopyStatus, sqlText]);
+
   const effectivePathText = originText
     ? originText
         .replace(/^Origem:\s*Sistema\s+[^-]+-\s*/i, '')
@@ -133,10 +172,10 @@ export default function ScreenAuditModal({
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <button
               type="button"
-              onClick={() => void copyText(auditText)}
+              onClick={() => void handleCopySql()}
               className="rounded-xl bg-emerald-700 px-10 py-3 text-sm font-black uppercase tracking-[0.08em] text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800"
             >
-              Copiar SQL
+              {copyStatus === 'copied' ? 'SQL copiado' : copyStatus === 'error' ? 'Falha ao copiar' : 'Copiar SQL'}
             </button>
             <button
               type="button"

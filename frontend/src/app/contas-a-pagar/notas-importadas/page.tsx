@@ -56,6 +56,7 @@ FILTROS APLICADOS:
 - company resolvida por sourceSystem + sourceTenantId
 - status opcional: PENDING_APPROVAL | APPROVED | ALL
 - busca por chave, número, série, fornecedor ou documento
+- filtro local opcional por data de emissão na coluna Emissão
 
 ORDENACAO:
 - order by payable_invoice_imports.createdAt desc`;
@@ -101,6 +102,7 @@ export default function FinanceiroNotasImportadasPage() {
   const [items, setItems] = useState<PayableInvoiceImportSummary[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
+  const [issueDateFilter, setIssueDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING_APPROVAL' | 'APPROVED'>(
     'ALL',
   );
@@ -160,8 +162,19 @@ export default function FinanceiroNotasImportadasPage() {
     );
   }, [runtimeContext.embedded]);
 
+  const filteredItems = useMemo(() => {
+    if (!issueDateFilter) {
+      return items;
+    }
+
+    return items.filter((item) => {
+      const normalizedIssueDate = item.issueDate ? item.issueDate.slice(0, 10) : '';
+      return normalizedIssueDate === issueDateFilter;
+    });
+  }, [issueDateFilter, items]);
+
   const summary = useMemo(() => {
-    return items.reduce(
+    return filteredItems.reduce(
       (accumulator, current) => {
         accumulator.total += current.totalInvoiceAmount || 0;
         if (current.status === 'APPROVED') {
@@ -173,7 +186,7 @@ export default function FinanceiroNotasImportadasPage() {
       },
       { total: 0, approved: 0, pending: 0 },
     );
-  }, [items]);
+  }, [filteredItems]);
 
   const handleSearchSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -216,7 +229,7 @@ export default function FinanceiroNotasImportadasPage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Notas no grid</div>
-              <div className="mt-1 text-2xl font-black text-slate-900">{items.length}</div>
+              <div className="mt-1 text-2xl font-black text-slate-900">{filteredItems.length}</div>
             </div>
             <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-600">Pendentes</div>
@@ -287,7 +300,17 @@ export default function FinanceiroNotasImportadasPage() {
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Semáforo</th>
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Nota fiscal</th>
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Fornecedor</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Emissão</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      <div className="flex min-w-[170px] flex-col gap-2">
+                        <span>Emissão</span>
+                        <input
+                          type="date"
+                          value={issueDateFilter}
+                          onChange={(event) => setIssueDateFilter(event.target.value)}
+                          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-600 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Valor total</th>
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Duplicatas</th>
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Estoque</th>
@@ -301,8 +324,8 @@ export default function FinanceiroNotasImportadasPage() {
                         Carregando notas importadas...
                       </td>
                     </tr>
-                  ) : items.length ? (
-                    items.map((item) => (
+                  ) : filteredItems.length ? (
+                    filteredItems.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50/80">
                         <td className="px-4 py-4 align-top">
                           <div className="flex items-center gap-3">
@@ -356,7 +379,7 @@ export default function FinanceiroNotasImportadasPage() {
 
             <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {items.length} registro(s) no resultado
+                {filteredItems.length} registro(s) no resultado
               </div>
 
               <ScreenNameCopy
@@ -373,7 +396,7 @@ export default function FinanceiroNotasImportadasPage() {
       <GridExportModal
         isOpen={isExportModalOpen}
         title="Exportar notas importadas"
-        description={`A exportação considera ${items.length} registro(s) do filtro atual.`}
+        description={`A exportação considera ${filteredItems.length} registro(s) do filtro atual.`}
         format={exportFormat}
         onFormatChange={setExportFormat}
         columns={EXPORT_COLUMNS.map((column) => ({
@@ -387,7 +410,7 @@ export default function FinanceiroNotasImportadasPage() {
         onClose={() => setIsExportModalOpen(false)}
         onExport={async (config) => {
           await exportGridRows({
-            rows: items,
+            rows: filteredItems,
             columns: EXPORT_COLUMNS,
             selectedColumns: config.selectedColumns,
             format: exportFormat,
@@ -395,7 +418,11 @@ export default function FinanceiroNotasImportadasPage() {
             branding: {
               title: 'Notas importadas',
               subtitle: 'Exportação das notas filtradas no contas a pagar.',
-              schoolName: runtimeContext.companyName || items[0]?.companyName || 'FINANCEIRO',
+              schoolName:
+                runtimeContext.companyName ||
+                filteredItems[0]?.companyName ||
+                items[0]?.companyName ||
+                'FINANCEIRO',
               logoUrl: runtimeContext.logoUrl,
             },
             pdfOptions: config.pdfOptions,

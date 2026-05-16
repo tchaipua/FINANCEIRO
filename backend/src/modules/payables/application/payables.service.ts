@@ -9,6 +9,7 @@ import {
   normalizeEmail,
   normalizePhone,
   normalizeText,
+  parseIsoDate,
   roundMoney,
   serializeJson,
 } from "../../../common/finance-core.utils";
@@ -18,6 +19,9 @@ import {
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
   ListPayableInvoiceImportsDto,
+  PAYABLE_INSTALLMENT_PAYMENT_METHODS,
+  UpdatePayableInvoiceImportInstallmentDto,
+  UpdatePayableInvoiceImportInstallmentsDto,
 } from "./dto/payables.dto";
 import {
   ParsedPayableInvoiceItem,
@@ -54,6 +58,24 @@ export class PayablesService {
     }
 
     return roundMoney(Math.max(0, normalized));
+  }
+
+  private normalizePayableInstallmentStatus(value?: string | null) {
+    return normalizeText(value) === "PAID" ? "PAID" : "OPEN";
+  }
+
+  private normalizePayableInstallmentPaymentMethod(value?: string | null) {
+    const normalized = normalizeText(value);
+    if (
+      normalized &&
+      PAYABLE_INSTALLMENT_PAYMENT_METHODS.includes(
+        normalized as (typeof PAYABLE_INSTALLMENT_PAYMENT_METHODS)[number],
+      )
+    ) {
+      return normalized;
+    }
+
+    return null;
   }
 
   private async resolveCompany(filters: {
@@ -317,13 +339,36 @@ export class PayablesService {
         tracksInventory: Boolean(item.tracksInventory),
       })),
       installments: (invoiceImport.installments || []).map(
-        (installment: any) => ({
-          id: installment.id,
-          installmentLabel: installment.installmentLabel || null,
-          installmentNumber: installment.installmentNumber,
-          dueDate: installment.dueDate.toISOString(),
-          amount: roundMoney(installment.amount || 0),
-        }),
+        (installment: any) => {
+          const originalAmount = roundMoney(
+            installment.originalAmount ?? installment.amount ?? 0,
+          );
+          const additionAmount = roundMoney(installment.additionAmount || 0);
+          const discountAmount = roundMoney(installment.discountAmount || 0);
+          const finalAmount = roundMoney(
+            installment.finalAmount ??
+              installment.amount ??
+              originalAmount + additionAmount - discountAmount,
+          );
+
+          return {
+            id: installment.id,
+            installmentLabel: installment.installmentLabel || null,
+            installmentNumber: installment.installmentNumber,
+            dueDate: installment.dueDate.toISOString(),
+            originalAmount,
+            additionAmount,
+            discountAmount,
+            finalAmount,
+            amount: finalAmount,
+            status: installment.status || "OPEN",
+            paymentMethod: installment.paymentMethod || null,
+            settledAt: installment.settledAt
+              ? installment.settledAt.toISOString()
+              : null,
+            notes: installment.notes || null,
+          };
+        },
       ),
       payableTitle: invoiceImport.payableTitle
         ? {
@@ -338,9 +383,25 @@ export class PayablesService {
               installmentNumber: installment.installmentNumber,
               installmentCount: installment.installmentCount,
               dueDate: installment.dueDate.toISOString(),
-              amount: roundMoney(installment.amount || 0),
+              originalAmount: roundMoney(
+                installment.originalAmount ?? installment.amount ?? 0,
+              ),
+              additionAmount: roundMoney(installment.additionAmount || 0),
+              discountAmount: roundMoney(installment.discountAmount || 0),
+              finalAmount: roundMoney(
+                installment.finalAmount ?? installment.amount ?? 0,
+              ),
+              amount: roundMoney(
+                installment.finalAmount ?? installment.amount ?? 0,
+              ),
               openAmount: roundMoney(installment.openAmount || 0),
+              paidAmount: roundMoney(installment.paidAmount || 0),
               status: installment.status,
+              paymentMethod: installment.paymentMethod || null,
+              settledAt: installment.settledAt
+                ? installment.settledAt.toISOString()
+                : null,
+              notes: installment.notes || null,
             })),
           }
         : null,
@@ -548,7 +609,15 @@ export class PayablesService {
             installmentLabel: installment.installmentLabel,
             installmentNumber: installment.installmentNumber,
             dueDate: installment.dueDate,
+            originalAmount: installment.amount,
+            additionAmount: 0,
+            discountAmount: 0,
+            finalAmount: installment.amount,
             amount: installment.amount,
+            status: "OPEN",
+            paymentMethod: null,
+            settledAt: null,
+            notes: null,
             createdBy: options?.requestedBy || null,
             updatedBy: options?.requestedBy || null,
           },
@@ -860,6 +929,241 @@ export class PayablesService {
     return this.mapImportDetail(invoiceImport);
   }
 
+  async updateInvoiceImportInstallments(
+    importId: string,
+    payload: UpdatePayableInvoiceImportInstallmentsDto,
+  ) {
+    const invoiceImport = await this.loadScopedImport(
+      importId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+
+    if (normalizeText(invoiceImport.status) === "APPROVED") {
+      throw new BadRequestException(
+        "Não é possível alterar parcelas de uma nota já aprovada.",
+      );
+    }
+
+    if (!Array.isArray(payload.installments) || !payload.installments.length) {
+      throw new BadRequestException(
+        "A nota precisa manter pelo menos uma parcela.",
+      );
+    }
+
+    const normalizedInstallments = payload.installments.map(
+      (installment: UpdatePayableInvoiceImportInstallmentDto, index: number) => {
+        const dueDate = parseIsoDate(
+          installment.dueDate,
+          `a data da parcela ${index + 1}`,
+        );
+        const originalAmount = this.normalizeOptionalMoney(installment.amount);
+        const additionAmount =
+          this.normalizeOptionalMoney(installment.additionAmount) || 0;
+        const discountAmount =
+          this.normalizeOptionalMoney(installment.discountAmount) || 0;
+
+        if (!originalAmount || originalAmount <= 0) {
+          throw new BadRequestException(
+            `Informe um valor válido para a parcela ${index + 1}.`,
+          );
+        }
+
+        if (discountAmount > roundMoney(originalAmount + additionAmount)) {
+          throw new BadRequestException(
+            `O desconto da parcela ${index + 1} não pode ser maior que o valor ajustado da duplicata.`,
+          );
+        }
+
+        const finalAmount = roundMoney(
+          originalAmount + additionAmount - discountAmount,
+        );
+
+        if (finalAmount <= 0) {
+          throw new BadRequestException(
+            `O valor final da parcela ${index + 1} precisa ser maior que zero.`,
+          );
+        }
+
+        const status = this.normalizePayableInstallmentStatus(
+          installment.status,
+        );
+        const paymentMethod =
+          status === "PAID"
+            ? this.normalizePayableInstallmentPaymentMethod(
+                installment.paymentMethod,
+              )
+            : null;
+
+        if (status === "PAID" && !paymentMethod) {
+          throw new BadRequestException(
+            `Informe o meio de pagamento da parcela ${index + 1}.`,
+          );
+        }
+
+        const settledAt =
+          status === "PAID"
+            ? installment.settledAt
+              ? parseIsoDate(
+                  installment.settledAt,
+                  `a data de baixa da parcela ${index + 1}`,
+                )
+              : new Date()
+            : null;
+
+        return {
+          id: String(installment.id || "").trim() || null,
+          installmentLabel:
+            normalizeText(installment.installmentLabel) ||
+            `PARCELA ${index + 1}`,
+          installmentNumber: index + 1,
+          dueDate,
+          originalAmount,
+          additionAmount,
+          discountAmount,
+          finalAmount,
+          amount: finalAmount,
+          status,
+          paymentMethod,
+          settledAt,
+          notes: normalizeText(installment.notes) || null,
+        };
+      },
+    );
+
+    const totalInstallmentsAmount = roundMoney(
+      normalizedInstallments.reduce(
+        (accumulator, installment) => accumulator + installment.originalAmount,
+        0,
+      ),
+    );
+    const totalInvoiceAmount = roundMoney(invoiceImport.totalInvoiceAmount || 0);
+
+    if (Math.abs(totalInstallmentsAmount - totalInvoiceAmount) > 0.01) {
+      throw new BadRequestException(
+        "A soma das parcelas deve ser igual ao valor total da nota.",
+      );
+    }
+
+    const existingInstallments = [...invoiceImport.installments].sort(
+      (left, right) => left.installmentNumber - right.installmentNumber,
+    );
+    const existingById = new Map(
+      existingInstallments.map((installment) => [installment.id, installment]),
+    );
+
+    for (const installment of normalizedInstallments) {
+      if (installment.id && !existingById.has(installment.id)) {
+        throw new BadRequestException(
+          "Uma ou mais parcelas informadas não pertencem a esta nota.",
+        );
+      }
+    }
+
+    const updateResult = await this.prisma.$transaction(async (tx: any) => {
+      const usedIds = new Set<string>();
+
+      for (const installment of normalizedInstallments) {
+        if (installment.id) {
+          usedIds.add(installment.id);
+          await tx.payableInvoiceImportInstallment.update({
+            where: { id: installment.id },
+            data: {
+              installmentLabel: installment.installmentLabel,
+              installmentNumber: installment.installmentNumber,
+              dueDate: installment.dueDate,
+              originalAmount: installment.originalAmount,
+              additionAmount: installment.additionAmount,
+              discountAmount: installment.discountAmount,
+              finalAmount: installment.finalAmount,
+              amount: installment.amount,
+              status: installment.status,
+              paymentMethod: installment.paymentMethod,
+              settledAt: installment.settledAt,
+              notes: installment.notes,
+              canceledAt: null,
+              canceledBy: null,
+              updatedBy: payload.requestedBy || null,
+            },
+          });
+          continue;
+        }
+
+        await tx.payableInvoiceImportInstallment.create({
+          data: {
+            invoiceImportId: invoiceImport.id,
+            installmentLabel: installment.installmentLabel,
+            installmentNumber: installment.installmentNumber,
+            dueDate: installment.dueDate,
+            originalAmount: installment.originalAmount,
+            additionAmount: installment.additionAmount,
+            discountAmount: installment.discountAmount,
+            finalAmount: installment.finalAmount,
+            amount: installment.amount,
+            status: installment.status,
+            paymentMethod: installment.paymentMethod,
+            settledAt: installment.settledAt,
+            notes: installment.notes,
+            createdBy: payload.requestedBy || null,
+            updatedBy: payload.requestedBy || null,
+          },
+        });
+      }
+
+      const archivedInstallmentBase = Date.now() % 100000000;
+      const removedInstallments = existingInstallments.filter(
+        (installment) => !usedIds.has(installment.id),
+      );
+
+      for (const [index, installment] of removedInstallments.entries()) {
+        await tx.payableInvoiceImportInstallment.update({
+          where: { id: installment.id },
+          data: {
+            installmentNumber: archivedInstallmentBase + index + 1,
+            canceledAt: new Date(),
+            canceledBy: payload.requestedBy || null,
+            updatedBy: payload.requestedBy || null,
+          },
+        });
+      }
+
+      return tx.payableInvoiceImport.findUnique({
+        where: { id: invoiceImport.id },
+        include: {
+          company: true,
+          supplier: true,
+          items: {
+            where: { canceledAt: null },
+            include: { product: true },
+            orderBy: [{ lineNumber: "asc" }],
+          },
+          installments: {
+            where: { canceledAt: null },
+            orderBy: [{ installmentNumber: "asc" }],
+          },
+          payableTitle: {
+            include: {
+              installments: {
+                where: { canceledAt: null },
+                orderBy: [{ installmentNumber: "asc" }],
+              },
+            },
+          },
+          stockMovements: {
+            where: { canceledAt: null },
+            include: { product: true },
+            orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+          },
+        },
+      });
+    });
+
+    return {
+      ...this.mapImportDetail(updateResult),
+      message: "Parcelas da nota atualizadas com sucesso.",
+    };
+  }
+
   async approveInvoiceImport(
     importId: string,
     payload: ApprovePayableInvoiceImportDto,
@@ -881,21 +1185,73 @@ export class PayablesService {
       (payload.items || []).map((item) => [item.itemId, item]),
     );
     const createdProductsCache = new Map<string, any>();
+    const normalizedInstallments = invoiceImport.installments.map(
+      (installment: any) => {
+        const originalAmount = roundMoney(
+          installment.originalAmount ?? installment.amount ?? 0,
+        );
+        const additionAmount = roundMoney(installment.additionAmount || 0);
+        const discountAmount = roundMoney(installment.discountAmount || 0);
+        const finalAmount = roundMoney(
+          installment.finalAmount ??
+            installment.amount ??
+            originalAmount + additionAmount - discountAmount,
+        );
+        const status = this.normalizePayableInstallmentStatus(
+          installment.status,
+        );
+        const paymentMethod =
+          status === "PAID"
+            ? this.normalizePayableInstallmentPaymentMethod(
+                installment.paymentMethod,
+              )
+            : null;
+        const settledAt =
+          status === "PAID"
+            ? installment.settledAt || new Date()
+            : null;
+
+        return {
+          ...installment,
+          originalAmount,
+          additionAmount,
+          discountAmount,
+          finalAmount,
+          status,
+          paymentMethod,
+          settledAt,
+          notes: installment.notes || null,
+        };
+      },
+    );
 
     const approvalResult = await this.prisma.$transaction(async (tx: any) => {
+      const titleTotalAmount = roundMoney(
+        normalizedInstallments.reduce(
+          (accumulator, installment) => accumulator + installment.finalAmount,
+          0,
+        ),
+      );
+      const titleStatus =
+        normalizedInstallments.length > 0 &&
+        normalizedInstallments.every(
+          (installment) => installment.status === "PAID",
+        )
+          ? "PAID"
+          : "OPEN";
       const payableTitle = await tx.payableTitle.create({
         data: {
           companyId: invoiceImport.companyId,
           supplierId: invoiceImport.supplierId,
           sourceDocumentType: "PAYABLE_INVOICE_IMPORT",
           sourceDocumentId: invoiceImport.id,
-          status: "OPEN",
+          status: titleStatus,
           documentNumber: `${invoiceImport.invoiceNumber}${invoiceImport.series ? `/${invoiceImport.series}` : ""}`,
           description: normalizeText(
             `NF-E ${invoiceImport.invoiceNumber}${invoiceImport.series ? ` SÉRIE ${invoiceImport.series}` : ""} - ${invoiceImport.supplier?.legalName || "FORNECEDOR"}`,
           )!,
           issueDate: invoiceImport.issueDate,
-          totalAmount: roundMoney(invoiceImport.totalInvoiceAmount || 0),
+          totalAmount: titleTotalAmount,
           supplierNameSnapshot:
             invoiceImport.supplier?.legalName || "FORNECEDOR NÃO IDENTIFICADO",
           supplierDocumentSnapshot: invoiceImport.supplier?.document || null,
@@ -904,9 +1260,9 @@ export class PayablesService {
         },
       });
 
-      const installmentsCount = invoiceImport.installments.length || 1;
+      const installmentsCount = normalizedInstallments.length || 1;
 
-      for (const installment of invoiceImport.installments) {
+      for (const installment of normalizedInstallments) {
         await tx.payableInstallment.create({
           data: {
             companyId: invoiceImport.companyId,
@@ -914,10 +1270,17 @@ export class PayablesService {
             installmentNumber: installment.installmentNumber,
             installmentCount: installmentsCount,
             dueDate: installment.dueDate,
-            amount: installment.amount,
-            openAmount: installment.amount,
-            paidAmount: 0,
-            status: "OPEN",
+            originalAmount: installment.originalAmount,
+            additionAmount: installment.additionAmount,
+            discountAmount: installment.discountAmount,
+            finalAmount: installment.finalAmount,
+            amount: installment.finalAmount,
+            openAmount: installment.status === "PAID" ? 0 : installment.finalAmount,
+            paidAmount: installment.status === "PAID" ? installment.finalAmount : 0,
+            status: installment.status,
+            paymentMethod: installment.paymentMethod,
+            settledAt: installment.settledAt,
+            notes: installment.notes,
             descriptionSnapshot: normalizeText(
               `NF-E ${invoiceImport.invoiceNumber}${invoiceImport.series ? `/${invoiceImport.series}` : ""} - ${invoiceImport.supplier?.legalName || "FORNECEDOR"}`,
             )!,

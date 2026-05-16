@@ -1,5 +1,8 @@
 import { Transform, Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  IsDateString,
+  IsIn,
   IsArray,
   IsBoolean,
   IsNumber,
@@ -29,6 +32,15 @@ function transformBooleanInput(value: unknown) {
 
   return value;
 }
+
+export const PAYABLE_INSTALLMENT_STATUSES = ["OPEN", "PAID"] as const;
+export const PAYABLE_INSTALLMENT_PAYMENT_METHODS = [
+  "CASH",
+  "PIX",
+  "CREDIT_CARD",
+  "DEBIT_CARD",
+  "CHECK",
+] as const;
 
 export class ListPayableInvoiceImportsDto {
   @IsString()
@@ -153,4 +165,68 @@ export class ApprovePayableInvoiceImportDto {
   @ValidateNested({ each: true })
   @Type(() => ApprovePayableInvoiceImportItemDto)
   items?: ApprovePayableInvoiceImportItemDto[];
+}
+
+export class UpdatePayableInvoiceImportInstallmentDto {
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @IsOptional()
+  @IsString()
+  installmentLabel?: string;
+
+  @IsString()
+  dueDate!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  additionAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  discountAmount?: number;
+
+  @IsOptional()
+  @IsIn(PAYABLE_INSTALLMENT_STATUSES)
+  status?: (typeof PAYABLE_INSTALLMENT_STATUSES)[number];
+
+  @IsOptional()
+  @IsIn(PAYABLE_INSTALLMENT_PAYMENT_METHODS)
+  paymentMethod?: (typeof PAYABLE_INSTALLMENT_PAYMENT_METHODS)[number];
+
+  @IsOptional()
+  @IsDateString()
+  settledAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdatePayableInvoiceImportInstallmentsDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => UpdatePayableInvoiceImportInstallmentDto)
+  installments!: UpdatePayableInvoiceImportInstallmentDto[];
 }

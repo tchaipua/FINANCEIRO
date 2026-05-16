@@ -1,7 +1,8 @@
 export type UiPatternId =
   | 'program-header-school-finance'
   | 'grid-list-toolbar-school-finance'
-  | 'embedded-consumer-shell-finance-screen';
+  | 'embedded-consumer-shell-finance-screen'
+  | 'audited-popup-identity-finance';
 
 export type UiPatternDefinition = {
   id: UiPatternId;
@@ -66,6 +67,24 @@ export const UI_PATTERNS: UiPatternDefinition[] = [
       'frontend/src/app/bancos/page.tsx',
       'frontend/src/app/components/financeiro-resumo-page.tsx',
       'C:/Sistemas/IA/Escola/frontend/src/app/principal/financeiro/[section]/page.tsx',
+    ],
+    status: 'approved',
+  },
+  {
+    id: 'audited-popup-identity-finance',
+    name: 'POPUP/MODAL DO FINANCEIRO COM AUDITORIA TECNICA',
+    summary:
+      'TODO NOVO POPUP/MODAL DO FINANCEIRO DEVE NASCER COM LOGOTIPO NO CABECALHO, NOME TECNICO EXCLUSIVO E BLOCO "TELA:" NO RODAPE COM COPIA E ABERTURA DA LOGICA/SQL ENVOLVIDOS.',
+    documentationPath:
+      'DOCUMENTACAO/AI/UI_PATTERNS.md#pat-017---popup-modal-com-logotipo-identificador-exclusivo-e-auditoria-sql',
+    componentPaths: [
+      'frontend/src/app/components/screen-name-copy.tsx',
+      'frontend/src/app/components/screen-audit-modal.tsx',
+      'frontend/src/app/components/audited-popup-shell.tsx',
+      'frontend/src/app/lib/grid-page-standards.ts',
+    ],
+    referenceScreens: [
+      'frontend/src/app/contas-a-pagar/importacao-notas/page.tsx',
     ],
     status: 'approved',
   },

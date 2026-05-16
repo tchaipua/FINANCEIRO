@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
@@ -13,16 +13,18 @@ import {
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
   buildFinanceApiQueryString,
-  buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import type {
   ApprovalItemState,
   PayableInvoiceImportDetail,
+  PayableInvoiceImportInstallment,
   ProductOption,
 } from '../../payables-types';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_APROVACAO_NOTA';
+const INSTALLMENT_POPUP_SCREEN_ID =
+  'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_APROVACAO_NOTA_DUPLICATA';
 
 const auditText = `--- LOGICA DA TELA ---
 Esta tela aprova a nota já importada no contas a pagar do Financeiro.
@@ -59,15 +61,143 @@ ORDENACAO:
 - duplicatas por installmentNumber asc
 - movimentos por occurredAt asc`;
 
-function getStatusClass(status: string) {
-  return status === 'APPROVED'
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-amber-200 bg-amber-50 text-amber-700';
+const installmentPopupAuditText = `--- LOGICA DO POPUP ---
+Este popup ajusta uma duplicata importada antes da aprovação final da nota.
+
+TABELAS PRINCIPAIS:
+- payable_invoice_import_installments (PIIN) - duplicata importada da nota.
+- payable_invoice_imports (PII) - cabeçalho da nota de entrada.
+- payable_installments (PINST) - parcela final gerada após aprovação.
+
+CAMPOS AJUSTADOS:
+- dueDate
+- originalAmount
+- additionAmount
+- discountAmount
+- finalAmount
+- status
+- paymentMethod
+- settledAt
+- notes`;
+
+const installmentPopupSqlText = `SELECT
+  PIIN.id,
+  PIIN.installmentNumber,
+  PIIN.installmentLabel,
+  PIIN.dueDate,
+  PIIN.originalAmount,
+  PIIN.additionAmount,
+  PIIN.discountAmount,
+  PIIN.finalAmount,
+  PIIN.status,
+  PIIN.paymentMethod,
+  PIIN.settledAt,
+  PIIN.notes
+FROM payable_invoice_import_installments PIIN
+INNER JOIN payable_invoice_imports PII ON PII.id = PIIN.invoiceImportId
+WHERE PIIN.invoiceImportId = :importId
+  AND PIIN.canceledAt IS NULL
+ORDER BY PIIN.installmentNumber ASC
+
+UPDATE payable_invoice_import_installments
+SET dueDate = :dueDate,
+    originalAmount = :originalAmount,
+    additionAmount = :additionAmount,
+    discountAmount = :discountAmount,
+    finalAmount = :finalAmount,
+    amount = :finalAmount,
+    status = :status,
+    paymentMethod = :paymentMethod,
+    settledAt = :settledAt,
+    notes = :notes,
+    updatedBy = :requestedBy
+WHERE id = :installmentId;`;
+
+type InstallmentPaymentMethod =
+  | 'CASH'
+  | 'PIX'
+  | 'CREDIT_CARD'
+  | 'DEBIT_CARD'
+  | 'CHECK';
+
+type InstallmentEditorState = {
+  installmentId: string;
+  dueDate: string;
+  status: 'OPEN' | 'PAID';
+  paymentMethod: InstallmentPaymentMethod | '';
+  settledAt: string;
+  additionAmountInput: string;
+  discountAmountInput: string;
+  notes: string;
+};
+
+const INSTALLMENT_PAYMENT_METHOD_OPTIONS: Array<{
+  value: InstallmentPaymentMethod;
+  label: string;
+}> = [
+  { value: 'CASH', label: 'DINHEIRO' },
+  { value: 'PIX', label: 'PIX' },
+  { value: 'CREDIT_CARD', label: 'CARTÃO CRÉDITO' },
+  { value: 'DEBIT_CARD', label: 'CARTÃO DÉBITO' },
+  { value: 'CHECK', label: 'CHEQUE' },
+];
+
+function roundMoney(value: number) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function parseMoneyInput(value: string) {
+  const normalized = String(value || '')
+    .replace(/\s+/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .trim();
+
+  if (!normalized) return 0;
+
+  const numericValue = Number(normalized);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function formatMoneyInput(value: number) {
+  return Number(value || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatDateInput(value?: string | null) {
+  if (!value) return '';
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+}
+
+function buildInstallmentEditorState(
+  installment: PayableInvoiceImportInstallment,
+): InstallmentEditorState {
+  return {
+    installmentId: installment.id,
+    dueDate: formatDateInput(installment.dueDate),
+    status: installment.status === 'PAID' ? 'PAID' : 'OPEN',
+    paymentMethod:
+      installment.status === 'PAID'
+        ? ((installment.paymentMethod as InstallmentPaymentMethod | null) || '')
+        : '',
+    settledAt: formatDateInput(installment.settledAt || installment.dueDate),
+    additionAmountInput: formatMoneyInput(installment.additionAmount || 0),
+    discountAmountInput: formatMoneyInput(installment.discountAmount || 0),
+    notes: installment.notes || '',
+  };
 }
 
 function buildInitialApprovalState(item: PayableInvoiceImportDetail['items'][number]): ApprovalItemState {
   return {
-    action: item.approvalAction || item.recommendedAction,
+    action: item.approvalAction || 'IGNORE_STOCK',
     productId: item.productId || '',
     productName: item.productName || item.description,
     internalCode: item.supplierItemCode || '',
@@ -75,7 +205,7 @@ function buildInitialApprovalState(item: PayableInvoiceImportDetail['items'][num
     barcode: item.barcode || '',
     unitCode: item.unitCode || 'UN',
     productType: 'GOODS',
-    tracksInventory: item.productTracksInventory ?? item.tracksInventory,
+    tracksInventory: item.productTracksInventory ?? false,
     allowFraction: false,
     minimumStock: '0',
     notes: '',
@@ -84,20 +214,43 @@ function buildInitialApprovalState(item: PayableInvoiceImportDetail['items'][num
 
 export default function FinanceiroAprovacaoNotaPage() {
   const params = useParams<{ importId: string }>();
-  const importId = String(params?.importId || '');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const runtimeContext = useFinanceRuntimeContext();
-  const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
+  const [resolvedImportId, setResolvedImportId] = useState('');
   const [detail, setDetail] = useState<PayableInvoiceImportDetail | null>(null);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalItems, setApprovalItems] = useState<Record<string, ApprovalItemState>>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingInstallment, setSavingInstallment] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [installmentSuccessMessage, setInstallmentSuccessMessage] =
+    useState<string | null>(null);
+  const [editingInstallment, setEditingInstallment] =
+    useState<InstallmentEditorState | null>(null);
 
   const loadPageData = useCallback(async () => {
-    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId || !importId) {
+    if (!hydrated) {
+      return;
+    }
+
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setErrorMessage(
+        'Abra esta tela a partir do sistema de origem para informar o tenant do Financeiro.',
+      );
+      setLoading(false);
+      return;
+    }
+
+    if (!resolvedImportId) {
+      setErrorMessage(
+        'A aprovação da nota foi aberta sem o identificador da importação.',
+      );
+      setLoading(false);
       return;
     }
 
@@ -112,7 +265,7 @@ export default function FinanceiroAprovacaoNotaPage() {
 
       const [detailResponse, productsResponse] = await Promise.all([
         getJson<PayableInvoiceImportDetail>(
-          `/payables/invoice-imports/${importId}${importQueryString}`,
+          `/payables/invoice-imports/${resolvedImportId}${importQueryString}`,
         ),
         getJson<ProductOption[]>(`/products${productsQueryString}`),
       ]);
@@ -136,7 +289,37 @@ export default function FinanceiroAprovacaoNotaPage() {
     } finally {
       setLoading(false);
     }
-  }, [importId, runtimeContext]);
+  }, [hydrated, resolvedImportId, runtimeContext]);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const directParam = String(params?.importId || '').trim();
+    const queryImportId =
+      String(searchParams?.get('importId') || '').trim() ||
+      String(new URLSearchParams(window.location.search).get('importId') || '').trim();
+
+    const pathSegments = String(window.location.pathname || pathname || '')
+      .split('/')
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const lastSegment = pathSegments[pathSegments.length - 1] || '';
+
+    const pathImportId =
+      lastSegment &&
+      lastSegment.toLowerCase() !== 'notas-importadas' &&
+      lastSegment.toLowerCase() !== 'contas-a-pagar'
+        ? lastSegment
+        : '';
+
+    setResolvedImportId(directParam || queryImportId || pathImportId || '');
+  }, [params?.importId, pathname, searchParams]);
 
   useEffect(() => {
     void loadPageData();
@@ -245,88 +428,222 @@ export default function FinanceiroAprovacaoNotaPage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [products]);
 
+  const selectedInstallment = useMemo(() => {
+    if (!detail || !editingInstallment) {
+      return null;
+    }
+
+    return (
+      detail.installments.find(
+        (installment) => installment.id === editingInstallment.installmentId,
+      ) || null
+    );
+  }, [detail, editingInstallment]);
+
+  const editedInstallmentFinalAmount = useMemo(() => {
+    if (!selectedInstallment || !editingInstallment) {
+      return 0;
+    }
+
+    return roundMoney(
+      Number(selectedInstallment.originalAmount || 0) +
+        parseMoneyInput(editingInstallment.additionAmountInput) -
+        parseMoneyInput(editingInstallment.discountAmountInput),
+    );
+  }, [editingInstallment, selectedInstallment]);
+
+  const openInstallmentEditor = useCallback(
+    (installment: PayableInvoiceImportInstallment) => {
+      setInstallmentSuccessMessage(null);
+      setEditingInstallment(buildInstallmentEditorState(installment));
+    },
+    [],
+  );
+
+  const closeInstallmentEditor = useCallback(() => {
+    setInstallmentSuccessMessage(null);
+    setEditingInstallment(null);
+  }, []);
+
+  const handleAcknowledgeInstallmentSave = useCallback(() => {
+    setInstallmentSuccessMessage(null);
+    setEditingInstallment(null);
+  }, []);
+
+  const handleSaveInstallment = useCallback(async () => {
+    if (
+      !detail ||
+      !editingInstallment ||
+      !selectedInstallment ||
+      !runtimeContext.sourceSystem ||
+      !runtimeContext.sourceTenantId
+    ) {
+      return;
+    }
+
+    const additionAmount = parseMoneyInput(editingInstallment.additionAmountInput);
+    const discountAmount = parseMoneyInput(editingInstallment.discountAmountInput);
+    const finalAmount = roundMoney(
+      Number(selectedInstallment.originalAmount || 0) +
+        additionAmount -
+        discountAmount,
+    );
+
+    if (finalAmount <= 0) {
+      setErrorMessage('O valor final da duplicata precisa ser maior que zero.');
+      return;
+    }
+
+    if (
+      editingInstallment.status === 'PAID' &&
+      !String(editingInstallment.paymentMethod || '').trim()
+    ) {
+      setErrorMessage('Selecione o meio de pagamento para baixar a duplicata.');
+      return;
+    }
+
+    setSavingInstallment(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setInstallmentSuccessMessage(null);
+
+    try {
+      const response = await requestJson<PayableInvoiceImportDetail & { message?: string }>(
+        `/payables/invoice-imports/${detail.id}/installments`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            requestedBy:
+              runtimeContext.cashierDisplayName ||
+              runtimeContext.userRole ||
+              'OPERADOR',
+            installments: detail.installments.map((installment) => {
+              const isCurrent = installment.id === selectedInstallment.id;
+              const status = isCurrent
+                ? editingInstallment.status
+                : installment.status === 'PAID'
+                  ? 'PAID'
+                  : 'OPEN';
+
+              return {
+                id: installment.id,
+                installmentLabel: installment.installmentLabel,
+                dueDate: isCurrent
+                  ? editingInstallment.dueDate
+                  : formatDateInput(installment.dueDate),
+                amount: installment.originalAmount,
+                additionAmount: isCurrent
+                  ? additionAmount
+                  : installment.additionAmount || 0,
+                discountAmount: isCurrent
+                  ? discountAmount
+                  : installment.discountAmount || 0,
+                status,
+                paymentMethod:
+                  status === 'PAID'
+                    ? isCurrent
+                      ? editingInstallment.paymentMethod || undefined
+                      : installment.paymentMethod || undefined
+                    : undefined,
+                settledAt:
+                  status === 'PAID'
+                    ? isCurrent
+                      ? editingInstallment.settledAt || editingInstallment.dueDate
+                      : formatDateInput(
+                          installment.settledAt || installment.dueDate,
+                        ) || formatDateInput(installment.dueDate)
+                    : undefined,
+                notes: isCurrent ? editingInstallment.notes : installment.notes || undefined,
+              };
+            }),
+          }),
+          fallbackMessage: 'Não foi possível atualizar a duplicata da nota.',
+        },
+      );
+
+      setDetail(response);
+      setInstallmentSuccessMessage(
+        response.message ||
+          'Duplicata atualizada com sucesso. Clique para voltar à nota.',
+      );
+    } catch (error) {
+      setErrorMessage(
+        getFriendlyRequestErrorMessage(
+          error,
+          'Não foi possível atualizar a duplicata da nota.',
+        ),
+      );
+    } finally {
+      setSavingInstallment(false);
+    }
+  }, [detail, editingInstallment, runtimeContext, selectedInstallment]);
+
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
       <section className={FINANCE_GRID_PAGE_LAYOUT.card}>
-        <div className="border-b border-slate-200 px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
-                Contas a pagar
-              </div>
-              <h1 className="mt-1 text-2xl font-black text-slate-900">Aprovação da Nota</h1>
-              <p className="mt-2 text-sm font-medium text-slate-500">
-                Confira os itens, decida o vínculo com produtos e conclua a entrada no estoque com as duplicatas.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/contas-a-pagar/notas-importadas${navigationQuery}`}
-                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                Voltar para a lista
-              </Link>
-            </div>
-          </div>
-        </div>
-
         {loading ? (
           <div className="px-6 py-10 text-center text-sm font-semibold text-slate-500">
             Carregando dados da nota importada...
           </div>
         ) : detail ? (
           <div className="grid gap-6 p-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 xl:col-span-2">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Nota fiscal</div>
-                <div className="mt-1 text-xl font-black text-slate-900">
-                  NF-e {detail.invoiceNumber}
-                  {detail.series ? ` / Série ${detail.series}` : ''}
+            <div className="sticky top-0 z-20 -mx-6 -mt-6 border-b border-slate-200 bg-white/95 px-6 pt-6 pb-4 shadow-sm backdrop-blur">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+                    Contas a pagar
+                  </div>
+                  <h1 className="mt-1 text-2xl font-black text-slate-900">Aprovação da Nota</h1>
+                  <p className="mt-2 text-sm font-medium text-slate-500">
+                    Confira os itens, decida o vínculo com produtos e conclua a entrada no estoque com as duplicatas.
+                  </p>
                 </div>
-                <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {detail.accessKey}
-                </div>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Fornecedor</div>
-                <div className="mt-1 text-sm font-black text-slate-900">{detail.supplierName || '---'}</div>
-                <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{detail.supplierDocument || 'SEM DOCUMENTO'}</div>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Emissão</div>
-                <div className="mt-1 text-sm font-black text-slate-900">{formatDateLabel(detail.issueDate)}</div>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Valor total</div>
-                <div className="mt-1 text-sm font-black text-slate-900">{formatCurrency(detail.totalInvoiceAmount)}</div>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-              <div className="flex flex-wrap items-center gap-4">
-                <span className={`rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.18em] ${getStatusClass(detail.status)}`}>
-                  {detail.statusLabel}
-                </span>
-                <span className="text-sm font-semibold text-slate-500">
-                  {detail.items.length} item(ns) e {detail.installments.length} duplicata(s) importada(s)
-                </span>
+                <div className="flex flex-wrap gap-3">
+                  {detail.status !== 'APPROVED' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleApprove()}
+                      disabled={saving}
+                      className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                    >
+                      {saving ? 'Aprovando...' : 'Aprovar Nota'}
+                    </button>
+                  ) : (
+                    <div className="flex items-center rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-emerald-700">
+                      {`Aprovada em ${formatDateLabel(detail.approvedAt || null)}`}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {detail.status !== 'APPROVED' ? (
-                <button
-                  type="button"
-                  onClick={() => void handleApprove()}
-                  disabled={saving}
-                  className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-                >
-                  {saving ? 'Aprovando...' : 'Aprovar Nota'}
-                </button>
-              ) : (
-                <div className="text-sm font-black uppercase tracking-[0.16em] text-emerald-700">
-                  Aprovada em {formatDateLabel(detail.approvedAt || null)}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 xl:col-span-2">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Nota fiscal</div>
+                  <div className="mt-1 text-xl font-black text-slate-900">
+                    NF-e {detail.invoiceNumber}
+                    {detail.series ? ` / Série ${detail.series}` : ''}
+                  </div>
+                  <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {detail.accessKey}
+                  </div>
                 </div>
-              )}
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Fornecedor</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">{detail.supplierName || '---'}</div>
+                  <div className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{detail.supplierDocument || 'SEM DOCUMENTO'}</div>
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Emissão</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">{formatDateLabel(detail.issueDate)}</div>
+                </div>
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Valor total</div>
+                  <div className="mt-1 text-sm font-black text-slate-900">{formatCurrency(detail.totalInvoiceAmount)}</div>
+                </div>
+              </div>
             </div>
 
             {errorMessage ? (
@@ -342,12 +659,22 @@ export default function FinanceiroAprovacaoNotaPage() {
             ) : null}
 
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-              <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                Duplicatas importadas
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+                  Duplicatas importadas
+                </div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Clique em uma duplicata para ajustar vencimento, baixa e valor final
+                </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {detail.installments.map((installment) => (
-                  <div key={installment.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                  <button
+                    key={installment.id}
+                    type="button"
+                    onClick={() => openInstallmentEditor(installment)}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md"
+                  >
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
                       Duplicata {installment.installmentNumber}
                     </div>
@@ -358,9 +685,36 @@ export default function FinanceiroAprovacaoNotaPage() {
                       Vencimento: {formatDateLabel(installment.dueDate)}
                     </div>
                     <div className="mt-1 text-sm font-semibold text-slate-600">
-                      Valor: {formatCurrency(installment.amount)}
+                      Valor original: {formatCurrency(installment.originalAmount)}
                     </div>
-                  </div>
+                    {(installment.additionAmount || 0) > 0 ? (
+                      <div className="mt-1 text-sm font-semibold text-rose-600">
+                        Acréscimo: {formatCurrency(installment.additionAmount)}
+                      </div>
+                    ) : null}
+                    {(installment.discountAmount || 0) > 0 ? (
+                      <div className="mt-1 text-sm font-semibold text-emerald-600">
+                        Desconto: {formatCurrency(installment.discountAmount)}
+                      </div>
+                    ) : null}
+                    <div className="mt-1 text-sm font-semibold text-slate-600">
+                      Valor final: {formatCurrency(installment.finalAmount)}
+                    </div>
+                    <div
+                      className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
+                        installment.status === 'PAID'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-rose-200 bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      {installment.status === 'PAID' ? 'PARCELA PAGA' : 'PARCELA ABERTA'}
+                    </div>
+                    {installment.notes ? (
+                      <div className="mt-3 text-xs font-semibold text-slate-500">
+                        Obs.: {installment.notes}
+                      </div>
+                    ) : null}
+                  </button>
                 ))}
               </div>
             </section>
@@ -583,10 +937,300 @@ export default function FinanceiroAprovacaoNotaPage() {
                 auditText={auditText}
               />
             </section>
+
+            <AuditedPopupShell
+              isOpen={Boolean(editingInstallment && selectedInstallment)}
+              screenId={INSTALLMENT_POPUP_SCREEN_ID}
+              eyebrow="Duplicata importada"
+              title={
+                selectedInstallment
+                  ? `Duplicata ${selectedInstallment.installmentNumber}`
+                  : 'Duplicata'
+              }
+              description="Ajuste o vencimento, os acréscimos, os descontos e defina se a duplicata permanece em aberto ou já sai baixada."
+              brandingName={runtimeContext.companyName || 'FINANCEIRO'}
+              logoUrl={runtimeContext.logoUrl}
+              originText="Origem: Sistema Financeiro - frontend/src/app/contas-a-pagar/notas-importadas/[importId]/page.tsx"
+              auditText={installmentPopupAuditText}
+              sqlText={installmentPopupSqlText}
+              onClose={closeInstallmentEditor}
+              panelClassName="max-w-[1120px]"
+              bodyClassName="overflow-y-auto pb-2"
+              footerActions={
+                <>
+                  <button
+                    type="button"
+                    onClick={closeInstallmentEditor}
+                    className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-black uppercase tracking-[0.16em] text-slate-600 shadow-sm transition hover:bg-slate-50"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveInstallment()}
+                    disabled={
+                      savingInstallment ||
+                      detail.status === 'APPROVED' ||
+                      Boolean(installmentSuccessMessage)
+                    }
+                    className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                  >
+                    {savingInstallment ? 'Salvando...' : 'Salvar duplicata'}
+                  </button>
+                </>
+              }
+            >
+              {selectedInstallment && editingInstallment ? (
+                <div className="relative grid gap-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Valor original
+                      </div>
+                      <div className="mt-2 text-lg font-black text-slate-900">
+                        {formatCurrency(selectedInstallment.originalAmount)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Valor final
+                      </div>
+                      <div className="mt-2 text-lg font-black text-slate-900">
+                        {formatCurrency(editedInstallmentFinalAmount)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Situação
+                      </div>
+                      <div className="mt-2 text-lg font-black text-slate-900">
+                        {editingInstallment.status === 'PAID' ? 'FECHADA' : 'EM ABERTO'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)]">
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Data de vencimento
+                      </span>
+                      <input
+                        type="date"
+                        value={editingInstallment.dueDate}
+                        onChange={(event) =>
+                          setEditingInstallment((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  dueDate: event.target.value,
+                                  settledAt:
+                                    current.status === 'PAID' &&
+                                    !current.settledAt
+                                      ? event.target.value
+                                      : current.settledAt,
+                                }
+                              : current,
+                          )
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      />
+                    </label>
+
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Situação da duplicata
+                      </span>
+                      <select
+                        value={editingInstallment.status}
+                        onChange={(event) =>
+                          setEditingInstallment((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  status: event.target.value as 'OPEN' | 'PAID',
+                                  paymentMethod:
+                                    event.target.value === 'PAID'
+                                      ? current.paymentMethod
+                                      : '',
+                                  settledAt:
+                                    event.target.value === 'PAID'
+                                      ? current.settledAt || current.dueDate
+                                      : '',
+                                }
+                              : current,
+                          )
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      >
+                        <option value="OPEN">EM ABERTO</option>
+                        <option value="PAID">JÁ BAIXADA</option>
+                      </select>
+                    </label>
+
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Acréscimos
+                      </span>
+                      <input
+                        value={editingInstallment.additionAmountInput}
+                        onChange={(event) =>
+                          setEditingInstallment((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  additionAmountInput: event.target.value,
+                                }
+                              : current,
+                          )
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                        placeholder="0,00"
+                      />
+                    </label>
+
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Descontos
+                      </span>
+                      <input
+                        value={editingInstallment.discountAmountInput}
+                        onChange={(event) =>
+                          setEditingInstallment((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  discountAmountInput: event.target.value,
+                                }
+                              : current,
+                          )
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                        placeholder="0,00"
+                      />
+                    </label>
+                  </div>
+
+                  {editingInstallment.status === 'PAID' ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          Meio de pagamento
+                        </span>
+                        <select
+                          value={editingInstallment.paymentMethod}
+                          onChange={(event) =>
+                            setEditingInstallment((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    paymentMethod: event.target
+                                      .value as InstallmentPaymentMethod,
+                                  }
+                                : current,
+                            )
+                          }
+                          disabled={detail.status === 'APPROVED'}
+                          className={FINANCE_GRID_PAGE_LAYOUT.input}
+                        >
+                          <option value="">SELECIONE O MEIO DE PAGAMENTO</option>
+                          {INSTALLMENT_PAYMENT_METHOD_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          Data da baixa
+                        </span>
+                        <input
+                          type="date"
+                          value={editingInstallment.settledAt}
+                          onChange={(event) =>
+                            setEditingInstallment((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    settledAt: event.target.value,
+                                  }
+                                : current,
+                            )
+                          }
+                          disabled={detail.status === 'APPROVED'}
+                          className={FINANCE_GRID_PAGE_LAYOUT.input}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Observação da duplicata
+                    </span>
+                    <textarea
+                      value={editingInstallment.notes}
+                      onChange={(event) =>
+                        setEditingInstallment((current) =>
+                          current
+                            ? {
+                                ...current,
+                                notes: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                      disabled={detail.status === 'APPROVED'}
+                      className="min-h-20 w-full rounded-3xl border border-slate-300 bg-white px-4 py-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      placeholder="OBSERVAÇÃO ESPECÍFICA DESTA DUPLICATA..."
+                    />
+                  </label>
+
+                  {installmentSuccessMessage ? (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] bg-slate-950/35 px-4 backdrop-blur-sm">
+                      <div className="w-full max-w-md rounded-3xl border border-emerald-200 bg-white p-6 text-center shadow-2xl">
+                        <div className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-600">
+                          Duplicata salva
+                        </div>
+                        <div className="mt-3 text-lg font-black text-slate-900">
+                          {installmentSuccessMessage}
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-slate-500">
+                          Ao confirmar, você volta para a tela chamadora.
+                        </div>
+                        <div className="mt-6 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={handleAcknowledgeInstallmentSave}
+                            className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                          >
+                            Confirmar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                </div>
+              ) : null}
+            </AuditedPopupShell>
           </div>
         ) : (
-          <div className="px-6 py-10 text-center text-sm font-semibold text-slate-500">
-            Nenhum dado encontrado para esta nota.
+          <div className="px-6 py-10">
+            <div
+              className={`rounded-2xl px-4 py-4 text-center text-sm font-semibold ${
+                errorMessage
+                  ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                  : 'text-slate-500'
+              }`}
+            >
+              {errorMessage || 'Nenhum dado encontrado para esta nota.'}
+            </div>
           </div>
         )}
       </section>

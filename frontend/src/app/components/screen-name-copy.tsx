@@ -13,6 +13,7 @@ type ScreenNameCopyProps = {
   className?: string;
   originText?: string;
   auditText?: string;
+  sqlText?: string;
 };
 
 function copyTextWithLegacyCommand(value: string) {
@@ -46,6 +47,7 @@ export default function ScreenNameCopy({
   className = '',
   originText,
   auditText,
+  sqlText,
 }: ScreenNameCopyProps) {
   const [status, setStatus] = useState<CopyStatus>('idle');
   const [isAuditOpen, setIsAuditOpen] = useState(false);
@@ -119,6 +121,7 @@ export default function ScreenNameCopy({
           systemName="Sistema Financeiro"
           originText={originText}
           auditText={auditText}
+          sqlText={sqlText}
           onClose={() => setIsAuditOpen(false)}
         />
       ) : null}

@@ -234,7 +234,15 @@ model PayableInvoiceImportInstallment {
   installmentLabel String?
   installmentNumber Int
   dueDate         DateTime
+  originalAmount  Float    @default(0)
+  additionAmount  Float    @default(0)
+  discountAmount  Float    @default(0)
+  finalAmount     Float    @default(0)
   amount          Float    @default(0)
+  status          String   @default("OPEN")
+  paymentMethod   String?
+  settledAt       DateTime?
+  notes           String?
   createdAt       DateTime @default(now())
   createdBy       String?
   updatedAt       DateTime @updatedAt
@@ -286,10 +294,17 @@ model PayableInstallment {
   installmentNumber     Int
   installmentCount      Int
   dueDate               DateTime
+  originalAmount        Float    @default(0)
+  additionAmount        Float    @default(0)
+  discountAmount        Float    @default(0)
+  finalAmount           Float    @default(0)
   amount                Float    @default(0)
   openAmount            Float    @default(0)
   paidAmount            Float    @default(0)
   status                String   @default("OPEN")
+  paymentMethod         String?
+  settledAt             DateTime?
+  notes                 String?
   descriptionSnapshot   String
   supplierNameSnapshot  String
   supplierDocumentSnapshot String?

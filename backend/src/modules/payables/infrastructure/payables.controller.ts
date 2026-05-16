@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PayablesService } from "../application/payables.service";
 import {
@@ -6,6 +6,7 @@ import {
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
   ListPayableInvoiceImportsDto,
+  UpdatePayableInvoiceImportInstallmentsDto,
 } from "../application/dto/payables.dto";
 
 @ApiTags("Payables")
@@ -38,6 +39,17 @@ export class PayablesController {
   })
   importFromXml(@Body() payload: ImportInvoiceXmlDto) {
     return this.payablesService.importFromXml(payload);
+  }
+
+  @Patch("invoice-imports/:importId/installments")
+  @ApiOperation({
+    summary: "Atualiza as parcelas da nota importada antes da aprovação",
+  })
+  updateInvoiceImportInstallments(
+    @Param("importId") importId: string,
+    @Body() payload: UpdatePayableInvoiceImportInstallmentsDto,
+  ) {
+    return this.payablesService.updateInvoiceImportInstallments(importId, payload);
   }
 
   @Post("invoice-imports/:importId/approve")
