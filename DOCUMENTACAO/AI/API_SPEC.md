@@ -64,12 +64,14 @@ Uso:
 Uso:
 
 - criar o cadastro base de produto compartilhado no `Financeiro`
+- respeitar os parametros de estoque da filial atual via `x-source-branch-code`
 
 ### PATCH `/products/:productId`
 
 Uso:
 
 - atualizar o cadastro do produto informado
+- manter grade, lote e quantidade conforme configuracao da filial
 
 ### POST `/products/:productId/activate`
 
@@ -82,6 +84,78 @@ Uso:
 Uso:
 
 - inativar produto com soft delete
+
+Campos de estoque aceitos no produto:
+
+- `tracksInventory`
+- `allowFraction`
+- `usesColorSize`
+- `usesLotControl`
+- `currentStock`
+- `minimumStock`
+
+Regras:
+
+- filial `TRADITIONAL` ignora `usesColorSize` e `usesLotControl`
+- filial `COLOR_SIZE` permite `usesColorSize` por produto
+- filial `LOT` permite `usesLotControl` por produto
+- filial `INTEGER_ONLY` rejeita quantidade decimal
+- filial `DECIMAL_ALLOWED` grava produto com quantidade fracionada permitida
+- filial `PRODUCT_DEFINED` usa `allowFraction` do produto
+
+### GET `/products/stock-movements`
+
+Uso:
+
+- listar o historico de movimentacoes de estoque da empresa financeira do tenant informado
+- alimentar a tela `Histórico Movimentação do Estoque`
+- a tela e somente consulta, sem cadastro direto de movimentacao
+
+Query string esperada:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `sourceBranchCode` opcional
+- `movementType` opcional: `ENTRY | EXIT | ALL`
+- `search` opcional
+
+Regras:
+
+- consultar `stock_movements`
+- retornar movimentacoes mais recentes primeiro
+- nao alterar saldo e nao criar registros
+- correcoes futuras devem ocorrer por novas movimentacoes de ajuste/estorno
+
+## Company branches
+
+### GET `/companies/:id/branches`
+
+Uso:
+
+- listar filiais e seus parametros de estoque
+
+### POST `/companies/:id/branches`
+
+Uso:
+
+- criar filial com parametros operacionais
+
+Body resumido:
+
+```json
+{
+  "branchCode": 2,
+  "name": "FILIAL CENTRO",
+  "inventoryControlType": "COLOR_SIZE",
+  "quantityPrecision": "PRODUCT_DEFINED"
+}
+```
+
+### PATCH `/companies/:id/branches/:branchId`
+
+Uso:
+
+- atualizar nome, tipo de controle de estoque e regra de quantidade da filial
 
 ## Fiscal Certificates
 

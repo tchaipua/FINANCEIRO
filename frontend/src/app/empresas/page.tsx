@@ -40,6 +40,24 @@ type CompanyFinancialFormState = {
   penaltyGracePeriod: string;
 };
 
+type CompanyBranchItem = {
+  id: string;
+  branchCode: number;
+  name: string;
+  isActive: boolean;
+  isDefault: boolean;
+  inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
+  quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+};
+
+type CompanyBranchFormState = {
+  id: string | null;
+  branchCode: string;
+  name: string;
+  inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
+  quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+};
+
 type CompanyGridColumnKey =
   | 'name'
   | 'sourceSystem'
@@ -102,6 +120,46 @@ function buildCompanyFinancialForm(company: CompanyItem): CompanyFinancialFormSt
     penaltyValue: formatOptionalNumberInput(company.penaltyValue),
     penaltyGracePeriod: formatOptionalNumberInput(company.penaltyGracePeriod),
   };
+}
+
+const emptyBranchForm: CompanyBranchFormState = {
+  id: null,
+  branchCode: '',
+  name: '',
+  inventoryControlType: 'TRADITIONAL',
+  quantityPrecision: 'INTEGER_ONLY',
+};
+
+function buildBranchForm(branch: CompanyBranchItem): CompanyBranchFormState {
+  return {
+    id: branch.id,
+    branchCode: String(branch.branchCode),
+    name: branch.name,
+    inventoryControlType: branch.inventoryControlType || 'TRADITIONAL',
+    quantityPrecision: branch.quantityPrecision || 'INTEGER_ONLY',
+  };
+}
+
+function getInventoryControlTypeLabel(value: CompanyBranchItem['inventoryControlType']) {
+  switch (value) {
+    case 'COLOR_SIZE':
+      return 'COR E NÚMERO';
+    case 'LOT':
+      return 'LOTE';
+    default:
+      return 'TRADICIONAL';
+  }
+}
+
+function getQuantityPrecisionLabel(value: CompanyBranchItem['quantityPrecision']) {
+  switch (value) {
+    case 'DECIMAL_ALLOWED':
+      return 'ACEITA DECIMAL';
+    case 'PRODUCT_DEFINED':
+      return 'DEFINIR NO PRODUTO';
+    default:
+      return 'SOMENTE INTEIRO';
+  }
 }
 
 function getCompanyGridStorageKey(tenantId: string | null) {
@@ -574,6 +632,201 @@ function CompanyFinancialSettingsModal({
   );
 }
 
+function CompanyBranchSettingsModal({
+  company,
+  branches,
+  form,
+  isOpen,
+  isLoading,
+  isSaving,
+  error,
+  onClose,
+  onEdit,
+  onNew,
+  onChange,
+  onSave,
+}: {
+  company: CompanyItem | null;
+  branches: CompanyBranchItem[];
+  form: CompanyBranchFormState;
+  isOpen: boolean;
+  isLoading: boolean;
+  isSaving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onEdit: (branch: CompanyBranchItem) => void;
+  onNew: () => void;
+  onChange: (field: keyof CompanyBranchFormState, value: string) => void;
+  onSave: () => void;
+}) {
+  if (!isOpen || !company) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-5">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              Parâmetros da filial
+            </div>
+            <h2 className="mt-1 text-2xl font-black text-slate-900">{company.name}</h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Configure como cada filial controla estoque, grade, lote e casas decimais.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6 lg:grid-cols-[1fr_1fr]">
+          <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+                  Filiais cadastradas
+                </div>
+                <div className="mt-1 text-xs font-medium text-slate-500">
+                  {isLoading ? 'Carregando...' : `${branches.length} filial(is)`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onNew}
+                className="rounded-full bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+              >
+                Nova
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {branches.map((branch) => (
+                <button
+                  key={branch.id}
+                  type="button"
+                  onClick={() => onEdit(branch)}
+                  className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                    form.id === branch.id
+                      ? 'border-blue-300 bg-blue-50 text-blue-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-black uppercase tracking-[0.12em]">
+                      {branch.branchCode} - {branch.name}
+                    </div>
+                    {branch.isDefault ? (
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                        Padrão
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    {getInventoryControlTypeLabel(branch.inventoryControlType)} ·{' '}
+                    {getQuantityPrecisionLabel(branch.quantityPrecision)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-5">
+            <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+              Configuração da filial
+            </div>
+
+            <div className="grid gap-4">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Código da filial
+                </span>
+                <input
+                  value={form.branchCode}
+                  onChange={(event) => onChange('branchCode', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  disabled={Boolean(form.id)}
+                  inputMode="numeric"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Nome da filial
+                </span>
+                <input
+                  value={form.name}
+                  onChange={(event) => onChange('name', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Tipo controle estoque
+                </span>
+                <select
+                  value={form.inventoryControlType}
+                  onChange={(event) => onChange('inventoryControlType', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                >
+                  <option value="TRADITIONAL">TRADICIONAL</option>
+                  <option value="COLOR_SIZE">COR E NÚMERO</option>
+                  <option value="LOT">TRATAR POR LOTE</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Quantidade do estoque
+                </span>
+                <select
+                  value={form.quantityPrecision}
+                  onChange={(event) => onChange('quantityPrecision', event.target.value)}
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                >
+                  <option value="INTEGER_ONLY">SOMENTE NÚMERO INTEIRO</option>
+                  <option value="DECIMAL_ALLOWED">ACEITA QUANTIDADE DECIMAL</option>
+                  <option value="PRODUCT_DEFINED">AMBOS, DEFINIR NO PRODUTO</option>
+                </select>
+              </label>
+            </div>
+
+            {error ? (
+              <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {error}
+              </div>
+            ) : null}
+          </section>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="rounded-2xl bg-blue-600 px-5 py-2 text-sm font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+          >
+            {isSaving ? 'Salvando...' : 'Salvar filial'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FinanceiroEmpresasPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [search, setSearch] = useState('');
@@ -593,6 +846,12 @@ export default function FinanceiroEmpresasPage() {
   });
   const [financialFormError, setFinancialFormError] = useState<string | null>(null);
   const [isSavingFinancialSettings, setIsSavingFinancialSettings] = useState(false);
+  const [branchCompany, setBranchCompany] = useState<CompanyItem | null>(null);
+  const [branches, setBranches] = useState<CompanyBranchItem[]>([]);
+  const [branchForm, setBranchForm] = useState<CompanyBranchFormState>(emptyBranchForm);
+  const [branchFormError, setBranchFormError] = useState<string | null>(null);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
+  const [isSavingBranch, setIsSavingBranch] = useState(false);
   const [columnOrder, setColumnOrder] = useState<CompanyGridColumnKey[]>(
     DEFAULT_COMPANY_GRID_CONFIG.order,
   );
@@ -691,6 +950,89 @@ export default function FinanceiroEmpresasPage() {
     setEditingCompany(null);
     setFinancialFormError(null);
     setIsSavingFinancialSettings(false);
+  }
+
+  async function loadBranches(company: CompanyItem) {
+    try {
+      setIsLoadingBranches(true);
+      setBranchFormError(null);
+      const response = await getJson<CompanyBranchItem[]>(
+        `/companies/${company.id}/branches${buildFinanceApiQueryString(runtimeContext)}`,
+      );
+      setBranches(response);
+      if (response.length && !branchForm.id) {
+        setBranchForm(buildBranchForm(response[0]));
+      }
+    } catch (currentError) {
+      setBranches([]);
+      setBranchFormError(
+        getFriendlyRequestErrorMessage(
+          currentError,
+          'Não foi possível carregar as filiais da empresa.',
+        ),
+      );
+    } finally {
+      setIsLoadingBranches(false);
+    }
+  }
+
+  function openBranchSettings(company: CompanyItem) {
+    setBranchCompany(company);
+    setBranchForm(emptyBranchForm);
+    setBranchFormError(null);
+    void loadBranches(company);
+  }
+
+  function closeBranchSettings() {
+    setBranchCompany(null);
+    setBranches([]);
+    setBranchForm(emptyBranchForm);
+    setBranchFormError(null);
+    setIsSavingBranch(false);
+  }
+
+  async function handleSaveBranch() {
+    if (!branchCompany) {
+      return;
+    }
+
+    try {
+      setIsSavingBranch(true);
+      setBranchFormError(null);
+      const payload = {
+        requestedBy:
+          runtimeContext.sourceTenantId || runtimeContext.companyName || 'FINANCEIRO_EMPRESAS',
+        branchCode: branchForm.id ? undefined : parseOptionalNumber(branchForm.branchCode, true),
+        name: branchForm.name || undefined,
+        inventoryControlType: branchForm.inventoryControlType,
+        quantityPrecision: branchForm.quantityPrecision,
+      };
+
+      const endpoint = branchForm.id
+        ? `/companies/${branchCompany.id}/branches/${branchForm.id}${buildFinanceApiQueryString(
+            runtimeContext,
+          )}`
+        : `/companies/${branchCompany.id}/branches${buildFinanceApiQueryString(runtimeContext)}`;
+
+      const savedBranch = await requestJson<CompanyBranchItem>(endpoint, {
+        method: branchForm.id ? 'PATCH' : 'POST',
+        body: JSON.stringify(payload),
+        fallbackMessage: 'Não foi possível salvar os parâmetros da filial.',
+      });
+
+      await loadBranches(branchCompany);
+      setBranchForm(buildBranchForm(savedBranch));
+      setStatusMessage('Parâmetros de estoque da filial atualizados com sucesso.');
+    } catch (currentError) {
+      setBranchFormError(
+        getFriendlyRequestErrorMessage(
+          currentError,
+          'Não foi possível salvar os parâmetros da filial.',
+        ),
+      );
+    } finally {
+      setIsSavingBranch(false);
+    }
   }
 
   async function handleSaveFinancialSettings() {
@@ -944,6 +1286,13 @@ export default function FinanceiroEmpresasPage() {
                             >
                               Alterar financeiro
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => openBranchSettings(item)}
+                              className="ml-2 mt-3 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                            >
+                              Filiais/estoque
+                            </button>
                           </div>
                         ) : column.key === 'sourceSystem' ? (
                           <div>
@@ -1067,6 +1416,34 @@ export default function FinanceiroEmpresasPage() {
         }}
         onSave={() => {
           void handleSaveFinancialSettings();
+        }}
+      />
+      <CompanyBranchSettingsModal
+        isOpen={!runtimeContext.embedded && Boolean(branchCompany)}
+        company={branchCompany}
+        branches={branches}
+        form={branchForm}
+        isLoading={isLoadingBranches}
+        isSaving={isSavingBranch}
+        error={branchFormError}
+        onClose={closeBranchSettings}
+        onEdit={(branch) => setBranchForm(buildBranchForm(branch))}
+        onNew={() =>
+          setBranchForm({
+            ...emptyBranchForm,
+            branchCode: branches.length
+              ? String(Math.max(...branches.map((branch) => branch.branchCode)) + 1)
+              : '1',
+          })
+        }
+        onChange={(field, value) => {
+          setBranchForm((current) => ({
+            ...current,
+            [field]: value,
+          }));
+        }}
+        onSave={() => {
+          void handleSaveBranch();
         }}
       />
       <GridExportModal

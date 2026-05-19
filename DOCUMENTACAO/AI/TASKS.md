@@ -15,6 +15,8 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - definir fluxo de importacao da escola
 - consolidar fluxo de aprovacao de notas de entrada com estoque e duplicatas
 - consolidar cadastro multi-certificado por empresa para automacao fiscal
+- parametrizar estoque por filial com suporte a grade cor/numero, lote e quantidade inteira/fracionada
+- criar historico de movimentacao de estoque em grid/lista somente consulta
 
 ## Tarefas seguintes
 
@@ -24,3 +26,4 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - criar modulo de extrato
 - criar modulo de cobranca
 - ampliar importacao automatica com manifestacao do destinatario e tratamento de resumos DF-e
+- acompanhar patch oficial do Next moderno para remover alerta residual de `postcss` interno sem downgrade para Next 9

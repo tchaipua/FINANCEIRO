@@ -236,3 +236,60 @@ Campos minimos:
 - nunca depender apenas de ID da vertical como chave universal
 - nao pode existir delete fisico em negocio
 - baixa em dinheiro exige caixa aberto por usuario operacional
+
+## Estoque por filial
+
+### `company_branches`
+
+Cada filial financeira define como o estoque sera tratado naquela operacao.
+
+Campos de parametrizacao:
+
+- `inventoryControlType`: `TRADITIONAL`, `COLOR_SIZE` ou `LOT`
+- `quantityPrecision`: `INTEGER_ONLY`, `DECIMAL_ALLOWED` ou `PRODUCT_DEFINED`
+
+Regras:
+
+- `TRADITIONAL`: o cadastro de produto nao exibe opcoes de grade ou lote
+- `COLOR_SIZE`: o cadastro de produto pode marcar que aquele produto trata cor/numero
+- `LOT`: o cadastro de produto pode marcar que aquele produto trata lote
+- `INTEGER_ONLY`: quantidades devem ser inteiras e a tela nao precisa destacar decimais
+- `DECIMAL_ALLOWED`: a filial aceita quantidade fracionada
+- `PRODUCT_DEFINED`: cada produto define se aceita quantidade fracionada
+
+### `products`
+
+Produtos seguem a configuracao da filial atual.
+
+Campos principais de estoque:
+
+- `branchCode`
+- `tracksInventory`
+- `allowFraction`
+- `usesColorSize`
+- `usesLotControl`
+- `currentStock`
+- `minimumStock`
+
+### `product_stock_balances`
+
+Tabela de saldo por produto, empresa, filial e variacao/lote.
+
+Regras:
+
+- `branchCode = 0` representa o estoque geral da empresa
+- `branchCode >= 1` representa o saldo separado da filial
+- `variantKey` identifica a combinacao operacional usada no saldo, como grade ou lote
+- campos opcionais como `colorCode`, `colorName`, `sizeCode`, `lotNumber` e `lotExpirationDate` preparam o estoque para grade e lote sem acoplar a uma vertical especifica
+
+### `stock_movements`
+
+Tabela historica das movimentacoes que alteram saldo de estoque.
+
+Regras:
+
+- deve ser tratada como historico append-only
+- nao deve existir tela de cadastro direto para movimentacao
+- a tela de historico apenas lista o resultado gerado por fluxos operacionais do estoque
+- correcoes devem ser feitas por nova movimentacao de ajuste ou estorno, nunca por edicao fisica do historico
+- cada registro deve guardar produto, filial, tipo de movimento, quantidade, saldo anterior, saldo resultante, origem/documento quando houver, usuario e data

@@ -536,9 +536,6 @@ export default function FinanceiroManualSettlementPage() {
             </div>
           </div>
         </div>
-        <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
-        </div>
       </section>
 
       <section className={`${cardClass} p-6`}>
@@ -708,6 +705,10 @@ export default function FinanceiroManualSettlementPage() {
           </div>
         </div>
       </section>
+
+      <div className="flex justify-end">
+        <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+      </div>
     </div>
   );
 }

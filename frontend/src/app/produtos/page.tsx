@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -19,7 +18,6 @@ import {
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
   buildFinanceApiQueryString,
-  buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 
@@ -38,6 +36,8 @@ type ProductItem = {
   productType: string;
   tracksInventory: boolean;
   allowFraction: boolean;
+  usesColorSize: boolean;
+  usesLotControl: boolean;
   currentStock: number;
   minimumStock: number;
   purchasePrice?: number | null;
@@ -51,6 +51,19 @@ type ProductItem = {
   canceledAt?: string | null;
 };
 
+type CompanyItem = {
+  id: string;
+  name: string;
+};
+
+type BranchInventoryConfig = {
+  id?: string;
+  branchCode: number;
+  name?: string;
+  inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
+  quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+};
+
 type ProductFormState = {
   id: string | null;
   name: string;
@@ -61,6 +74,8 @@ type ProductFormState = {
   productType: string;
   tracksInventory: boolean;
   allowFraction: boolean;
+  usesColorSize: boolean;
+  usesLotControl: boolean;
   currentStock: string;
   minimumStock: string;
   purchasePrice: string;
@@ -113,7 +128,10 @@ const PRODUCT_GRID_COLUMNS: GridColumnDefinition<ProductItem, ProductGridColumnK
     label: 'Estoque',
     getValue: (item) =>
       item.tracksInventory
-        ? `${formatStock(item.currentStock)} / mín ${formatStock(item.minimumStock)}`
+        ? `${formatStock(item.currentStock, item.allowFraction)} / mín ${formatStock(
+            item.minimumStock,
+            item.allowFraction,
+          )}`
         : 'SEM CONTROLE',
   },
   {
@@ -142,12 +160,14 @@ const PRODUCT_EXPORT_COLUMNS: GridColumnDefinition<ProductItem, ProductExportCol
   {
     key: 'stock',
     label: 'Estoque atual',
-    getValue: (item) => (item.tracksInventory ? formatStock(item.currentStock) : 'SEM CONTROLE'),
+    getValue: (item) =>
+      item.tracksInventory ? formatStock(item.currentStock, item.allowFraction) : 'SEM CONTROLE',
   },
   {
     key: 'minimumStock',
     label: 'Estoque mínimo',
-    getValue: (item) => (item.tracksInventory ? formatStock(item.minimumStock) : '---'),
+    getValue: (item) =>
+      item.tracksInventory ? formatStock(item.minimumStock, item.allowFraction) : '---',
   },
   {
     key: 'purchasePrice',
@@ -184,6 +204,8 @@ const emptyFormState: ProductFormState = {
   productType: 'GOODS',
   tracksInventory: true,
   allowFraction: false,
+  usesColorSize: false,
+  usesLotControl: false,
   currentStock: '0',
   minimumStock: '0',
   purchasePrice: '',
@@ -293,11 +315,17 @@ function getInventorySituationClass(value: ProductItem['inventorySituation']) {
   }
 }
 
-function formatStock(value?: number | null) {
+const DEFAULT_BRANCH_INVENTORY_CONFIG: BranchInventoryConfig = {
+  branchCode: 1,
+  inventoryControlType: 'TRADITIONAL',
+  quantityPrecision: 'INTEGER_ONLY',
+};
+
+function formatStock(value?: number | null, allowFraction = true) {
   const normalized = Number(value || 0);
   return normalized.toLocaleString('pt-BR', {
-    minimumFractionDigits: Number.isInteger(normalized) ? 0 : 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: allowFraction && !Number.isInteger(normalized) ? 2 : 0,
+    maximumFractionDigits: allowFraction ? 2 : 0,
   });
 }
 
@@ -319,6 +347,14 @@ function parseOptionalNumber(value: string) {
   return Number(parsed.toFixed(2));
 }
 
+function parseStockNumber(value: string, allowFraction: boolean) {
+  const parsed = parseOptionalNumber(value) ?? 0;
+  if (!allowFraction && !Number.isInteger(parsed)) {
+    throw new Error('Esta filial trabalha apenas com quantidade inteira.');
+  }
+  return allowFraction ? parsed : Math.trunc(parsed);
+}
+
 function buildProductForm(product: ProductItem): ProductFormState {
   return {
     id: product.id,
@@ -330,6 +366,8 @@ function buildProductForm(product: ProductItem): ProductFormState {
     productType: product.productType || 'GOODS',
     tracksInventory: Boolean(product.tracksInventory),
     allowFraction: Boolean(product.allowFraction),
+    usesColorSize: Boolean(product.usesColorSize),
+    usesLotControl: Boolean(product.usesLotControl),
     currentStock: formatOptionalNumberInput(product.currentStock),
     minimumStock: formatOptionalNumberInput(product.minimumStock),
     purchasePrice: formatOptionalNumberInput(product.purchasePrice),
@@ -557,7 +595,6 @@ function ProductGridConfigModal({
 
 export default function FinanceiroProdutosPage() {
   const runtimeContext = useFinanceRuntimeContext();
-  const navigationQueryString = buildFinanceNavigationQueryString(runtimeContext);
 
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [searchInput, setSearchInput] = useState('');
@@ -580,6 +617,9 @@ export default function FinanceiroProdutosPage() {
   );
   const [hiddenColumns, setHiddenColumns] = useState<ProductGridColumnKey[]>(
     DEFAULT_PRODUCT_GRID_CONFIG.hidden,
+  );
+  const [branchInventoryConfig, setBranchInventoryConfig] = useState<BranchInventoryConfig>(
+    DEFAULT_BRANCH_INVENTORY_CONFIG,
   );
 
   const loadProducts = useCallback(async () => {
@@ -606,6 +646,36 @@ export default function FinanceiroProdutosPage() {
     }
   }, [appliedSearch, runtimeContext, statusFilter]);
 
+  const loadBranchInventoryConfig = useCallback(async () => {
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setBranchInventoryConfig(DEFAULT_BRANCH_INVENTORY_CONFIG);
+      return;
+    }
+
+    try {
+      const companies = await getJson<CompanyItem[]>(
+        `/companies${buildFinanceApiQueryString(runtimeContext)}`,
+      );
+      const company = companies[0];
+      if (!company) {
+        setBranchInventoryConfig(DEFAULT_BRANCH_INVENTORY_CONFIG);
+        return;
+      }
+
+      const branches = await getJson<BranchInventoryConfig[]>(
+        `/companies/${company.id}/branches${buildFinanceApiQueryString(runtimeContext)}`,
+      );
+      const currentBranch =
+        branches.find((branch) => branch.branchCode === runtimeContext.sourceBranchCode) ||
+        branches.find((branch) => branch.branchCode === 1) ||
+        branches[0];
+
+      setBranchInventoryConfig(currentBranch || DEFAULT_BRANCH_INVENTORY_CONFIG);
+    } catch {
+      setBranchInventoryConfig(DEFAULT_BRANCH_INVENTORY_CONFIG);
+    }
+  }, [runtimeContext]);
+
   useEffect(() => {
     const storedConfig = readStoredProductGridConfig(runtimeContext.sourceTenantId);
     setColumnOrder(storedConfig.order);
@@ -616,6 +686,10 @@ export default function FinanceiroProdutosPage() {
   useEffect(() => {
     void loadProducts();
   }, [loadProducts]);
+
+  useEffect(() => {
+    void loadBranchInventoryConfig();
+  }, [loadBranchInventoryConfig]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -636,7 +710,10 @@ export default function FinanceiroProdutosPage() {
   const showClearSearchButton = Boolean(searchInput.trim() || appliedSearch.trim());
 
   function openCreateModal() {
-    setFormState(emptyFormState);
+    setFormState({
+      ...emptyFormState,
+      allowFraction: branchInventoryConfig.quantityPrecision === 'DECIMAL_ALLOWED',
+    });
     setSuccessMessage(null);
     setErrorMessage(null);
     setIsFormOpen(true);
@@ -662,6 +739,9 @@ export default function FinanceiroProdutosPage() {
     setSuccessMessage(null);
 
     try {
+      const allowStockFraction =
+        branchInventoryConfig.quantityPrecision === 'DECIMAL_ALLOWED' ||
+        (branchInventoryConfig.quantityPrecision === 'PRODUCT_DEFINED' && formState.allowFraction);
       const payload = {
         requestedBy: runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO',
         sourceSystem: runtimeContext.sourceSystem,
@@ -674,9 +754,21 @@ export default function FinanceiroProdutosPage() {
         unitCode: formState.unitCode || undefined,
         productType: formState.productType || undefined,
         tracksInventory: formState.tracksInventory,
-        allowFraction: formState.allowFraction,
-        currentStock: formState.tracksInventory ? parseOptionalNumber(formState.currentStock) ?? 0 : 0,
-        minimumStock: formState.tracksInventory ? parseOptionalNumber(formState.minimumStock) ?? 0 : 0,
+        allowFraction: allowStockFraction,
+        usesColorSize:
+          branchInventoryConfig.inventoryControlType === 'COLOR_SIZE'
+            ? formState.usesColorSize
+            : false,
+        usesLotControl:
+          branchInventoryConfig.inventoryControlType === 'LOT'
+            ? formState.usesLotControl
+            : false,
+        currentStock: formState.tracksInventory
+          ? parseStockNumber(formState.currentStock, allowStockFraction)
+          : 0,
+        minimumStock: formState.tracksInventory
+          ? parseStockNumber(formState.minimumStock, allowStockFraction)
+          : 0,
         purchasePrice: parseOptionalNumber(formState.purchasePrice),
         salePrice: parseOptionalNumber(formState.salePrice),
         ncmCode: formState.ncmCode || undefined,
@@ -752,35 +844,6 @@ export default function FinanceiroProdutosPage() {
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-sm font-black uppercase tracking-[0.28em] text-blue-100">
-                Cadastro base para estoque
-              </div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">Produtos</h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium text-blue-50">
-                Cadastre o produto uma única vez no Financeiro e deixe o estoque pronto para
-                futuras notas fiscais, entradas e vendas.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-black uppercase tracking-[0.18em] text-white">
-                Menu Financeiro
-              </span>
-              <Link
-                href={`/${navigationQueryString}`}
-                className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-              >
-                Voltar ao menu
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId ? (
         <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-8`}>
           <div className="rounded-3xl border border-amber-200 bg-amber-50 px-6 py-5 text-amber-900">
@@ -832,44 +895,6 @@ export default function FinanceiroProdutosPage() {
           ) : (
             <div />
           )}
-        </div>
-
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          {[
-            {
-              value: 'ACTIVE' as const,
-              label: 'Ativos',
-              tone: 'bg-emerald-500',
-              activeTone: 'bg-emerald-700',
-            },
-            {
-              value: 'ALL' as const,
-              label: 'Todos',
-              tone: 'bg-slate-300',
-              activeTone: 'bg-slate-700',
-            },
-            {
-              value: 'INACTIVE' as const,
-              label: 'Inativos',
-              tone: 'bg-rose-300',
-              activeTone: 'bg-rose-500',
-            },
-          ].map((item) => {
-            const isActive = statusFilter === item.value;
-            return (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setStatusFilter(item.value)}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-black uppercase tracking-[0.14em] text-white transition ${
-                  isActive ? item.activeTone : item.tone
-                }`}
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-white" />
-                {item.label}
-              </button>
-            );
-          })}
         </div>
 
         {errorMessage ? (
@@ -952,9 +977,14 @@ export default function FinanceiroProdutosPage() {
                         <td key={column.key} className="px-4 py-4 align-top">
                           <div className="font-semibold text-slate-800">
                             {product.tracksInventory
-                              ? `${formatStock(product.currentStock)} ${product.unitCode}`
+                              ? `${formatStock(product.currentStock, product.allowFraction)} ${product.unitCode}`
                               : 'SEM CONTROLE'}
                           </div>
+                          {product.usesColorSize || product.usesLotControl ? (
+                            <div className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+                              {product.usesColorSize ? 'COR/NÚMERO' : 'LOTE'}
+                            </div>
+                          ) : null}
                           <div className="mt-2">
                             <span
                               className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getInventorySituationClass(
@@ -1028,7 +1058,7 @@ export default function FinanceiroProdutosPage() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
+        <div className="grid gap-4 border-t border-slate-200 px-6 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -1052,12 +1082,67 @@ export default function FinanceiroProdutosPage() {
             </button>
           </div>
 
-          <ScreenNameCopy
-            screenId={PRODUCT_SCREEN_ID}
-            className="justify-end"
-            originText="Origem: Sistema Financeiro - frontend/src/app/produtos/page.tsx"
-            auditText={screenAuditText}
-          />
+          <div className="flex items-center justify-center gap-2">
+            {[
+              {
+                value: 'ACTIVE' as const,
+                label: 'Ativos',
+                tone: 'bg-emerald-500',
+                activeTone: 'bg-emerald-700',
+                dot: 'bg-white',
+              },
+              {
+                value: 'ALL' as const,
+                label: 'Todos',
+                tone: 'bg-amber-200',
+                activeTone: 'bg-amber-400',
+                dot: 'bg-white',
+              },
+              {
+                value: 'INACTIVE' as const,
+                label: 'Inativos',
+                tone: 'bg-rose-200',
+                activeTone: 'bg-rose-400',
+                dot: 'bg-white',
+              },
+            ].map((item) => {
+              const isActive = statusFilter === item.value;
+
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setStatusFilter(item.value)}
+                  aria-label={item.label}
+                  title={item.label}
+                  aria-pressed={isActive}
+                  className={`relative h-6 w-14 rounded-full border transition duration-200 ${
+                    isActive
+                      ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
+                      : `${item.tone} border-transparent opacity-55 hover:opacity-85`
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full shadow-sm ${item.dot} ${
+                      isActive ? 'right-1' : 'left-1'
+                    }`}
+                  />
+                  <span className="sr-only">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            {!runtimeContext.embedded ? (
+              <ScreenNameCopy
+                screenId={PRODUCT_SCREEN_ID}
+                className="justify-end"
+                originText="Origem: Sistema Financeiro - frontend/src/app/produtos/page.tsx"
+                auditText={screenAuditText}
+              />
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -1201,27 +1286,90 @@ export default function FinanceiroProdutosPage() {
                       </div>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormState((current) => ({
-                          ...current,
-                          allowFraction: !current.allowFraction,
-                        }))
-                      }
-                      className={`rounded-3xl border px-4 py-4 text-left transition ${
-                        formState.allowFraction
-                          ? 'border-blue-300 bg-blue-50 text-blue-800'
-                          : 'border-slate-200 bg-white text-slate-700'
-                      }`}
-                    >
-                      <div className="text-sm font-black uppercase tracking-[0.16em]">
-                        Permite fracionar
+                    {branchInventoryConfig.quantityPrecision === 'PRODUCT_DEFINED' ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            allowFraction: !current.allowFraction,
+                          }))
+                        }
+                        className={`rounded-3xl border px-4 py-4 text-left transition ${
+                          formState.allowFraction
+                            ? 'border-blue-300 bg-blue-50 text-blue-800'
+                            : 'border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        <div className="text-sm font-black uppercase tracking-[0.16em]">
+                          Permite fracionar
+                        </div>
+                        <div className="mt-1 text-sm font-medium">
+                          {formState.allowFraction ? 'Sim, aceita quantidade fracionada.' : 'Não, trabalha com quantidade inteira.'}
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 text-left text-slate-700">
+                        <div className="text-sm font-black uppercase tracking-[0.16em]">
+                          Quantidade da filial
+                        </div>
+                        <div className="mt-1 text-sm font-medium">
+                          {branchInventoryConfig.quantityPrecision === 'DECIMAL_ALLOWED'
+                            ? 'Esta filial trabalha com quantidade fracionada.'
+                            : 'Esta filial trabalha somente com quantidade inteira.'}
+                        </div>
                       </div>
-                      <div className="mt-1 text-sm font-medium">
-                        {formState.allowFraction ? 'Sim, aceita quantidade fracionada.' : 'Não, trabalha com quantidade inteira.'}
-                      </div>
-                    </button>
+                    )}
+
+                    {branchInventoryConfig.inventoryControlType === 'COLOR_SIZE' ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            usesColorSize: !current.usesColorSize,
+                            usesLotControl: false,
+                          }))
+                        }
+                        className={`rounded-3xl border px-4 py-4 text-left transition ${
+                          formState.usesColorSize
+                            ? 'border-indigo-300 bg-indigo-50 text-indigo-800'
+                            : 'border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        <div className="text-sm font-black uppercase tracking-[0.16em]">
+                          Trata cor/número
+                        </div>
+                        <div className="mt-1 text-sm font-medium">
+                          {formState.usesColorSize ? 'Sim, este produto usa grade.' : 'Não, produto sem grade.'}
+                        </div>
+                      </button>
+                    ) : null}
+
+                    {branchInventoryConfig.inventoryControlType === 'LOT' ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormState((current) => ({
+                            ...current,
+                            usesLotControl: !current.usesLotControl,
+                            usesColorSize: false,
+                          }))
+                        }
+                        className={`rounded-3xl border px-4 py-4 text-left transition ${
+                          formState.usesLotControl
+                            ? 'border-amber-300 bg-amber-50 text-amber-800'
+                            : 'border-slate-200 bg-white text-slate-700'
+                        }`}
+                      >
+                        <div className="text-sm font-black uppercase tracking-[0.16em]">
+                          Trata por lote
+                        </div>
+                        <div className="mt-1 text-sm font-medium">
+                          {formState.usesLotControl ? 'Sim, este produto controla lote.' : 'Não, produto sem lote.'}
+                        </div>
+                      </button>
+                    ) : null}
                   </div>
                 </section>
 
@@ -1240,6 +1388,11 @@ export default function FinanceiroProdutosPage() {
                           setFormState((current) => ({ ...current, currentStock: event.target.value }))
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
+                        inputMode={
+                          branchInventoryConfig.quantityPrecision === 'INTEGER_ONLY'
+                            ? 'numeric'
+                            : 'decimal'
+                        }
                         disabled={!formState.tracksInventory}
                       />
                     </label>
@@ -1254,6 +1407,11 @@ export default function FinanceiroProdutosPage() {
                           setFormState((current) => ({ ...current, minimumStock: event.target.value }))
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
+                        inputMode={
+                          branchInventoryConfig.quantityPrecision === 'INTEGER_ONLY'
+                            ? 'numeric'
+                            : 'decimal'
+                        }
                         disabled={!formState.tracksInventory}
                       />
                     </label>

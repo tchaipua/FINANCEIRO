@@ -85,3 +85,25 @@ Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Fina
   - `DOCUMENTACAO/AI/UI_PATTERNS.md`
   - `DOCUMENTACAO/AI/CODING_RULES.md`
 - Status: aprovado
+
+### UIP-0007
+
+- Data: 2026-05-18
+- Padrao: sem faixa azul interna duplicada em telas com grid/lista
+- Contexto: foi aprovado que novas telas com grid/lista nao devem repetir abaixo do cabecalho principal uma segunda faixa com eyebrow, titulo, descricao e botao de voltar/menu, pois isso duplica a identificacao da tela
+- Alteracao: reforco do PAT-015 para que telas com grid/lista abram direto na barra operacional da listagem e no grid; explicacoes adicionais devem aguardar o local especifico indicado pelo usuario
+- Componentes/Telas:
+  - `frontend/src/app/produtos/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+- Status: aprovado
+
+### UIP-0008
+
+- Data: 2026-05-18
+- Padrao: identificador unico e exclusivo por tela
+- Contexto: na validacao da tela `PRINCIPAL_FINANCEIRO_ESTOQUE`, foi identificado que o grid interno de produtos exibia um segundo nome tecnico (`FINANCEIRO_PRODUTOS_LISTAGEM_GERAL`) alem do identificador da tela hospedeira
+- Alteracao: telas novas devem ter apenas um nome tecnico visivel por vez; esse nome deve ser exclusivo da tela, e identificadores internos do Financeiro devem ficar ocultos quando a tela estiver embutida em uma vertical consumidora
+- Componentes/Telas:
+  - `frontend/src/app/produtos/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+- Status: aprovado

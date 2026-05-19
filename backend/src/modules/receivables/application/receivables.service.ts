@@ -41,6 +41,8 @@ import {
   resolveBankReturnMovementStatus,
   SICOOB_MOVEMENT_TYPE_CODES,
 } from "./bank-return.utils";
+import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
+import { getFinanceContext } from "../../../common/finance-context";
 
 @Injectable()
 export class ReceivablesService {
@@ -48,6 +50,10 @@ export class ReceivablesService {
     private readonly prisma: PrismaService,
     private readonly sicoobBillingService: SicoobBillingService,
   ) {}
+
+  private branchCode() {
+    return getFinanceContext()?.branchCode ?? DEFAULT_BRANCH_CODE;
+  }
 
   private normalizeOptionalInt(value?: number | null) {
     if (value === undefined || value === null) {
@@ -217,8 +223,9 @@ export class ReceivablesService {
 
     const existing = await this.prisma.party.findUnique({
       where: {
-        companyId_externalEntityType_externalEntityId: {
+        companyId_branchCode_externalEntityType_externalEntityId: {
           companyId,
+          branchCode: this.branchCode(),
           externalEntityType,
           externalEntityId,
         },
@@ -748,8 +755,9 @@ export class ReceivablesService {
 
     const existingBatch = await this.prisma.receivableBatch.findUnique({
       where: {
-        companyId_sourceBatchId: {
+        companyId_branchCode_sourceBatchId: {
           companyId: company.id,
+          branchCode: this.branchCode(),
           sourceBatchId: normalizedBatchId,
         },
       },

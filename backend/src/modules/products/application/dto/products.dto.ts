@@ -56,6 +56,40 @@ export class ListProductsDto {
   cashierDisplayName?: string;
 }
 
+export class ListStockMovementsDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  movementType?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
 export class GetProductDto {
   @IsString()
   sourceSystem!: string;
@@ -127,6 +161,16 @@ export class SaveProductDto {
   @Transform(({ value }) => transformBooleanInput(value))
   @IsBoolean()
   allowFraction?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesColorSize?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesLotControl?: boolean;
 
   @IsOptional()
   @Type(() => Number)

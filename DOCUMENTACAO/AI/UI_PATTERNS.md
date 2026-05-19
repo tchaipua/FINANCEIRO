@@ -70,6 +70,8 @@ Arquivos de referencia tecnica no Financeiro:
 - a exportacao e a impressao da tela com grid devem ficar concentradas apenas no botao ao lado de `COLUNAS`
 - quando a toolbar padrao estiver presente, o botao textual separado `EXPORTAR` no topo da tela deixa de ser necessario e deve ser removido para evitar duplicidade funcional
 - telas com grid/lista nao devem exibir faixa explicativa contextual entre o cabecalho principal e a area da listagem
+- telas com grid/lista nao devem criar uma segunda faixa azul interna repetindo `eyebrow`, titulo, descricao ou botao de voltar/menu logo abaixo do cabecalho principal
+- a tela deve abrir direto na barra operacional da listagem e no grid; qualquer explicacao adicional sobre a finalidade da tela deve aguardar o local especifico aprovado pelo usuario
 - quando a tela tiver acao de incluir/cadastrar novo registro, esse botao deve ficar na mesma linha da busca
 - a posicao aprovada para essa acao e no lado esquerdo do campo de busca, como primeiro elemento da linha
 - o botao de incluir deve preferir formato compacto, mostrando apenas o icone `+`, com tooltip explicando a acao de cadastro
@@ -85,6 +87,9 @@ Arquivos de referencia tecnica no Financeiro:
 - em modo embutido, o `Financeiro` nao deve repetir cabecalho principal proprio nem faixa contextual secundaria se isso gerar segunda camada visual concorrente
 - em modo embutido, o `Financeiro` nao deve exibir um segundo nome tecnico visivel da tela
 - o unico nome tecnico visivel deve ser o da vertical consumidora, por exemplo `PRINCIPAL_FINANCEIRO_RESUMO`
+- toda tela nova deve ter apenas um nome tecnico visivel por vez
+- o nome tecnico de tela deve ser exclusivo, estavel e nao reutilizado em outra tela, rota, popup ou fluxo visual
+- se uma tela interna do `Financeiro` for aberta dentro de uma tela da vertical consumidora, o identificador interno deve ficar oculto para nao duplicar o nome visivel
 - o identificador interno do `Financeiro` pode continuar existindo no codigo, em auditoria e em integracoes, mas deve ficar oculto na interface embutida
 - a tela `PRINCIPAL_FINANCEIRO_BANCOS` passa a ser a referencia funcional soberana desse comportamento de integracao visual
 - a tela `PRINCIPAL_FINANCEIRO_RESUMO` alinhada ao mesmo comportamento passa a ser a referencia de regra para ocultacao do identificador interno em modo embutido

@@ -1,0 +1,753 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import GridExportModal from '@/app/components/grid-export-modal';
+import ScreenNameCopy from '@/app/components/screen-name-copy';
+import { getJson } from '@/app/lib/api';
+import { getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
+import {
+  buildDefaultExportColumns,
+  exportGridRows,
+  type GridColumnDefinition,
+  type GridExportFormat,
+} from '@/app/lib/grid-export-utils';
+import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import {
+  buildFinanceApiQueryString,
+  useFinanceRuntimeContext,
+} from '@/app/lib/runtime-context';
+
+const SCREEN_ID = 'FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO';
+const ORIGIN_TEXT =
+  'Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\historico-movimentacao\\page.tsx';
+
+type StockMovementItem = {
+  id: string;
+  branchCode: number;
+  productId: string;
+  productName: string;
+  productInternalCode?: string | null;
+  productBarcode?: string | null;
+  productUnitCode?: string | null;
+  movementType: string;
+  movementTypeLabel: string;
+  quantity: number;
+  previousStock: number;
+  resultingStock: number;
+  unitCost?: number | null;
+  sourceType: string;
+  sourceDocument?: string | null;
+  sourceAccessKey?: string | null;
+  notes?: string | null;
+  occurredAt: string;
+  createdBy?: string | null;
+};
+
+type MovementTypeFilter = 'ALL' | 'ENTRY' | 'EXIT';
+type MovementGridColumnKey =
+  | 'occurredAt'
+  | 'movementType'
+  | 'product'
+  | 'quantity'
+  | 'previousStock'
+  | 'resultingStock'
+  | 'source'
+  | 'createdBy'
+  | 'notes';
+
+const auditText = `--- LOGICA DA TELA ---
+Esta tela lista o historico de movimentacoes de estoque gravado pelo Financeiro.
+
+TABELAS PRINCIPAIS:
+- stock_movements (SM) - historico append-only das movimentacoes que alteraram saldo.
+- products (PR) - cadastro do produto movimentado.
+- payable_invoice_imports (PII) - origem fiscal quando a movimentacao veio de NF-e.
+- payable_invoice_import_items (PII_ITEM) - item da nota que gerou a movimentacao.
+
+RELACIONAMENTOS:
+- SM.companyId -> companies.id
+- SM.productId -> products.id
+- SM.sourceImportId -> payable_invoice_imports.id
+- SM.sourceImportItemId -> payable_invoice_import_items.id
+
+METRICAS / CAMPOS EXIBIDOS:
+- data/hora da movimentacao
+- tipo de movimento
+- produto
+- quantidade movimentada
+- saldo anterior
+- saldo resultante
+- documento de origem
+- usuario/operador e observacao
+
+FILTROS APLICADOS:
+- sourceSystem e sourceTenantId da vertical consumidora
+- sourceBranchCode da filial operacional
+- busca textual por produto, codigo, codigo de barras, nota, chave de acesso ou observacao
+- filtro visual por tipo: entradas, todos ou saidas
+
+ORDENACAO:
+- movimentacoes mais recentes primeiro.
+
+OBSERVACAO:
+- Esta tela nao cadastra movimentos. Ela apenas exibe o resultado das movimentacoes geradas por fluxos operacionais do estoque.`;
+
+const sqlText = `SELECT
+  SM.id,
+  SM.occurredAt,
+  SM.movementType,
+  PR.name AS productName,
+  SM.quantity,
+  SM.previousStock,
+  SM.resultingStock,
+  PII.invoiceNumber,
+  SM.createdBy
+FROM stock_movements SM
+JOIN products PR ON PR.id = SM.productId
+LEFT JOIN payable_invoice_imports PII ON PII.id = SM.sourceImportId
+WHERE SM.companyId = :companyId
+  AND SM.branchCode = :sourceBranchCode
+  AND SM.canceledAt IS NULL
+ORDER BY SM.occurredAt DESC, SM.createdAt DESC;`;
+
+const MOVEMENT_GRID_COLUMNS: GridColumnDefinition<StockMovementItem, MovementGridColumnKey>[] = [
+  {
+    key: 'occurredAt',
+    label: 'Data/Hora',
+    getValue: (item) => formatDateTime(item.occurredAt),
+  },
+  {
+    key: 'movementType',
+    label: 'Tipo',
+    getValue: (item) => item.movementTypeLabel,
+  },
+  {
+    key: 'product',
+    label: 'Produto',
+    getValue: (item) => item.productName,
+  },
+  {
+    key: 'quantity',
+    label: 'Quantidade',
+    getValue: (item) => `${formatQuantity(item.quantity)} ${item.productUnitCode || ''}`.trim(),
+    align: 'right',
+  },
+  {
+    key: 'previousStock',
+    label: 'Saldo anterior',
+    getValue: (item) => formatQuantity(item.previousStock),
+    align: 'right',
+  },
+  {
+    key: 'resultingStock',
+    label: 'Saldo final',
+    getValue: (item) => formatQuantity(item.resultingStock),
+    align: 'right',
+  },
+  {
+    key: 'source',
+    label: 'Origem',
+    getValue: (item) => item.sourceDocument || item.sourceType || '---',
+  },
+  {
+    key: 'createdBy',
+    label: 'Usuário',
+    getValue: (item) => item.createdBy || '---',
+  },
+  {
+    key: 'notes',
+    label: 'Observação',
+    getValue: (item) => item.notes || '---',
+  },
+];
+
+const DEFAULT_MOVEMENT_GRID_CONFIG = {
+  order: MOVEMENT_GRID_COLUMNS.map((column) => column.key),
+  hidden: ['notes'] as MovementGridColumnKey[],
+};
+
+function getMovementGridStorageKey(sourceTenantId?: string | null) {
+  return `financeiro:estoque-historico:grid-columns:${sourceTenantId || 'default'}`;
+}
+
+function getMovementExportStorageKey(sourceTenantId?: string | null) {
+  return `financeiro:estoque-historico:export-config:${sourceTenantId || 'default'}`;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '---';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('pt-BR');
+}
+
+function formatQuantity(value?: number | null) {
+  const normalized = Number(value || 0);
+  return normalized.toLocaleString('pt-BR', {
+    minimumFractionDigits: Number.isInteger(normalized) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function readStoredGridConfig(storageKey: string) {
+  if (typeof window === 'undefined') return DEFAULT_MOVEMENT_GRID_CONFIG;
+
+  try {
+    const stored = window.localStorage.getItem(storageKey);
+    if (!stored) return DEFAULT_MOVEMENT_GRID_CONFIG;
+    const parsed = JSON.parse(stored) as Partial<typeof DEFAULT_MOVEMENT_GRID_CONFIG>;
+    const validKeys = new Set(MOVEMENT_GRID_COLUMNS.map((column) => column.key));
+    const order = (parsed.order || []).filter((key): key is MovementGridColumnKey =>
+      validKeys.has(key as MovementGridColumnKey),
+    );
+    const hidden = (parsed.hidden || []).filter((key): key is MovementGridColumnKey =>
+      validKeys.has(key as MovementGridColumnKey),
+    );
+
+    return {
+      order: [
+        ...order,
+        ...DEFAULT_MOVEMENT_GRID_CONFIG.order.filter((key) => !order.includes(key)),
+      ],
+      hidden,
+    };
+  } catch {
+    return DEFAULT_MOVEMENT_GRID_CONFIG;
+  }
+}
+
+function writeStoredGridConfig(
+  storageKey: string,
+  order: MovementGridColumnKey[],
+  hidden: MovementGridColumnKey[],
+) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(storageKey, JSON.stringify({ order, hidden }));
+}
+
+function MovementGridConfigModal({
+  isOpen,
+  order,
+  hidden,
+  onSave,
+  onClose,
+}: {
+  isOpen: boolean;
+  order: MovementGridColumnKey[];
+  hidden: MovementGridColumnKey[];
+  onSave: (order: MovementGridColumnKey[], hidden: MovementGridColumnKey[]) => void;
+  onClose: () => void;
+}) {
+  const [draftOrder, setDraftOrder] = useState(order);
+  const [draftHidden, setDraftHidden] = useState(hidden);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDraftOrder(order);
+    setDraftHidden(hidden);
+  }, [hidden, isOpen, order]);
+
+  if (!isOpen) return null;
+
+  const toggleColumnVisibility = (columnKey: MovementGridColumnKey) => {
+    setDraftHidden((current) =>
+      current.includes(columnKey)
+        ? current.filter((item) => item !== columnKey)
+        : [...current, columnKey],
+    );
+  };
+
+  const moveColumn = (columnKey: MovementGridColumnKey, direction: -1 | 1) => {
+    setDraftOrder((current) => {
+      const index = current.indexOf(columnKey);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [removed] = next.splice(index, 1);
+      next.splice(nextIndex, 0, removed);
+      return next;
+    });
+  };
+
+  return (
+    <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
+      <div className={FINANCE_GRID_PAGE_LAYOUT.modalPanel}>
+        <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              Configuração da tela
+            </div>
+            <h2 className="mt-1 text-2xl font-black text-slate-900">Configurar colunas do grid</h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Reordene, oculte ou inclua colunas do histórico de estoque.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="grid gap-3">
+            {draftOrder.map((columnKey) => {
+              const column = MOVEMENT_GRID_COLUMNS.find((item) => item.key === columnKey);
+              if (!column) return null;
+              const isHidden = draftHidden.includes(columnKey);
+
+              return (
+                <div
+                  key={column.key}
+                  className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-4 transition ${
+                    isHidden ? 'border-slate-200 bg-white' : 'border-emerald-300 bg-emerald-100/90'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleColumnVisibility(column.key)}
+                      aria-pressed={!isHidden}
+                      title={!isHidden ? 'Esta coluna está sendo usada no grid' : 'Esta coluna não está sendo usada no grid'}
+                      className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 shadow-sm transition-transform hover:scale-105 ${
+                        isHidden
+                          ? 'border-rose-200 bg-rose-500 text-white shadow-rose-200/80'
+                          : 'border-emerald-200 bg-emerald-500 text-white shadow-emerald-200/80'
+                      }`}
+                    >
+                      {isHidden ? '×' : '✓'}
+                    </button>
+                    <div>
+                      <div className="text-sm font-black text-slate-800">{column.label}</div>
+                      <div className="text-xs font-medium text-slate-500">
+                        {isHidden ? 'Oculta no grid atual.' : 'Visível no grid atual.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveColumn(column.key, -1)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-slate-50"
+                      title="Mover para cima"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveColumn(column.key, 1)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 transition hover:bg-slate-50"
+                      title="Mover para baixo"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-3 border-t border-slate-100 px-6 py-5">
+          <button
+            type="button"
+            onClick={() => {
+              setDraftOrder(DEFAULT_MOVEMENT_GRID_CONFIG.order);
+              setDraftHidden(DEFAULT_MOVEMENT_GRID_CONFIG.hidden);
+            }}
+            className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+          >
+            Restaurar padrão
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onSave(draftOrder, draftHidden);
+              onClose();
+            }}
+            className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+          >
+            Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
+  const runtimeContext = useFinanceRuntimeContext();
+  const [movements, setMovements] = useState<StockMovementItem[]>([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [movementTypeFilter, setMovementTypeFilter] = useState<MovementTypeFilter>('ALL');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
+  const [exportColumns, setExportColumns] = useState(() =>
+    buildDefaultExportColumns(MOVEMENT_GRID_COLUMNS),
+  );
+  const [columnOrder, setColumnOrder] = useState<MovementGridColumnKey[]>(
+    DEFAULT_MOVEMENT_GRID_CONFIG.order,
+  );
+  const [hiddenColumns, setHiddenColumns] = useState<MovementGridColumnKey[]>(
+    DEFAULT_MOVEMENT_GRID_CONFIG.hidden,
+  );
+
+  useEffect(() => {
+    if (!runtimeContext.embedded) return;
+
+    window.parent?.postMessage(
+      {
+        type: 'MSINFOR_SCREEN_CONTEXT',
+        screenId: 'PRINCIPAL_FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO',
+      },
+      '*',
+    );
+  }, [runtimeContext.embedded]);
+
+  useEffect(() => {
+    const storageKey = getMovementGridStorageKey(runtimeContext.sourceTenantId);
+    const storedConfig = readStoredGridConfig(storageKey);
+    setColumnOrder(storedConfig.order);
+    setHiddenColumns(storedConfig.hidden);
+  }, [runtimeContext.sourceTenantId]);
+
+  const loadMovements = useCallback(async () => {
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setMovements([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const data = await getJson<StockMovementItem[]>(
+        `/products/stock-movements${buildFinanceApiQueryString(runtimeContext, {
+          search: appliedSearch,
+          movementType: movementTypeFilter,
+          sourceBranchCode: runtimeContext.sourceBranchCode,
+        })}`,
+      );
+      setMovements(data);
+    } catch (error) {
+      setErrorMessage(
+        getFriendlyRequestErrorMessage(error, 'Não foi possível carregar o histórico de estoque.'),
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [appliedSearch, movementTypeFilter, runtimeContext]);
+
+  useEffect(() => {
+    void loadMovements();
+  }, [loadMovements]);
+
+  const activeColumns = useMemo(
+    () =>
+      columnOrder
+        .map((columnKey) => MOVEMENT_GRID_COLUMNS.find((column) => column.key === columnKey))
+        .filter(
+          (
+            column,
+          ): column is GridColumnDefinition<StockMovementItem, MovementGridColumnKey> =>
+            Boolean(column),
+        )
+        .filter((column) => !hiddenColumns.includes(column.key)),
+    [columnOrder, hiddenColumns],
+  );
+
+  const showClearSearchButton = Boolean(searchInput.trim() || appliedSearch.trim());
+
+  return (
+    <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            setAppliedSearch(searchInput.trim());
+          }}
+          className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"
+        >
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Pesquisar por produto, nota, chave, código ou observação"
+            className={FINANCE_GRID_PAGE_LAYOUT.input}
+          />
+
+          <button type="submit" className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}>
+            Pesquisar
+          </button>
+
+          {showClearSearchButton ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('');
+                setAppliedSearch('');
+              }}
+              className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+            >
+              Limpar consulta
+            </button>
+          ) : (
+            <div />
+          )}
+        </form>
+
+        {errorMessage ? (
+          <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+            {errorMessage}
+          </div>
+        ) : null}
+      </section>
+
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                Movimentações encontradas
+              </div>
+              <div className="mt-1 text-xl font-black text-slate-900">
+                {isLoading ? 'Carregando...' : `${movements.length} registro(s)`}
+              </div>
+            </div>
+            <div className="text-sm font-medium text-slate-500">
+              Filial {runtimeContext.sourceBranchCode}
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-white">
+              <tr>
+                {activeColumns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 ${
+                      column.align === 'right' ? 'text-right' : 'text-left'
+                    }`}
+                  >
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {!isLoading && !movements.length ? (
+                <tr>
+                  <td
+                    colSpan={activeColumns.length || 1}
+                    className="px-6 py-10 text-center text-sm font-semibold text-slate-500"
+                  >
+                    Nenhuma movimentação de estoque foi localizada para os filtros informados.
+                  </td>
+                </tr>
+              ) : null}
+
+              {movements.map((movement) => (
+                <tr key={movement.id} className="hover:bg-slate-50/70">
+                  {activeColumns.map((column) => {
+                    if (column.key === 'product') {
+                      return (
+                        <td key={column.key} className="px-4 py-4 align-top">
+                          <div className="font-black uppercase tracking-[0.08em] text-slate-900">
+                            {movement.productName}
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            {movement.productInternalCode || movement.productBarcode || '---'}
+                          </div>
+                        </td>
+                      );
+                    }
+
+                    if (column.key === 'movementType') {
+                      const isEntry = movement.movementType === 'ENTRY';
+                      const isExit = movement.movementType === 'EXIT';
+                      return (
+                        <td key={column.key} className="px-4 py-4 align-top">
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
+                              isEntry
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : isExit
+                                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                                  : 'border-amber-200 bg-amber-50 text-amber-700'
+                            }`}
+                          >
+                            {movement.movementTypeLabel}
+                          </span>
+                        </td>
+                      );
+                    }
+
+                    return (
+                      <td
+                        key={column.key}
+                        className={`px-4 py-4 align-top text-sm font-semibold text-slate-700 ${
+                          column.align === 'right' ? 'text-right' : 'text-left'
+                        }`}
+                      >
+                        {column.getValue(movement)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="grid gap-4 border-t border-slate-200 px-6 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsColumnConfigOpen(true)}
+              className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+            >
+              ☰ Colunas
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExportModalOpen(true)}
+              className={FINANCE_GRID_PAGE_LAYOUT.footerIconButton}
+              aria-label="Imprimir"
+              title="Imprimir"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                <path d="M6 9V3h12v6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M6 14h12v7H6z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-2">
+            {[
+              {
+                value: 'ENTRY' as const,
+                label: 'Entradas',
+                tone: 'bg-emerald-500',
+                activeTone: 'bg-emerald-700',
+              },
+              {
+                value: 'ALL' as const,
+                label: 'Todos',
+                tone: 'bg-amber-200',
+                activeTone: 'bg-amber-400',
+              },
+              {
+                value: 'EXIT' as const,
+                label: 'Saídas',
+                tone: 'bg-rose-200',
+                activeTone: 'bg-rose-400',
+              },
+            ].map((item) => {
+              const isActive = movementTypeFilter === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setMovementTypeFilter(item.value)}
+                  aria-label={item.label}
+                  title={item.label}
+                  aria-pressed={isActive}
+                  className={`relative h-6 w-14 rounded-full border transition duration-200 ${
+                    isActive
+                      ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
+                      : `${item.tone} border-transparent opacity-55 hover:opacity-85`
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm ${
+                      isActive ? 'right-1' : 'left-1'
+                    }`}
+                  />
+                  <span className="sr-only">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
+              Registros exibidos ({movements.length})
+            </div>
+            {!runtimeContext.embedded ? (
+              <ScreenNameCopy
+                screenId={SCREEN_ID}
+                className="justify-end"
+                originText={ORIGIN_TEXT}
+                auditText={auditText}
+                sqlText={sqlText}
+              />
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <MovementGridConfigModal
+        isOpen={isColumnConfigOpen}
+        order={columnOrder}
+        hidden={hiddenColumns}
+        onSave={(order, hidden) => {
+          setColumnOrder(order);
+          setHiddenColumns(hidden);
+          writeStoredGridConfig(getMovementGridStorageKey(runtimeContext.sourceTenantId), order, hidden);
+        }}
+        onClose={() => setIsColumnConfigOpen(false)}
+      />
+
+      <GridExportModal
+        isOpen={isExportModalOpen}
+        title="Exportar histórico de estoque"
+        description={`A exportação respeita a busca atual e inclui ${movements.length} registro(s).`}
+        format={exportFormat}
+        onFormatChange={setExportFormat}
+        columns={MOVEMENT_GRID_COLUMNS.map((column) => ({
+          key: column.key,
+          label: column.label,
+        }))}
+        selectedColumns={exportColumns}
+        storageKey={getMovementExportStorageKey(runtimeContext.sourceTenantId)}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={async (config) => {
+          await exportGridRows({
+            rows: movements,
+            columns: (config.orderedColumns || []).length
+              ? config.orderedColumns
+                  .map((key) =>
+                    MOVEMENT_GRID_COLUMNS.find((definition) => definition.key === key),
+                  )
+                  .filter(
+                    (column): column is GridColumnDefinition<StockMovementItem, MovementGridColumnKey> =>
+                      Boolean(column),
+                  )
+              : MOVEMENT_GRID_COLUMNS,
+            selectedColumns: config.selectedColumns,
+            format: exportFormat,
+            fileBaseName: 'historico-movimentacao-estoque',
+            branding: {
+              title: 'Histórico de estoque',
+              subtitle: 'Exportação com os filtros atualmente aplicados.',
+              schoolName: runtimeContext.companyName || 'FINANCEIRO',
+            },
+            pdfOptions: config.pdfOptions,
+          });
+
+          setExportColumns(config.selectedColumns);
+          setIsExportModalOpen(false);
+        }}
+      />
+    </div>
+  );
+}

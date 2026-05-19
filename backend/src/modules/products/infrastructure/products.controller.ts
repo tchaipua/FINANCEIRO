@@ -5,6 +5,7 @@ import {
   ChangeProductStatusDto,
   GetProductDto,
   ListProductsDto,
+  ListStockMovementsDto,
   SaveProductDto,
 } from "../application/dto/products.dto";
 
@@ -19,6 +20,14 @@ export class ProductsController {
   })
   list(@Query() query: ListProductsDto) {
     return this.productsService.list(query);
+  }
+
+  @Get("stock-movements")
+  @ApiOperation({
+    summary: "Lista o histórico de movimentações de estoque",
+  })
+  listStockMovements(@Query() query: ListStockMovementsDto) {
+    return this.productsService.listStockMovements(query);
   }
 
   @Get(":productId")

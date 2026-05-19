@@ -34,6 +34,7 @@ model Company {
   payableTitles          PayableTitle[]
   payableInstallments    PayableInstallment[]
   stockMovements         StockMovement[]
+  productStockBalances   ProductStockBalance[]
   receivableBatches      ReceivableBatch[]
   receivableTitles       ReceivableTitle[]
   receivableInstallments ReceivableInstallment[]
@@ -42,15 +43,40 @@ model Company {
   cashSessions           CashSession[]
   cashMovements          CashMovement[]
   settlements            InstallmentSettlement[]
+  branches               CompanyBranch[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
   @@map("companies")
 }
 
+model CompanyBranch {
+  id                   String   @id @default(uuid())
+  companyId            String
+  branchCode           Int
+  name                 String
+  isActive             Boolean  @default(true)
+  isDefault            Boolean  @default(false)
+  inventoryControlType String   @default("TRADITIONAL")
+  quantityPrecision    String   @default("INTEGER_ONLY")
+  createdAt            DateTime @default(now())
+  createdBy            String?
+  updatedAt            DateTime @updatedAt
+  updatedBy            String?
+  canceledAt           DateTime?
+  canceledBy           String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode])
+  @@index([companyId, isActive, name])
+  @@map("company_branches")
+}
+
 model Product {
   id              String   @id @default(uuid())
   companyId       String
+  branchCode  Int      @default(1)
   status          String   @default("ACTIVE")
   name            String
   internalCode    String?
@@ -60,6 +86,8 @@ model Product {
   productType     String   @default("GOODS")
   tracksInventory Boolean  @default(true)
   allowFraction   Boolean  @default(false)
+  usesColorSize    Boolean  @default(false)
+  usesLotControl   Boolean  @default(false)
   currentStock    Float    @default(0)
   minimumStock    Float    @default(0)
   purchasePrice   Float?
@@ -77,18 +105,49 @@ model Product {
   company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImportItems PayableInvoiceImportItem[]
   stockMovements            StockMovement[]
+  stockBalances             ProductStockBalance[]
 
-  @@unique([companyId, internalCode])
-  @@unique([companyId, sku])
-  @@unique([companyId, barcode])
+  @@unique([companyId, branchCode, internalCode])
+  @@unique([companyId, branchCode, sku])
+  @@unique([companyId, branchCode, barcode])
   @@index([companyId, status, name])
   @@index([companyId, productType, tracksInventory])
   @@map("products")
 }
 
+model ProductStockBalance {
+  id                String    @id @default(uuid())
+  companyId         String
+  branchCode        Int       @default(0)
+  productId         String
+  variantKey        String    @default("GERAL")
+  colorCode         String?
+  colorName         String?
+  sizeCode          String?
+  lotNumber         String?
+  lotExpirationDate DateTime?
+  quantity          Float     @default(0)
+  reservedQuantity  Float     @default(0)
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, productId, branchCode, variantKey])
+  @@index([companyId, branchCode, productId])
+  @@index([companyId, productId, lotNumber])
+  @@map("product_stock_balances")
+}
+
 model FiscalCertificate {
   id                  String   @id @default(uuid())
   companyId           String
+  branchCode  Int      @default(1)
   status              String   @default("ACTIVE")
   certificateType     String   @default("A1")
   environment         String   @default("PRODUCTION")
@@ -126,6 +185,7 @@ model FiscalCertificate {
 model Supplier {
   id                String   @id @default(uuid())
   companyId         String
+  branchCode  Int      @default(1)
   status            String   @default("ACTIVE")
   legalName         String
   tradeName         String?
@@ -145,7 +205,7 @@ model Supplier {
   payableInvoiceImports PayableInvoiceImport[]
   payableTitles         PayableTitle[]
 
-  @@unique([companyId, document])
+  @@unique([companyId, branchCode, document])
   @@index([companyId, status, legalName])
   @@map("suppliers")
 }
@@ -153,6 +213,7 @@ model Supplier {
 model PayableInvoiceImport {
   id                  String   @id @default(uuid())
   companyId           String
+  branchCode  Int      @default(1)
   supplierId          String?
   fiscalCertificateId String?
   status              String   @default("PENDING_APPROVAL")
@@ -188,8 +249,8 @@ model PayableInvoiceImport {
   payableTitle PayableTitle?
   stockMovements StockMovement[]
 
-  @@unique([companyId, accessKey])
-  @@unique([companyId, xmlHash])
+  @@unique([companyId, branchCode, accessKey])
+  @@unique([companyId, branchCode, xmlHash])
   @@index([companyId, status, issueDate])
   @@index([companyId, invoiceNumber, series])
   @@index([fiscalCertificateId, distributionNsu])
@@ -260,6 +321,7 @@ model PayableInvoiceImportInstallment {
 model PayableTitle {
   id                     String   @id @default(uuid())
   companyId              String
+  branchCode  Int      @default(1)
   supplierId             String?
   sourceDocumentType     String
   sourceDocumentId       String   @unique
@@ -282,7 +344,7 @@ model PayableTitle {
   sourceImport PayableInvoiceImport @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
   installments PayableInstallment[]
 
-  @@unique([companyId, sourceDocumentType, sourceDocumentId])
+  @@unique([companyId, branchCode, sourceDocumentType, sourceDocumentId])
   @@index([companyId, status, issueDate])
   @@map("payable_titles")
 }
@@ -290,6 +352,7 @@ model PayableTitle {
 model PayableInstallment {
   id                    String   @id @default(uuid())
   companyId             String
+  branchCode  Int      @default(1)
   titleId               String
   installmentNumber     Int
   installmentCount      Int
@@ -326,6 +389,7 @@ model PayableInstallment {
 model StockMovement {
   id                String   @id @default(uuid())
   companyId         String
+  branchCode  Int      @default(1)
   productId         String
   sourceImportId    String
   sourceImportItemId String
@@ -357,6 +421,7 @@ model StockMovement {
 model BankAccount {
   id                  String   @id @default(uuid())
   companyId           String
+  branchCode  Int      @default(1)
   status              String   @default("ACTIVE")
   bankCode            String
   bankName            String
@@ -405,13 +470,14 @@ model BankAccount {
   bankReturnImportItems BankReturnImportItem[]
 
   @@index([companyId, status, bankName])
-  @@unique([companyId, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
+  @@unique([companyId, branchCode, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
   @@map("bank_accounts")
 }
 
 model Party {
   id                 String    @id @default(uuid())
   companyId          String
+  branchCode  Int      @default(1)
   externalEntityType String
   externalEntityId   String
   name               String
@@ -433,7 +499,7 @@ model Party {
   company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   receivableTitles ReceivableTitle[]
 
-  @@unique([companyId, externalEntityType, externalEntityId])
+  @@unique([companyId, branchCode, externalEntityType, externalEntityId])
   @@index([companyId, name])
   @@map("parties")
 }
@@ -441,6 +507,7 @@ model Party {
 model ReceivableBatch {
   id               String    @id @default(uuid())
   companyId        String
+  branchCode  Int      @default(1)
   sourceSystem     String
   sourceTenantId   String
   sourceBatchType  String
@@ -465,7 +532,7 @@ model ReceivableBatch {
   receivableTitles       ReceivableTitle[]
   receivableInstallments ReceivableInstallment[]
 
-  @@unique([companyId, sourceBatchId])
+  @@unique([companyId, branchCode, sourceBatchId])
   @@index([companyId, createdAt])
   @@index([sourceSystem, sourceTenantId])
   @@map("receivable_batches")
@@ -474,6 +541,7 @@ model ReceivableBatch {
 model ReceivableTitle {
   id                    String    @id @default(uuid())
   companyId             String
+  branchCode  Int      @default(1)
   batchId               String
   payerPartyId          String?
   sourceEntityType      String
@@ -500,7 +568,7 @@ model ReceivableTitle {
   payerParty   Party?                  @relation(fields: [payerPartyId], references: [id], onDelete: SetNull)
   installments ReceivableInstallment[]
 
-  @@unique([companyId, businessKey])
+  @@unique([companyId, branchCode, businessKey])
   @@index([companyId, sourceEntityType, sourceEntityId])
   @@index([batchId])
   @@map("receivable_titles")
@@ -509,6 +577,7 @@ model ReceivableTitle {
 model ReceivableInstallment {
   id                    String    @id @default(uuid())
   companyId             String
+  branchCode  Int      @default(1)
   batchId               String
   titleId               String
   bankAccountId         String?
@@ -559,7 +628,7 @@ model ReceivableInstallment {
   settlements InstallmentSettlement[]
   bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemInstallment")
 
-  @@unique([companyId, sourceInstallmentKey])
+  @@unique([companyId, branchCode, sourceInstallmentKey])
   @@index([companyId, status, dueDate])
   @@index([companyId, bankAccountId, status])
   @@index([titleId])
@@ -569,6 +638,7 @@ model ReceivableInstallment {
 model CashSession {
   id                    String    @id @default(uuid())
   companyId             String
+  branchCode  Int      @default(1)
   sourceSystem          String
   sourceTenantId        String
   cashierUserId         String
@@ -600,6 +670,7 @@ model CashSession {
 model CashMovement {
   id            String    @id @default(uuid())
   companyId     String
+  branchCode  Int      @default(1)
   cashSessionId String
   movementType  String
   direction     String
@@ -627,6 +698,7 @@ model CashMovement {
 model InstallmentSettlement {
   id             String    @id @default(uuid())
   companyId      String
+  branchCode  Int      @default(1)
   installmentId  String
   cashSessionId  String
   receivedAmount Float
@@ -658,6 +730,7 @@ model InstallmentSettlement {
 model BankReturnImport {
   id                 String   @id @default(uuid())
   companyId          String
+  branchCode  Int      @default(1)
   bankAccountId      String
   provider           String
   periodStart        DateTime
@@ -692,6 +765,7 @@ model BankReturnImportItem {
   id                  String    @id @default(uuid())
   importId            String
   companyId           String
+  branchCode  Int      @default(1)
   bankAccountId       String
   matchedInstallmentId String?
   appliedSettlementId String?

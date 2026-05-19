@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { PrismaModule } from "./prisma/prisma.module";
 import { CompaniesModule } from "./modules/companies/companies.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
@@ -8,6 +8,7 @@ import { BanksModule } from "./modules/banks/banks.module";
 import { ProductsModule } from "./modules/products/products.module";
 import { PayablesModule } from "./modules/payables/payables.module";
 import { FiscalCertificatesModule } from "./modules/fiscal-certificates/fiscal-certificates.module";
+import { FinanceContextMiddleware } from "./common/finance-context.middleware";
 
 @Module({
   imports: [
@@ -22,4 +23,8 @@ import { FiscalCertificatesModule } from "./modules/fiscal-certificates/fiscal-c
     FiscalCertificatesModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(FinanceContextMiddleware).forRoutes("*");
+  }
+}

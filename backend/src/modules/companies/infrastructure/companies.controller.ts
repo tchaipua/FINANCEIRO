@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CompaniesService } from "../application/companies.service";
 import {
   ListCompaniesDto,
+  SaveCompanyBranchDto,
   SyncCompanyFinancialSettingsDto,
   UpdateCompanyFinancialSettingsDto,
 } from "../application/dto/companies.dto";
@@ -39,5 +40,38 @@ export class CompaniesController {
     @Body() payload: UpdateCompanyFinancialSettingsDto,
   ) {
     return this.companiesService.updateFinancialSettings(id, query, payload);
+  }
+
+  @Get(":id/branches")
+  @ApiOperation({
+    summary: "Lista as filiais ativas da empresa financeira",
+  })
+  listBranches(@Param("id") id: string, @Query() query: ListCompaniesDto) {
+    return this.companiesService.listBranches(id, query);
+  }
+
+  @Post(":id/branches")
+  @ApiOperation({
+    summary: "Cria uma nova filial na empresa financeira",
+  })
+  createBranch(
+    @Param("id") id: string,
+    @Query() query: ListCompaniesDto,
+    @Body() payload: SaveCompanyBranchDto,
+  ) {
+    return this.companiesService.createBranch(id, query, payload);
+  }
+
+  @Patch(":id/branches/:branchId")
+  @ApiOperation({
+    summary: "Atualiza os parâmetros operacionais de estoque da filial",
+  })
+  updateBranch(
+    @Param("id") id: string,
+    @Param("branchId") branchId: string,
+    @Query() query: ListCompaniesDto,
+    @Body() payload: SaveCompanyBranchDto,
+  ) {
+    return this.companiesService.updateBranch(id, branchId, query, payload);
   }
 }

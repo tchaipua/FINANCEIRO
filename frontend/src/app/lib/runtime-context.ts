@@ -7,6 +7,7 @@ export type FinanceRuntimeContext = {
   embedded: boolean;
   sourceSystem: string | null;
   sourceTenantId: string | null;
+  sourceBranchCode: number;
   companyName: string | null;
   logoUrl: string | null;
   cashierUserId: string | null;
@@ -36,6 +37,7 @@ const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
   embedded: false,
   sourceSystem: null,
   sourceTenantId: null,
+  sourceBranchCode: 1,
   companyName: null,
   logoUrl: null,
   cashierUserId: null,
@@ -51,6 +53,11 @@ function normalizePermissions(value: string | null) {
     .filter((permission): permission is string => Boolean(permission));
 }
 
+function normalizeBranchCode(value: string | null) {
+  const normalized = Number.parseInt(String(value || '').trim(), 10);
+  return Number.isInteger(normalized) && normalized >= 0 ? normalized : 1;
+}
+
 function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
   const searchParams = new URLSearchParams(search);
 
@@ -58,6 +65,7 @@ function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
     embedded: searchParams.get('embedded') === '1',
     sourceSystem: normalizeQueryValue(searchParams.get('sourceSystem')),
     sourceTenantId: normalizeQueryValue(searchParams.get('sourceTenantId')),
+    sourceBranchCode: normalizeBranchCode(searchParams.get('sourceBranchCode')),
     companyName: normalizeQueryValue(searchParams.get('companyName')),
     logoUrl: normalizeQueryValue(searchParams.get('logoUrl'), false),
     cashierUserId: normalizeQueryValue(searchParams.get('cashierUserId')),
@@ -109,6 +117,10 @@ export function buildFinanceNavigationQueryString(
 
   if (runtimeContext.sourceTenantId) {
     params.set('sourceTenantId', runtimeContext.sourceTenantId);
+  }
+
+  if (Number.isInteger(runtimeContext.sourceBranchCode) && runtimeContext.sourceBranchCode >= 0) {
+    params.set('sourceBranchCode', String(runtimeContext.sourceBranchCode));
   }
 
   if (runtimeContext.companyName) {

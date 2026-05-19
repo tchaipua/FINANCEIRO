@@ -7,9 +7,16 @@ import {
 } from "../../../common/finance-core.utils";
 import {
   ListCompaniesDto,
+  SaveCompanyBranchDto,
   SyncCompanyFinancialSettingsDto,
   UpdateCompanyFinancialSettingsDto,
 } from "./dto/companies.dto";
+import {
+  ensureDefaultCompanyBranch,
+  listCompanyBranches,
+  mapCompanyBranchSummary,
+} from "../../../common/company-branches";
+import { DEFAULT_BRANCH_CODE, normalizeBranchCode } from "../../../common/branch.constants";
 
 @Injectable()
 export class CompaniesService {
@@ -33,6 +40,44 @@ export class CompaniesService {
       installmentCount: company._count?.receivableInstallments ?? 0,
       cashSessionCount: company._count?.cashSessions ?? 0,
     };
+  }
+
+  private async findScopedCompany(
+    id: string,
+    sourceSystem?: string | null,
+    sourceTenantId?: string | null,
+  ) {
+    const normalizedCompanyId = String(id || "").trim();
+    const normalizedSourceSystem = normalizeText(sourceSystem);
+    const normalizedSourceTenantId = normalizeText(sourceTenantId);
+
+    if (!normalizedCompanyId) {
+      throw new BadRequestException("Empresa financeira inválida.");
+    }
+
+    if (!normalizedSourceTenantId) {
+      throw new BadRequestException("Informe o tenant de origem da empresa.");
+    }
+
+    const company = await this.prisma.company.findFirst({
+      where: {
+        id: normalizedCompanyId,
+        canceledAt: null,
+        sourceTenantId: normalizedSourceTenantId,
+        ...(normalizedSourceSystem
+          ? { sourceSystem: normalizedSourceSystem }
+          : {}),
+      },
+    });
+
+    if (!company) {
+      throw new NotFoundException(
+        "Empresa financeira não encontrada para o tenant informado.",
+      );
+    }
+
+    await ensureDefaultCompanyBranch(this.prisma, company.id);
+    return company;
   }
 
   private normalizeOptionalInt(value?: number | null) {
@@ -59,6 +104,22 @@ export class CompaniesService {
     }
 
     return roundMoney(Math.max(0, normalized));
+  }
+
+  private normalizeInventoryControlType(value?: string | null) {
+    const normalized = normalizeText(value) || "TRADITIONAL";
+    return ["TRADITIONAL", "COLOR_SIZE", "LOT"].includes(normalized)
+      ? normalized
+      : "TRADITIONAL";
+  }
+
+  private normalizeQuantityPrecision(value?: string | null) {
+    const normalized = normalizeText(value) || "INTEGER_ONLY";
+    return ["INTEGER_ONLY", "DECIMAL_ALLOWED", "PRODUCT_DEFINED"].includes(
+      normalized,
+    )
+      ? normalized
+      : "INTEGER_ONLY";
   }
 
   async list(query: ListCompaniesDto) {
@@ -141,6 +202,11 @@ export class CompaniesService {
         where: { id: existing.id },
         data,
       });
+      await ensureDefaultCompanyBranch(
+        this.prisma,
+        company.id,
+        payload.requestedBy || null,
+      );
 
       return {
         id: company.id,
@@ -168,6 +234,12 @@ export class CompaniesService {
       },
     });
 
+    await ensureDefaultCompanyBranch(
+      this.prisma,
+      company.id,
+      payload.requestedBy || null,
+    );
+
     return {
       id: company.id,
       sourceSystem: company.sourceSystem,
@@ -181,43 +253,11 @@ export class CompaniesService {
     scope: ListCompaniesDto,
     payload: UpdateCompanyFinancialSettingsDto,
   ) {
-    const normalizedCompanyId = String(id || "").trim();
-    const normalizedSourceSystem = normalizeText(scope.sourceSystem);
-    const normalizedSourceTenantId = normalizeText(scope.sourceTenantId);
-
-    if (!normalizedCompanyId) {
-      throw new BadRequestException("Empresa financeira inválida.");
-    }
-
-    if (!normalizedSourceTenantId) {
-      throw new BadRequestException("Informe o tenant de origem da empresa.");
-    }
-
-    const company = await this.prisma.company.findFirst({
-      where: {
-        id: normalizedCompanyId,
-        canceledAt: null,
-        sourceTenantId: normalizedSourceTenantId,
-        ...(normalizedSourceSystem
-          ? { sourceSystem: normalizedSourceSystem }
-          : {}),
-      },
-      include: {
-        _count: {
-          select: {
-            receivableTitles: true,
-            receivableInstallments: true,
-            cashSessions: true,
-          },
-        },
-      },
-    });
-
-    if (!company) {
-      throw new NotFoundException(
-        "Empresa financeira não encontrada para o tenant informado.",
-      );
-    }
+    const company = await this.findScopedCompany(
+      id,
+      scope.sourceSystem,
+      scope.sourceTenantId,
+    );
 
     const updatedCompany = await this.prisma.company.update({
       where: { id: company.id },
@@ -241,5 +281,107 @@ export class CompaniesService {
     });
 
     return this.mapCompany(updatedCompany);
+  }
+
+  async listBranches(id: string, scope: ListCompaniesDto) {
+    const company = await this.findScopedCompany(
+      id,
+      scope.sourceSystem,
+      scope.sourceTenantId,
+    );
+    const branches = await listCompanyBranches(this.prisma, company.id);
+    return branches.map(mapCompanyBranchSummary);
+  }
+
+  async createBranch(
+    id: string,
+    scope: ListCompaniesDto,
+    payload: SaveCompanyBranchDto,
+  ) {
+    const company = await this.findScopedCompany(
+      id,
+      scope.sourceSystem,
+      scope.sourceTenantId,
+    );
+    const branches = await listCompanyBranches(this.prisma, company.id);
+    const requestedBranchCode =
+      payload.branchCode === undefined || payload.branchCode === null
+        ? Math.max(...branches.map((branch) => branch.branchCode), 0) + 1
+        : normalizeBranchCode(payload.branchCode, -1);
+
+    if (requestedBranchCode < DEFAULT_BRANCH_CODE) {
+      throw new BadRequestException("A filial deve usar código maior ou igual a 1.");
+    }
+
+    const alreadyExists = branches.some(
+      (branch) => branch.branchCode === requestedBranchCode,
+    );
+    if (alreadyExists) {
+      throw new BadRequestException("Já existe uma filial com este código.");
+    }
+
+    const createdBranch = await this.prisma.companyBranch.create({
+      data: {
+        companyId: company.id,
+        branchCode: requestedBranchCode,
+        name: String(payload.name || `FILIAL ${requestedBranchCode}`)
+          .trim()
+          .toUpperCase(),
+        isActive: true,
+        isDefault: false,
+        inventoryControlType: this.normalizeInventoryControlType(
+          payload.inventoryControlType,
+        ),
+        quantityPrecision: this.normalizeQuantityPrecision(
+          payload.quantityPrecision,
+        ),
+        createdBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return mapCompanyBranchSummary(createdBranch);
+  }
+
+  async updateBranch(
+    id: string,
+    branchId: string,
+    scope: ListCompaniesDto,
+    payload: SaveCompanyBranchDto,
+  ) {
+    const company = await this.findScopedCompany(
+      id,
+      scope.sourceSystem,
+      scope.sourceTenantId,
+    );
+    const branch = await this.prisma.companyBranch.findFirst({
+      where: {
+        id: branchId,
+        companyId: company.id,
+        canceledAt: null,
+      },
+    });
+
+    if (!branch) {
+      throw new BadRequestException("Filial não encontrada para esta empresa.");
+    }
+
+    const updatedBranch = await this.prisma.companyBranch.update({
+      where: { id: branch.id },
+      data: {
+        ...(payload.name
+          ? { name: String(payload.name).trim().toUpperCase() }
+          : {}),
+        inventoryControlType: this.normalizeInventoryControlType(
+          payload.inventoryControlType || branch.inventoryControlType,
+        ),
+        quantityPrecision: this.normalizeQuantityPrecision(
+          payload.quantityPrecision || branch.quantityPrecision,
+        ),
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return mapCompanyBranchSummary(updatedBranch);
   }
 }

@@ -5,10 +5,14 @@ import {
   normalizeText,
   roundMoney,
 } from "../../../common/finance-core.utils";
+import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
+import { ensureDefaultCompanyBranch } from "../../../common/company-branches";
+import { getFinanceContext } from "../../../common/finance-context";
 import {
   ChangeProductStatusDto,
   GetProductDto,
   ListProductsDto,
+  ListStockMovementsDto,
   SaveProductDto,
 } from "./dto/products.dto";
 
@@ -21,6 +25,8 @@ type NormalizedProductPayload = {
   productType: string;
   tracksInventory: boolean;
   allowFraction: boolean;
+  usesColorSize: boolean;
+  usesLotControl: boolean;
   currentStock: number;
   minimumStock: number;
   purchasePrice: number | null;
@@ -28,6 +34,12 @@ type NormalizedProductPayload = {
   ncmCode: string | null;
   cestCode: string | null;
   notes: string | null;
+};
+
+type BranchInventoryConfig = {
+  branchCode: number;
+  inventoryControlType: string;
+  quantityPrecision: string;
 };
 
 @Injectable()
@@ -51,11 +63,164 @@ export class ProductsService {
     return typeof value === "boolean" ? value : fallback;
   }
 
-  private buildNormalizedPayload(payload: SaveProductDto): NormalizedProductPayload {
+  private currentBranchCode() {
+    const branchCode = getFinanceContext()?.branchCode;
+    return Number.isInteger(branchCode) && Number(branchCode) >= 0
+      ? Number(branchCode)
+      : DEFAULT_BRANCH_CODE;
+  }
+
+  private async loadCurrentBranchConfig(
+    companyId: string,
+  ): Promise<BranchInventoryConfig> {
+    await ensureDefaultCompanyBranch(this.prisma, companyId);
+
+    const requestedBranchCode = this.currentBranchCode() || DEFAULT_BRANCH_CODE;
+    const branch =
+      (await this.prisma.companyBranch.findFirst({
+        where: {
+          companyId,
+          branchCode: requestedBranchCode,
+          canceledAt: null,
+        },
+      })) ||
+      (await this.prisma.companyBranch.findFirst({
+        where: {
+          companyId,
+          branchCode: DEFAULT_BRANCH_CODE,
+          canceledAt: null,
+        },
+      }));
+
+    return {
+      branchCode: branch?.branchCode || DEFAULT_BRANCH_CODE,
+      inventoryControlType: branch?.inventoryControlType || "TRADITIONAL",
+      quantityPrecision: branch?.quantityPrecision || "INTEGER_ONLY",
+    };
+  }
+
+  private async loadBranchConfigByCode(
+    companyId: string,
+    branchCode: number,
+  ): Promise<BranchInventoryConfig> {
+    const branch = await this.prisma.companyBranch.findFirst({
+      where: {
+        companyId,
+        branchCode,
+        canceledAt: null,
+      },
+    });
+
+    return {
+      branchCode,
+      inventoryControlType: branch?.inventoryControlType || "TRADITIONAL",
+      quantityPrecision: branch?.quantityPrecision || "INTEGER_ONLY",
+    };
+  }
+
+  private normalizeStockQuantity(
+    value: number | null | undefined,
+    allowFraction: boolean,
+    fieldLabel: string,
+  ) {
+    const normalized = this.normalizeOptionalNumber(value) ?? 0;
+
+    if (!allowFraction && !Number.isInteger(normalized)) {
+      throw new BadRequestException(
+        `${fieldLabel} deve usar quantidade inteira nesta filial.`,
+      );
+    }
+
+    return allowFraction ? normalized : Math.trunc(normalized);
+  }
+
+  private buildVariantKey(payload: NormalizedProductPayload) {
+    const parts = [
+      payload.usesColorSize ? "GRADE" : "GERAL",
+      payload.usesLotControl ? "LOTE" : "SEM_LOTE",
+    ];
+
+    return parts.join("|");
+  }
+
+  private async upsertInitialStockBalances(
+    productId: string,
+    companyId: string,
+    branchCode: number,
+    payload: NormalizedProductPayload,
+    requestedBy?: string | null,
+  ) {
+    if (!payload.tracksInventory) {
+      return;
+    }
+
+    const variantKey = this.buildVariantKey(payload);
+    const quantity = payload.currentStock;
+
+    for (const balanceBranchCode of [0, branchCode]) {
+      await this.prisma.productStockBalance.upsert({
+        where: {
+          companyId_productId_branchCode_variantKey: {
+            companyId,
+            productId,
+            branchCode: balanceBranchCode,
+            variantKey,
+          },
+        },
+        create: {
+          companyId,
+          productId,
+          branchCode: balanceBranchCode,
+          variantKey,
+          quantity,
+          reservedQuantity: 0,
+          createdBy: requestedBy || null,
+          updatedBy: requestedBy || null,
+        },
+        update: {
+          quantity,
+          updatedBy: requestedBy || null,
+        },
+      });
+    }
+  }
+
+  private getBranchSummary(
+    product: { branchCode?: number | null },
+    branchConfig?: BranchInventoryConfig,
+  ) {
+    return {
+      branchCode:
+        branchConfig?.branchCode || product.branchCode || DEFAULT_BRANCH_CODE,
+      inventoryControlType:
+        branchConfig?.inventoryControlType || "TRADITIONAL",
+      quantityPrecision: branchConfig?.quantityPrecision || "INTEGER_ONLY",
+    };
+  }
+
+  private buildNormalizedPayload(
+    payload: SaveProductDto,
+    branchConfig: BranchInventoryConfig,
+  ): NormalizedProductPayload {
     const normalizedName = normalizeText(payload.name);
     if (!normalizedName) {
       throw new BadRequestException("Informe o nome do produto.");
     }
+
+    const usesColorSize =
+      branchConfig.inventoryControlType === "COLOR_SIZE"
+        ? this.normalizeBoolean(payload.usesColorSize, false)
+        : false;
+    const usesLotControl =
+      branchConfig.inventoryControlType === "LOT"
+        ? this.normalizeBoolean(payload.usesLotControl, false)
+        : false;
+    const allowFraction =
+      branchConfig.quantityPrecision === "DECIMAL_ALLOWED"
+        ? true
+        : branchConfig.quantityPrecision === "PRODUCT_DEFINED"
+          ? this.normalizeBoolean(payload.allowFraction, false)
+          : false;
 
     return {
       name: normalizedName,
@@ -65,9 +230,19 @@ export class ProductsService {
       unitCode: normalizeText(payload.unitCode) || "UN",
       productType: normalizeText(payload.productType) || "GOODS",
       tracksInventory: this.normalizeBoolean(payload.tracksInventory, true),
-      allowFraction: this.normalizeBoolean(payload.allowFraction, false),
-      currentStock: this.normalizeOptionalNumber(payload.currentStock) ?? 0,
-      minimumStock: this.normalizeOptionalNumber(payload.minimumStock) ?? 0,
+      allowFraction,
+      usesColorSize,
+      usesLotControl,
+      currentStock: this.normalizeStockQuantity(
+        payload.currentStock,
+        allowFraction,
+        "O estoque atual",
+      ),
+      minimumStock: this.normalizeStockQuantity(
+        payload.minimumStock,
+        allowFraction,
+        "O estoque mínimo",
+      ),
       purchasePrice: this.normalizeOptionalNumber(payload.purchasePrice),
       salePrice: this.normalizeOptionalNumber(payload.salePrice),
       ncmCode: normalizeDigits(payload.ncmCode) || normalizeText(payload.ncmCode),
@@ -97,7 +272,7 @@ export class ProductsService {
     return "OK";
   }
 
-  private mapProduct(product: any) {
+  private mapProduct(product: any, branchConfig?: BranchInventoryConfig) {
     return {
       id: product.id,
       companyId: product.companyId,
@@ -113,6 +288,8 @@ export class ProductsService {
       productType: product.productType,
       tracksInventory: Boolean(product.tracksInventory),
       allowFraction: Boolean(product.allowFraction),
+      usesColorSize: Boolean(product.usesColorSize),
+      usesLotControl: Boolean(product.usesLotControl),
       currentStock: roundMoney(product.currentStock || 0),
       minimumStock: roundMoney(product.minimumStock || 0),
       purchasePrice:
@@ -127,9 +304,73 @@ export class ProductsService {
       cestCode: product.cestCode || null,
       notes: product.notes || null,
       inventorySituation: this.getInventorySituation(product),
+      branchCode: product.branchCode || DEFAULT_BRANCH_CODE,
+      branch: this.getBranchSummary(product, branchConfig),
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
       canceledAt: product.canceledAt ? product.canceledAt.toISOString() : null,
+    };
+  }
+
+  private getMovementTypeLabel(value?: string | null) {
+    const normalized = normalizeText(value);
+
+    if (normalized === "ENTRY") {
+      return "ENTRADA";
+    }
+
+    if (normalized === "EXIT") {
+      return "SAÍDA";
+    }
+
+    if (normalized === "ADJUSTMENT") {
+      return "AJUSTE";
+    }
+
+    if (normalized === "REVERSAL") {
+      return "ESTORNO";
+    }
+
+    if (normalized === "TRANSFER") {
+      return "TRANSFERÊNCIA";
+    }
+
+    return normalized || "MOVIMENTAÇÃO";
+  }
+
+  private mapStockMovement(movement: any) {
+    const sourceImport = movement.sourceImport;
+    const product = movement.product;
+    const movementType = normalizeText(movement.movementType) || "MOVEMENT";
+
+    return {
+      id: movement.id,
+      companyId: movement.companyId,
+      branchCode: movement.branchCode || DEFAULT_BRANCH_CODE,
+      productId: movement.productId,
+      productName: product?.name || "PRODUTO NÃO IDENTIFICADO",
+      productInternalCode: product?.internalCode || null,
+      productBarcode: product?.barcode || null,
+      productUnitCode: product?.unitCode || null,
+      movementType,
+      movementTypeLabel: this.getMovementTypeLabel(movementType),
+      quantity: roundMoney(movement.quantity || 0),
+      previousStock: roundMoney(movement.previousStock || 0),
+      resultingStock: roundMoney(movement.resultingStock || 0),
+      unitCost:
+        movement.unitCost === null || movement.unitCost === undefined
+          ? null
+          : roundMoney(movement.unitCost),
+      sourceType: sourceImport ? "NF-E" : "SISTEMA",
+      sourceDocument:
+        sourceImport?.invoiceNumber
+          ? `NF-E ${sourceImport.invoiceNumber}${sourceImport.series ? `/${sourceImport.series}` : ""}`
+          : null,
+      sourceAccessKey: sourceImport?.accessKey || null,
+      notes: movement.notes || null,
+      occurredAt: movement.occurredAt.toISOString(),
+      createdBy: movement.createdBy || null,
+      createdAt: movement.createdAt.toISOString(),
     };
   }
 
@@ -330,7 +571,111 @@ export class ProductsService {
       orderBy: [{ name: "asc" }],
     });
 
-    return products.map((product) => this.mapProduct(product));
+    const branches = await this.prisma.companyBranch.findMany({
+      where: {
+        companyId: company.id,
+        canceledAt: null,
+      },
+    });
+    const branchConfigs = new Map(
+      branches.map((branch) => [
+        branch.branchCode,
+        {
+          branchCode: branch.branchCode,
+          inventoryControlType: branch.inventoryControlType,
+          quantityPrecision: branch.quantityPrecision,
+        },
+      ]),
+    );
+
+    return products.map((product) =>
+      this.mapProduct(product, branchConfigs.get(product.branchCode)),
+    );
+  }
+
+  async listStockMovements(query: ListStockMovementsDto) {
+    const company = await this.findCompany(
+      query.sourceSystem,
+      query.sourceTenantId,
+    );
+
+    if (!company) {
+      return [];
+    }
+
+    const normalizedSearch = normalizeText(query.search);
+    const normalizedDigits = normalizeDigits(query.search);
+    const normalizedMovementType = normalizeText(query.movementType);
+    const requestedBranchCode =
+      Number.isInteger(query.sourceBranchCode) && Number(query.sourceBranchCode) >= 0
+        ? Number(query.sourceBranchCode)
+        : this.currentBranchCode();
+
+    const movements = await this.prisma.stockMovement.findMany({
+      where: {
+        companyId: company.id,
+        canceledAt: null,
+        branchCode: requestedBranchCode,
+        ...(normalizedMovementType && normalizedMovementType !== "ALL"
+          ? { movementType: normalizedMovementType }
+          : {}),
+        ...(normalizedSearch
+          ? {
+              OR: [
+                { notes: { contains: normalizedSearch } },
+                {
+                  product: {
+                    is: {
+                      name: { contains: normalizedSearch },
+                    },
+                  },
+                },
+                {
+                  product: {
+                    is: {
+                      internalCode: { contains: normalizedSearch },
+                    },
+                  },
+                },
+                {
+                  product: {
+                    is: {
+                      barcode: {
+                        contains: normalizedDigits || normalizedSearch,
+                      },
+                    },
+                  },
+                },
+                {
+                  sourceImport: {
+                    is: {
+                      invoiceNumber: { contains: normalizedSearch },
+                    },
+                  },
+                },
+                {
+                  sourceImport: {
+                    is: {
+                      accessKey: {
+                        contains: normalizedDigits || normalizedSearch,
+                      },
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        product: true,
+        sourceImport: true,
+        sourceImportItem: true,
+      },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      take: 500,
+    });
+
+    return movements.map((movement) => this.mapStockMovement(movement));
   }
 
   async get(productId: string, query: GetProductDto) {
@@ -340,12 +685,16 @@ export class ProductsService {
       query.sourceTenantId,
     );
 
-    return this.mapProduct(product);
+    return this.mapProduct(
+      product,
+      await this.loadBranchConfigByCode(product.companyId, product.branchCode),
+    );
   }
 
   async create(payload: SaveProductDto) {
     const company = await this.resolveOrCreateCompany(payload);
-    const normalizedPayload = this.buildNormalizedPayload(payload);
+    const branchConfig = await this.loadCurrentBranchConfig(company.id);
+    const normalizedPayload = this.buildNormalizedPayload(payload, branchConfig);
 
     await this.ensureNoDuplicateProduct(company.id, normalizedPayload);
 
@@ -362,7 +711,15 @@ export class ProductsService {
       },
     });
 
-    return this.mapProduct(product);
+    await this.upsertInitialStockBalances(
+      product.id,
+      product.companyId,
+      branchConfig.branchCode,
+      normalizedPayload,
+      payload.requestedBy,
+    );
+
+    return this.mapProduct(product, branchConfig);
   }
 
   async update(productId: string, payload: SaveProductDto) {
@@ -371,7 +728,8 @@ export class ProductsService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
-    const normalizedPayload = this.buildNormalizedPayload(payload);
+    const branchConfig = await this.loadCurrentBranchConfig(product.companyId);
+    const normalizedPayload = this.buildNormalizedPayload(payload, branchConfig);
 
     await this.ensureNoDuplicateProduct(
       product.companyId,
@@ -390,7 +748,15 @@ export class ProductsService {
       },
     });
 
-    return this.mapProduct(updatedProduct);
+    await this.upsertInitialStockBalances(
+      updatedProduct.id,
+      updatedProduct.companyId,
+      branchConfig.branchCode,
+      normalizedPayload,
+      payload.requestedBy,
+    );
+
+    return this.mapProduct(updatedProduct, branchConfig);
   }
 
   async activate(productId: string, payload: ChangeProductStatusDto) {
@@ -413,7 +779,13 @@ export class ProductsService {
       },
     });
 
-    return this.mapProduct(updatedProduct);
+    return this.mapProduct(
+      updatedProduct,
+      await this.loadBranchConfigByCode(
+        updatedProduct.companyId,
+        updatedProduct.branchCode,
+      ),
+    );
   }
 
   async inactivate(productId: string, payload: ChangeProductStatusDto) {
@@ -436,6 +808,12 @@ export class ProductsService {
       },
     });
 
-    return this.mapProduct(updatedProduct);
+    return this.mapProduct(
+      updatedProduct,
+      await this.loadBranchConfigByCode(
+        updatedProduct.companyId,
+        updatedProduct.branchCode,
+      ),
+    );
   }
 }

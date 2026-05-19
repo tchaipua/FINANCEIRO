@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -116,4 +117,30 @@ export class UpdateCompanyFinancialSettingsDto {
   @IsNumber()
   @Min(0)
   penaltyGracePeriod?: number | null;
+}
+
+export class SaveCompanyBranchDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  branchCode?: number;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["TRADITIONAL", "COLOR_SIZE", "LOT"])
+  inventoryControlType?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["INTEGER_ONLY", "DECIMAL_ALLOWED", "PRODUCT_DEFINED"])
+  quantityPrecision?: string;
 }

@@ -82,3 +82,38 @@ Motivo:
 - evitar divergencia visual entre `Escola` e `Financeiro`;
 - preservar o padrao aprovado como patrimonio compartilhado entre os dois sistemas;
 - reduzir regressao em futuras manutencoes de header.
+
+## D009 - Estoque parametrizado por filial
+
+O estoque do `Financeiro` passa a ser parametrizado por filial.
+
+Decisao:
+
+- cada filial define se o estoque e tradicional, por cor/numero ou por lote;
+- cada filial define se as quantidades sao inteiras, decimais ou definidas por produto;
+- o cadastro de produto so exibe e aceita as opcoes permitidas pela filial atual;
+- os saldos sao preparados em `product_stock_balances` para estoque geral da empresa (`branchCode = 0`) e estoque separado por filial.
+
+Motivo:
+
+- permitir uso do mesmo `Financeiro` por escola, loja, petshop, oficina e outras verticais;
+- evitar campos desnecessarios na tela quando a filial nao usa grade, lote ou decimal;
+- preparar estoque por produto, filial, variacao e lote sem acoplar o core a uma vertical.
+
+## D010 - Tratamento do alerta npm audit do Next/PostCSS
+
+O `frontend` do `Financeiro` foi atualizado para `next@16.2.6` apos `npm audit fix --force`.
+
+Decisao:
+
+- manter `next@16.2.6`;
+- nao aplicar a sugestao restante do `npm audit` que aponta downgrade para `next@9.3.3`;
+- tratar o alerta residual de `postcss` interno do Next como risco conhecido temporario;
+- revisar novamente quando houver patch oficial do Next moderno que resolva a dependencia interna sem downgrade incompatível.
+
+Motivo:
+
+- o projeto usa Next moderno com App Router;
+- downgrade para Next 9 e incompatível com a arquitetura atual e tende a quebrar o frontend;
+- `npm run build` e teste visual com Playwright passaram em `next@16.2.6`;
+- a mitigacao segura e acompanhar nova versao compatível, nao forcar downgrade automatico.
