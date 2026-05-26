@@ -52,7 +52,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - parcelas geradas no contas a pagar
 - movimentos de estoque gerados
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - produto existente listado apenas para o tenant atual
 

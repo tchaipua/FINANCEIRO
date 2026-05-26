@@ -18,6 +18,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type CashSessionItem = {
   id: string;
@@ -98,6 +99,73 @@ function formatDateTimeLabel(value?: string | null) {
 
 function normalizeSessionStatus(value?: string | null) {
   return String(value || '').trim().toUpperCase() === 'OPEN' ? 'ABERTO' : 'FECHADO';
+}
+
+type CashAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  companyName?: string | null;
+  filters: CashSessionFilters;
+  displayedRowsCount: number;
+  openCount: number;
+  closedCount: number;
+};
+
+function buildCashAuditSql(params: CashAuditParams) {
+  const search = params.filters.search.trim().toUpperCase();
+  const status = String(params.filters.status || 'ALL').toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :search = ${toSqlLiteral(search)}
+-- :status = ${toSqlLiteral(status)}
+
+SELECT CS.*
+FROM cash_sessions CS
+WHERE CS.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND CS.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(CS.companyName, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(CS.cashierDisplayName, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(CS.sourceSystem, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(CS.sourceTenantId, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+  AND (
+    ${toSqlLiteral(status)} = 'ALL'
+    OR (${toSqlLiteral(status)} = 'OPEN' AND CS.status = 'OPEN')
+    OR (${toSqlLiteral(status)} = 'CLOSED' AND CS.status <> 'OPEN')
+  )
+ORDER BY CS.openedAt DESC;`;
+}
+
+function buildCashAuditText(params: CashAuditParams) {
+  const search = params.filters.search.trim().toUpperCase();
+  const status = String(params.filters.status || 'ALL').toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Tela de grid/listagem das sessoes de caixa do Financeiro.
+
+TABELAS PRINCIPAIS:
+- cash_sessions (CS) - sessoes de caixa
+
+RELACIONAMENTOS:
+- cada sessao pertence ao sistema/tenant de origem e ao operador do caixa
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId, params.companyName)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- busca digitada (:search): ${formatAuditValue(search)}
+- status selecionado (:status): ${status}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- sessoes abertas no filtro de busca: ${params.openCount}
+- sessoes fechadas no filtro de busca: ${params.closedCount}
+- ordenacao atual: abertura DESC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- CS.sourceSystem e CS.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
 }
 
 function getCashSessionGridStorageKey(tenantId: string | null) {
@@ -485,6 +553,30 @@ export default function FinanceiroCashPage() {
     [searchMatchedSessions],
   );
   const closedCount = searchMatchedSessions.length - openCount;
+  const cashAuditContext = useMemo(() => {
+    const auditParams: CashAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      companyName: filteredSessions[0]?.companyName || sessions[0]?.companyName,
+      filters: appliedFilters,
+      displayedRowsCount: filteredSessions.length,
+      openCount,
+      closedCount,
+    };
+
+    return {
+      auditText: buildCashAuditText(auditParams),
+      sqlText: buildCashAuditSql(auditParams),
+    };
+  }, [
+    appliedFilters,
+    closedCount,
+    filteredSessions,
+    openCount,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    sessions,
+  ]);
 
   const loadSessions = useCallback(async () => {
     if (!runtimeTenantReady) {
@@ -896,7 +988,12 @@ export default function FinanceiroCashPage() {
               Registros exibidos ({filteredSessions.length})
             </div>
             {!runtimeContext.embedded ? (
-              <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+              <ScreenNameCopy
+                screenId={SCREEN_ID}
+                className="justify-end"
+                auditText={cashAuditContext.auditText}
+                sqlText={cashAuditContext.sqlText}
+              />
             ) : null}
           </div>
         </div>

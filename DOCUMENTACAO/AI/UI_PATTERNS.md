@@ -116,6 +116,21 @@ Arquivos de referencia tecnica no Financeiro:
 - o bloco do identificador nao deve disputar a mesma linha dos botoes principais do popup
 - a regra vale tanto para popup aberto em tela cheia do `Financeiro` quanto para popup interno de uma tela embutida em outra vertical
 - em tela embutida, continua valendo a regra de nao duplicar o identificador principal da vertical hospedeira no corpo da pagina; essa excecao nao impede o uso do identificador tecnico proprio dentro de popup interno do `Financeiro`
+- a referencia visual aprovada para a auditoria SQL compartilhada com a Escola e a tela `PRINCIPAL_PROFESSORES`
+- o cabecalho do modal de auditoria deve concentrar os controles principais:
+  - esquerda: logotipo institucional, etiqueta `Auditoria SQL`, identificador tecnico e pill `ORIGEM: SISTEMA ...`
+  - centro: seletor de abas `Outras informações` / `SQL`
+  - direita: botoes textuais `Fechar` e `Copiar SQL` com o mesmo tamanho
+- o botao `Copiar SQL` deve aparecer somente quando a aba `SQL` estiver ativa
+- os botoes de acao nao devem ser repetidos no rodape do modal
+- o path/origem tecnica do arquivo deve ficar abaixo do cabecalho em pill vermelha centralizada
+- a auditoria SQL deve ser separada em duas abas:
+  - `Outras informações`, aberta por padrao, com origem, tabelas, relacionamentos, metricas/campos exibidos, filtros aplicados, ordenacao e observacoes
+  - `SQL`, contendo exclusivamente a consulta SQL/base logica copiavel
+- o botao `Copiar SQL` deve copiar somente o conteudo da aba `SQL`
+- a aba `SQL` deve refletir os filtros atuais da tela/listagem no momento da abertura, com valores reais para parametros como `companyId`/`tenantId`, `branchCode`, status, periodo, busca digitada e demais filtros visiveis
+- nomes humanos de apoio, como nome da empresa, escola consumidora ou filial, devem aparecer apenas em `Outras informações`, entre parenteses ao lado do identificador tecnico, sem alterar a SQL executavel
+- quando uma tela do `Financeiro` estiver embutida na `Escola`, a auditoria deve respeitar o contexto da vertical hospedeira e manter a consulta executavel para a origem real dos dados financeiros
 
 Arquivos de referencia tecnica no Financeiro:
 

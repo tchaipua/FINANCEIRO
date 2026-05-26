@@ -26,6 +26,7 @@ import {
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import type { FiscalCertificateItem } from '../payables-types';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_CERTIFICADOS_DIGITAIS';
 const CREATE_MODAL_SCREEN_ID =
@@ -55,13 +56,74 @@ METRICAS / CAMPOS EXIBIDOS:
 - certificado padrao
 - ultima sincronizacao
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - status opcional: ACTIVE | INACTIVE | ALL
 - busca opcional por aliasName, holderName, holderDocument e serialNumber
 
 ORDENACAO:
 - order by isDefault desc, aliasName asc`;
+
+type CertificadosAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  status: 'ALL' | 'ACTIVE' | 'INACTIVE';
+  search: string;
+  displayedRowsCount: number;
+};
+
+function buildCertificadosAuditSql(params: CertificadosAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const status = String(params.status || 'ALL').toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :status = ${toSqlLiteral(status)}
+-- :search = ${toSqlLiteral(search)}
+
+SELECT FC.*
+FROM fiscal_certificates FC
+INNER JOIN companies CO ON CO.id = FC.companyId
+WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND CO.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (${toSqlLiteral(status)} = 'ALL' OR FC.status = ${toSqlLiteral(status)})
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(FC.aliasName, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(FC.holderName, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(FC.holderDocument, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(FC.serialNumber, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY FC.isDefault DESC, FC.aliasName ASC;`;
+}
+
+function buildCertificadosAuditText(params: CertificadosAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const status = String(params.status || 'ALL').toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Esta tela lista e mantem os certificados digitais do contas a pagar no Financeiro.
+
+TABELAS PRINCIPAIS:
+- fiscal_certificates (FC) - certificados A1 cadastrados por empresa
+- companies (CO) - empresa financeira dona do certificado
+
+RELACIONAMENTOS:
+- fiscal_certificates.companyId = companies.id
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- status selecionado (:status): ${status}
+- busca digitada (:search): ${formatAuditValue(search)}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- ordenacao atual: certificado padrao DESC, apelido ASC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- CO.sourceSystem e CO.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
 
 type CertificateFormState = {
   id: string | null;
@@ -532,6 +594,27 @@ export default function FinanceiroCertificadosDigitaisPage() {
   useEffect(() => {
     void loadCertificates();
   }, [loadCertificates]);
+
+  const certificadosAuditContext = useMemo(() => {
+    const auditParams: CertificadosAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      status: statusFilter,
+      search: searchInput,
+      displayedRowsCount: items.length,
+    };
+
+    return {
+      auditText: buildCertificadosAuditText(auditParams),
+      sqlText: buildCertificadosAuditSql(auditParams),
+    };
+  }, [
+    items.length,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    searchInput,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') {
@@ -1109,7 +1192,8 @@ export default function FinanceiroCertificadosDigitaisPage() {
                       screenId={SCREEN_ID}
                       className="justify-end"
                       originText="Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\contas-a-pagar\\certificados-digitais\\page.tsx"
-                      auditText={auditText}
+                      auditText={certificadosAuditContext.auditText || auditText}
+                      sqlText={certificadosAuditContext.sqlText}
                     />
                   ) : null}
                 </div>

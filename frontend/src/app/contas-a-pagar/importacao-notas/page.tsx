@@ -58,7 +58,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - notas pendentes de aprovação
 - atalho para importação manual por XML
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - lista lateral mostra apenas importações pendentes de aprovação
 - certificados carregados apenas do tenant atual
@@ -86,7 +86,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - quantidade de parcelas
 - vencimento e valor de cada parcela
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - nota localizada por importId dentro do tenant atual
 - edição permitida apenas antes da aprovação
@@ -135,7 +135,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - quantidade de itens
 - descrição, unidade, quantidade, valor unitário e valor total por item
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - nota localizada por importId dentro do tenant atual
 

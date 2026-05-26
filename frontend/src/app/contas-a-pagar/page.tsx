@@ -22,10 +22,15 @@ const auditText = `--- LOGICA DA TELA ---
 Esta tela centraliza os atalhos operacionais do modulo de contas a pagar do Financeiro.
 
 TABELAS PRINCIPAIS:
-- Nenhuma tabela fisica consultada diretamente nesta entrega visual inicial.
+- companies (CO) - empresa financeira resolvida pelo contexto de origem.
+- payable_invoice_imports (PII) - notas importadas para aprovacao.
+- payable_titles (PT) - titulos de contas a pagar gerados.
+- payable_installments (PI) - parcelas de contas a pagar.
 
 RELACIONAMENTOS:
-- Nao aplicavel nesta etapa.
+- payable_invoice_imports.companyId -> companies.id
+- payable_titles.companyId -> companies.id
+- payable_installments.companyId -> companies.id
 
 METRICAS / CAMPOS EXIBIDOS:
 - atalhos de importacao de notas
@@ -35,7 +40,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - atalhos de consulta de notas importadas
 - atalho de lancamento manual de contas a pagar
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - Nao aplicavel.
 
 ORDENACAO:

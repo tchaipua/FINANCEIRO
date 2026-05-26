@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { copyTextToClipboard } from '@/app/lib/clipboard';
 import ScreenAuditModal from './screen-audit-modal';
 
 const COPY_FEEDBACK_TIMEOUT = 1800;
@@ -16,29 +17,341 @@ type ScreenNameCopyProps = {
   sqlText?: string;
 };
 
-function copyTextWithLegacyCommand(value: string) {
-  if (typeof document === 'undefined' || !document.body) return false;
+type ScreenAuditMetadata = {
+  originText?: string;
+  auditText?: string;
+  sqlText?: string;
+};
 
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', 'true');
-  textarea.style.position = 'fixed';
-  textarea.style.top = '-1000px';
-  textarea.style.left = '-1000px';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
+function buildFinanceOriginText(path: string) {
+  return `Origem: Sistema Financeiro - caminho fisico: C:/Sistemas/IA/Financeiro/frontend/src/app/${path}`;
+}
 
-  textarea.focus();
-  textarea.select();
-  textarea.setSelectionRange(0, value.length);
+const FINANCEIRO_AUDIT_METADATA: Record<string, ScreenAuditMetadata> = {
+  FINANCEIRO_DASHBOARD_RESUMO_GERAL: {
+    originText: buildFinanceOriginText('components/financeiro-resumo-page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Dashboard consolidado do Financeiro para acompanhar empresas, lotes, parcelas, caixas e recebimentos recentes.
 
-  try {
-    return document.execCommand('copy');
-  } catch {
-    return false;
-  } finally {
-    document.body.removeChild(textarea);
-  }
+TABELAS PRINCIPAIS:
+- companies (CO) - empresas/tenants financeiros resolvidos pelo sistema de origem
+- receivable_batches (RB) - lotes de parcelas recebidas das verticais
+- receivable_installments (RI) - parcelas financeiras abertas, vencidas ou liquidadas
+- cash_sessions (CS) - sessões de caixa abertas/fechadas
+- installment_settlements (IS) - baixas liquidadas em caixa
+
+RELACIONAMENTOS:
+- receivable_batches.companyId = companies.id
+- receivable_installments.companyId = companies.id
+- cash_sessions.companyId = companies.id
+- installment_settlements.companyId = companies.id
+- installment_settlements.installmentId = receivable_installments.id
+
+FILTROS APLICADOS AGORA:
+- sourceSystem/sourceTenantId/sourceBranchCode vindos do contexto financeiro quando a tela esta embarcada
+- empresas sem cancelamento logico: companies.canceledAt IS NULL
+- parcelas abertas: receivable_installments.status = 'OPEN'
+- caixas abertos: cash_sessions.status = 'OPEN'
+- recebimentos do mes corrente em installment_settlements.settledAt
+- ordenacao dos recentes: createdAt/openedAt DESC`,
+    sqlText: `SELECT
+  CO.id AS companyId,
+  CO.name AS companyName,
+  COUNT(DISTINCT RB.id) AS batchCount,
+  COUNT(DISTINCT CASE WHEN RI.status = 'OPEN' THEN RI.id END) AS openInstallmentCount,
+  SUM(CASE WHEN RI.status = 'OPEN' THEN RI.amount ELSE 0 END) AS openInstallmentAmount,
+  COUNT(DISTINCT CASE WHEN CS.status = 'OPEN' THEN CS.id END) AS openCashSessionCount,
+  SUM(CASE WHEN date(IS.settledAt) >= date('now', 'start of month') THEN IS.receivedAmount ELSE 0 END) AS settledAmountThisMonth
+FROM companies CO
+LEFT JOIN receivable_batches RB
+  ON RB.companyId = CO.id
+ AND RB.canceledAt IS NULL
+LEFT JOIN receivable_installments RI
+  ON RI.companyId = CO.id
+ AND RI.canceledAt IS NULL
+LEFT JOIN cash_sessions CS
+  ON CS.companyId = CO.id
+ AND CS.canceledAt IS NULL
+LEFT JOIN installment_settlements IS
+  ON IS.companyId = CO.id
+ AND IS.canceledAt IS NULL
+WHERE CO.canceledAt IS NULL
+  AND (:sourceSystem IS NULL OR CO.sourceSystem = :sourceSystem)
+  AND (:sourceTenantId IS NULL OR CO.sourceTenantId = :sourceTenantId)
+GROUP BY CO.id, CO.name
+ORDER BY CO.name ASC;`,
+  },
+  FINANCEIRO_RETORNOS_BANCARIOS_LISTAGEM: {
+    originText: buildFinanceOriginText('recebiveis/retornos/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Tela de listagem/importacao de retornos bancarios do contas a receber.
+
+TABELAS PRINCIPAIS:
+- companies (CO) - empresa financeira resolvida pelo contexto
+- bank_accounts (BA) - contas bancarias ativas para importacao
+- bank_return_imports (BRI) - importacoes de retorno bancario ja realizadas
+
+RELACIONAMENTOS:
+- bank_accounts.companyId = companies.id
+- bank_return_imports.companyId = companies.id
+- bank_return_imports.bankAccountId = bank_accounts.id
+
+FILTROS APLICADOS AGORA:
+- empresa resolvida por sourceSystem/sourceTenantId
+- banco selecionado para nova importacao quando informado na tela
+- periodo inicial/final digitado para importar retorno
+- contas bancarias ativas: bank_accounts.status = 'ACTIVE'
+- importacoes sem cancelamento logico
+- ordenacao atual: createdAt DESC`,
+    sqlText: `SELECT
+  BRI.id,
+  BRI.provider,
+  BRI.status,
+  BRI.periodStart,
+  BRI.periodEnd,
+  BRI.importedItemCount,
+  BRI.matchedItemCount,
+  BRI.liquidatedItemCount,
+  BA.bankName,
+  BA.branchNumber,
+  BA.accountNumber,
+  BRI.createdAt
+FROM bank_return_imports BRI
+INNER JOIN companies CO
+  ON CO.id = BRI.companyId
+ AND CO.canceledAt IS NULL
+LEFT JOIN bank_accounts BA
+  ON BA.id = BRI.bankAccountId
+ AND BA.companyId = BRI.companyId
+ AND BA.canceledAt IS NULL
+WHERE BRI.canceledAt IS NULL
+  AND (:sourceSystem IS NULL OR CO.sourceSystem = :sourceSystem)
+  AND (:sourceTenantId IS NULL OR CO.sourceTenantId = :sourceTenantId)
+ORDER BY BRI.createdAt DESC;`,
+  },
+  FINANCEIRO_RETORNOS_BANCARIOS_DETALHE: {
+    originText: buildFinanceOriginText('recebiveis/retornos/[importId]/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Detalhe do retorno bancario para conferir titulos encontrados, divergencias e baixas prontas para aplicar.
+
+TABELAS PRINCIPAIS:
+- bank_return_imports (BRI) - cabecalho da importacao
+- bank_return_import_items (BRII) - movimentos/linhas do retorno
+- receivable_installments (RI) - parcelas localizadas para baixa
+- bank_accounts (BA) - conta bancaria do retorno
+
+RELACIONAMENTOS:
+- bank_return_import_items.importId = bank_return_imports.id
+- bank_return_import_items.matchedInstallmentId = receivable_installments.id
+- bank_return_imports.bankAccountId = bank_accounts.id
+
+FILTROS APLICADOS AGORA:
+- importacao aberta na rota (:importId)
+- empresa resolvida por sourceSystem/sourceTenantId
+- itens sem cancelamento logico
+- ordenacao atual: dueDate/paymentDate ASC`,
+    sqlText: `SELECT
+  BRI.id AS importId,
+  BRI.status AS importStatus,
+  BRII.id AS itemId,
+  BRII.movementStatus,
+  BRII.dueDate,
+  BRII.paymentDate,
+  BRII.settledAmount,
+  BRII.yourNumber,
+  RI.id AS receivableInstallmentId,
+  RI.status AS installmentStatus,
+  BA.bankName
+FROM bank_return_imports BRI
+INNER JOIN bank_return_import_items BRII
+  ON BRII.importId = BRI.id
+ AND BRII.canceledAt IS NULL
+LEFT JOIN receivable_installments RI
+  ON RI.id = BRII.matchedInstallmentId
+ AND RI.companyId = BRII.companyId
+ AND RI.canceledAt IS NULL
+LEFT JOIN bank_accounts BA
+  ON BA.id = BRI.bankAccountId
+ AND BA.companyId = BRI.companyId
+ AND BA.canceledAt IS NULL
+WHERE BRI.id = :importId
+  AND BRI.canceledAt IS NULL
+ORDER BY BRII.dueDate ASC, BRII.paymentDate ASC;`,
+  },
+  FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL: {
+    originText: buildFinanceOriginText('recebiveis/baixa-manual/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Tela para selecionar parcelas em aberto e realizar baixa manual em uma sessao de caixa.
+
+TABELAS PRINCIPAIS:
+- receivable_installments (RI) - parcelas em aberto para baixa
+- receivable_titles (RT) - titulo financeiro da parcela
+- parties (PA) - pagador/aluno/cliente vinculado ao titulo
+- cash_sessions (CS) - caixa usado para registrar a baixa
+- installment_settlements (IS) - baixa gerada ao confirmar pagamento
+
+RELACIONAMENTOS:
+- receivable_installments.titleId = receivable_titles.id
+- receivable_titles.payerPartyId = parties.id
+- installment_settlements.installmentId = receivable_installments.id
+- installment_settlements.cashSessionId = cash_sessions.id
+
+FILTROS APLICADOS AGORA:
+- empresa resolvida por sourceSystem/sourceTenantId
+- parcelas em aberto: receivable_installments.status = 'OPEN'
+- busca e selecao aplicadas na propria tela
+- caixa aberto quando a baixa e confirmada
+- ordenacao atual: dueDate ASC`,
+    sqlText: `SELECT
+  RI.id,
+  RI.dueDate,
+  RI.amount,
+  RI.status,
+  RT.businessKey,
+  RT.description,
+  PA.name AS payerName,
+  CS.id AS openCashSessionId,
+  CS.status AS cashStatus
+FROM receivable_installments RI
+INNER JOIN receivable_titles RT
+  ON RT.id = RI.titleId
+ AND RT.companyId = RI.companyId
+ AND RT.canceledAt IS NULL
+LEFT JOIN parties PA
+  ON PA.id = RT.payerPartyId
+ AND PA.companyId = RT.companyId
+ AND PA.canceledAt IS NULL
+LEFT JOIN cash_sessions CS
+  ON CS.companyId = RI.companyId
+ AND CS.status = 'OPEN'
+ AND CS.canceledAt IS NULL
+WHERE RI.canceledAt IS NULL
+  AND RI.status = 'OPEN'
+  AND (:companyId IS NULL OR RI.companyId = :companyId)
+ORDER BY RI.dueDate ASC, PA.name ASC;`,
+  },
+  FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_SUCESSO: {
+    originText: buildFinanceOriginText('recebiveis/baixa-manual/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Popup de sucesso da baixa manual, exibindo o resultado da liquidacao feita no caixa.
+
+TABELAS PRINCIPAIS:
+- installment_settlements (IS) - baixa manual registrada
+- receivable_installments (RI) - parcela liquidada
+- cash_sessions (CS) - caixa que recebeu a baixa
+
+RELACIONAMENTOS:
+- installment_settlements.installmentId = receivable_installments.id
+- installment_settlements.cashSessionId = cash_sessions.id
+
+FILTROS APLICADOS AGORA:
+- baixa recem-confirmada na operacao atual
+- empresa do contexto financeiro
+- ordenacao: nao aplicavel ao popup`,
+    sqlText: `SELECT
+  IS.id,
+  IS.installmentId,
+  IS.cashSessionId,
+  IS.receivedAmount,
+  IS.paymentMethod,
+  IS.settledAt,
+  RI.status AS installmentStatus,
+  CS.status AS cashStatus
+FROM installment_settlements IS
+INNER JOIN receivable_installments RI
+  ON RI.id = IS.installmentId
+ AND RI.companyId = IS.companyId
+INNER JOIN cash_sessions CS
+  ON CS.id = IS.cashSessionId
+ AND CS.companyId = IS.companyId
+WHERE IS.id = :settlementId
+  AND IS.canceledAt IS NULL
+LIMIT 1;`,
+  },
+  PRINCIPAL_FINANCEIRO_ESTOQUE: {
+    originText: buildFinanceOriginText('estoque/page.tsx'),
+    sqlText: `SELECT
+  CO.id AS companyId,
+  CO.name AS companyName,
+  CB.branchCode,
+  CB.name AS branchName,
+  CB.inventoryControlType,
+  CB.quantityPrecision,
+  COUNT(DISTINCT PR.id) AS productCount,
+  COUNT(DISTINCT PSB.id) AS stockBalanceCount
+FROM companies CO
+LEFT JOIN company_branches CB
+  ON CB.companyId = CO.id
+ AND CB.canceledAt IS NULL
+LEFT JOIN products PR
+  ON PR.companyId = CO.id
+ AND PR.canceledAt IS NULL
+LEFT JOIN product_stock_balances PSB
+  ON PSB.companyId = CO.id
+ AND PSB.productId = PR.id
+ AND PSB.canceledAt IS NULL
+WHERE CO.canceledAt IS NULL
+  AND CO.sourceSystem = :sourceSystem
+  AND CO.sourceTenantId = :sourceTenantId
+  AND (:sourceBranchCode IS NULL OR CB.branchCode = :sourceBranchCode)
+GROUP BY CO.id, CO.name, CB.branchCode, CB.name, CB.inventoryControlType, CB.quantityPrecision;`,
+  },
+  PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR: {
+    originText: buildFinanceOriginText('contas-a-pagar/page.tsx'),
+    sqlText: `SELECT
+  CO.id AS companyId,
+  CO.name AS companyName,
+  COUNT(DISTINCT PII.id) AS importedInvoices,
+  COUNT(DISTINCT CASE WHEN PII.status = 'PENDING_APPROVAL' THEN PII.id END) AS pendingApproval,
+  COUNT(DISTINCT PT.id) AS payableTitles,
+  COUNT(DISTINCT PI.id) AS payableInstallments
+FROM companies CO
+LEFT JOIN payable_invoice_imports PII
+  ON PII.companyId = CO.id
+ AND PII.canceledAt IS NULL
+LEFT JOIN payable_titles PT
+  ON PT.companyId = CO.id
+ AND PT.canceledAt IS NULL
+LEFT JOIN payable_installments PI
+  ON PI.companyId = CO.id
+ AND PI.canceledAt IS NULL
+WHERE CO.canceledAt IS NULL
+  AND CO.sourceSystem = :sourceSystem
+  AND CO.sourceTenantId = :sourceTenantId
+GROUP BY CO.id, CO.name;`,
+  },
+  PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS_MANUAL: {
+    originText: buildFinanceOriginText('contas-a-pagar/importacao-notas/manual/page.tsx'),
+    sqlText: `SELECT
+  PII.id,
+  PII.status,
+  PII.invoiceNumber,
+  PII.series,
+  PII.issueDate,
+  PII.totalInvoiceAmount,
+  SU.legalName AS supplierName,
+  COUNT(DISTINCT PIIT.id) AS itemCount,
+  COUNT(DISTINCT PIIN.id) AS installmentCount
+FROM payable_invoice_imports PII
+LEFT JOIN suppliers SU
+  ON SU.id = PII.supplierId
+ AND SU.companyId = PII.companyId
+LEFT JOIN payable_invoice_import_items PIIT
+  ON PIIT.invoiceImportId = PII.id
+ AND PIIT.canceledAt IS NULL
+LEFT JOIN payable_invoice_import_installments PIIN
+  ON PIIN.invoiceImportId = PII.id
+ AND PIIN.canceledAt IS NULL
+WHERE PII.companyId = :companyId
+  AND PII.canceledAt IS NULL
+GROUP BY PII.id, PII.status, PII.invoiceNumber, PII.series, PII.issueDate, PII.totalInvoiceAmount, SU.legalName
+ORDER BY PII.createdAt DESC;`,
+  },
+};
+
+function getScreenAuditMetadata(screenId: string) {
+  const normalizedScreenId = String(screenId || '').trim().toUpperCase();
+  return FINANCEIRO_AUDIT_METADATA[normalizedScreenId] || null;
 }
 
 export default function ScreenNameCopy({
@@ -52,6 +365,10 @@ export default function ScreenNameCopy({
   const [status, setStatus] = useState<CopyStatus>('idle');
   const [isAuditOpen, setIsAuditOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const auditMetadata = getScreenAuditMetadata(screenId);
+  const effectiveOriginText = originText || auditMetadata?.originText;
+  const effectiveAuditText = auditText || auditMetadata?.auditText;
+  const effectiveSqlText = sqlText || auditMetadata?.sqlText;
 
   const resetStatus = useCallback(() => {
     if (timerRef.current) {
@@ -70,23 +387,12 @@ export default function ScreenNameCopy({
 
   const handleCopy = useCallback(async () => {
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(screenId);
-        setStatus('copied');
-        setIsAuditOpen(true);
-        resetStatus();
-        return;
-      }
-    } catch {
-      // Em iframe embutido o navegador pode bloquear a Clipboard API por policy.
-    }
-
-    try {
-      const copied = copyTextWithLegacyCommand(screenId);
+      const copied = await copyTextToClipboard(screenId);
       setStatus(copied ? 'copied' : 'error');
-      if (copied) {
-        setIsAuditOpen(true);
-      }
+      setIsAuditOpen(true);
+    } catch {
+      setStatus('error');
+      setIsAuditOpen(true);
     } finally {
       resetStatus();
     }
@@ -119,9 +425,9 @@ export default function ScreenNameCopy({
         <ScreenAuditModal
           screenId={screenId}
           systemName="Sistema Financeiro"
-          originText={originText}
-          auditText={auditText}
-          sqlText={sqlText}
+          originText={effectiveOriginText}
+          auditText={effectiveAuditText}
+          sqlText={effectiveSqlText}
           onClose={() => setIsAuditOpen(false)}
         />
       ) : null}

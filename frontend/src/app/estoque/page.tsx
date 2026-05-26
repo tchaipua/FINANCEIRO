@@ -65,7 +65,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - atalhos de cores, numeros e grades quando a filial usa grade cor/numero
 - identificacao da filial operacional atual
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - sourceSystem e sourceTenantId informados pela vertical consumidora
 - sourceBranchCode da filial operacional atual
 

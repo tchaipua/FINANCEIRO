@@ -20,6 +20,7 @@ import {
   buildFinanceApiQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type ProductItem = {
   id: string;
@@ -236,7 +237,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - situação cadastral
 - data da última atualização
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - companyId obrigatório pelo tenant informado
 - status opcional: ACTIVE | INACTIVE | ALL
 - busca opcional por name, internalCode, sku, barcode e ncmCode
@@ -275,6 +276,88 @@ WHERE PR.companyId = :companyId
     OR PR.ncmCode LIKE :searchDigits
   )
 ORDER BY PR.name ASC;`;
+
+type ProductAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  companyName?: string | null;
+  search: string;
+  status: 'ACTIVE' | 'ALL' | 'INACTIVE';
+  displayedRowsCount: number;
+};
+
+function buildProductAuditSql(params: ProductAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const status = String(params.status || 'ACTIVE').toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :status = ${toSqlLiteral(status)}
+-- :search = ${toSqlLiteral(search)}
+
+SELECT
+  PR.id,
+  PR.name,
+  PR.internalCode,
+  PR.sku,
+  PR.barcode,
+  PR.unitCode,
+  PR.productType,
+  PR.tracksInventory,
+  PR.allowFraction,
+  PR.currentStock,
+  PR.minimumStock,
+  PR.purchasePrice,
+  PR.salePrice,
+  PR.status,
+  PR.updatedAt,
+  CO.name AS companyName
+FROM products PR
+INNER JOIN companies CO ON CO.id = PR.companyId
+WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND CO.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (
+    ${toSqlLiteral(status)} = 'ALL'
+    OR PR.status = ${toSqlLiteral(status)}
+  )
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PR.internalCode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PR.sku, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PR.barcode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PR.ncmCode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY PR.name ASC;`;
+}
+
+function buildProductAuditText(params: ProductAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const status = String(params.status || 'ACTIVE').toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Esta tela lista e mantem o cadastro base de produtos do Financeiro.
+
+TABELAS PRINCIPAIS:
+- products (PR) - cadastro base de produtos compartilhados por empresa financeira
+- companies (CO) - empresa financeira dona do cadastro, resolvida por sourceSystem + sourceTenantId
+
+RELACIONAMENTOS:
+- products.companyId = companies.id
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId, params.companyName)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- status selecionado (:status): ${status}
+- busca digitada (:search): ${formatAuditValue(search)}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- ordenacao atual: products.name ASC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- CO.sourceSystem e CO.sourceTenantId resolvem a empresa financeira vinculada ao sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
 
 function getProductTypeLabel(value?: string | null) {
   switch (String(value || '').toUpperCase()) {
@@ -621,6 +704,27 @@ export default function FinanceiroProdutosPage() {
   const [branchInventoryConfig, setBranchInventoryConfig] = useState<BranchInventoryConfig>(
     DEFAULT_BRANCH_INVENTORY_CONFIG,
   );
+  const productAuditContext = useMemo(() => {
+    const auditParams: ProductAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      companyName: products[0]?.companyName,
+      search: appliedSearch,
+      status: statusFilter,
+      displayedRowsCount: products.length,
+    };
+
+    return {
+      auditText: buildProductAuditText(auditParams),
+      sqlText: buildProductAuditSql(auditParams),
+    };
+  }, [
+    appliedSearch,
+    products,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    statusFilter,
+  ]);
 
   const loadProducts = useCallback(async () => {
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
@@ -1139,7 +1243,8 @@ export default function FinanceiroProdutosPage() {
                 screenId={PRODUCT_SCREEN_ID}
                 className="justify-end"
                 originText="Origem: Sistema Financeiro - frontend/src/app/produtos/page.tsx"
-                auditText={screenAuditText}
+                auditText={productAuditContext.auditText || screenAuditText}
+                sqlText={productAuditContext.sqlText}
               />
             ) : null}
           </div>

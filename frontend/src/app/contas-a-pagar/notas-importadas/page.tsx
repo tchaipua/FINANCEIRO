@@ -23,6 +23,7 @@ import {
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import type { PayableInvoiceImportSummary } from '../payables-types';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_NOTAS_IMPORTADAS';
 const EXPORT_STORAGE_KEY = 'financeiro:contas-a-pagar:notas-importadas:export';
@@ -52,7 +53,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - quantidade de duplicatas
 - quantidade de movimentos de estoque gerados
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - status opcional: PENDING_APPROVAL | APPROVED | ALL
 - busca por chave, número, série, fornecedor ou documento
@@ -60,6 +61,75 @@ FILTROS APLICADOS:
 
 ORDENACAO:
 - order by payable_invoice_imports.createdAt desc`;
+
+type NotasImportadasAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  status: 'ALL' | 'PENDING_APPROVAL' | 'APPROVED';
+  search: string;
+  issueDate: string;
+  displayedRowsCount: number;
+};
+
+function buildNotasImportadasAuditSql(params: NotasImportadasAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const status = String(params.status || 'ALL').toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :status = ${toSqlLiteral(status)}
+-- :search = ${toSqlLiteral(search)}
+-- :issueDate = ${toSqlLiteral(params.issueDate)}
+
+SELECT PII.*
+FROM payable_invoice_imports PII
+INNER JOIN companies CO ON CO.id = PII.companyId
+LEFT JOIN suppliers SU ON SU.id = PII.supplierId
+WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND CO.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (${toSqlLiteral(status)} = 'ALL' OR PII.status = ${toSqlLiteral(status)})
+  AND (${toSqlLiteral(params.issueDate)} = '' OR PII.issueDate = ${toSqlLiteral(params.issueDate)})
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(PII.accessKey, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PII.invoiceNumber, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PII.series, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(SU.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(SU.documentNumber, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY PII.createdAt DESC;`;
+}
+
+function buildNotasImportadasAuditText(params: NotasImportadasAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const status = String(params.status || 'ALL').toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Esta tela lista as notas de entrada importadas no contas a pagar do Financeiro.
+
+TABELAS PRINCIPAIS:
+- payable_invoice_imports (PII) - cabecalho da nota importada
+- suppliers (SU) - fornecedor vinculado a nota
+- companies (CO) - empresa financeira resolvida por origem
+
+RELACIONAMENTOS:
+- payable_invoice_imports.companyId = companies.id
+- payable_invoice_imports.supplierId = suppliers.id
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- status selecionado (:status): ${status}
+- busca digitada (:search): ${formatAuditValue(search)}
+- emissao selecionada (:issueDate): ${formatAuditValue(params.issueDate, 'TODAS')}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- ordenacao atual: importacao criada em DESC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- CO.sourceSystem e CO.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
 
 type ExportColumnKey =
   | 'status'
@@ -187,6 +257,28 @@ export default function FinanceiroNotasImportadasPage() {
       { total: 0, approved: 0, pending: 0 },
     );
   }, [filteredItems]);
+  const notasImportadasAuditContext = useMemo(() => {
+    const auditParams: NotasImportadasAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      status: statusFilter,
+      search: appliedSearch,
+      issueDate: issueDateFilter,
+      displayedRowsCount: filteredItems.length,
+    };
+
+    return {
+      auditText: buildNotasImportadasAuditText(auditParams),
+      sqlText: buildNotasImportadasAuditSql(auditParams),
+    };
+  }, [
+    appliedSearch,
+    filteredItems.length,
+    issueDateFilter,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    statusFilter,
+  ]);
 
   const handleSearchSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -386,7 +478,8 @@ export default function FinanceiroNotasImportadasPage() {
                 screenId={SCREEN_ID}
                 className="justify-end"
                 originText="Origem: Sistema Financeiro - frontend/src/app/contas-a-pagar/notas-importadas/page.tsx"
-                auditText={auditText}
+                auditText={notasImportadasAuditContext.auditText || auditText}
+                sqlText={notasImportadasAuditContext.sqlText}
               />
             </div>
           </div>

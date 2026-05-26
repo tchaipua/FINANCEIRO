@@ -117,3 +117,22 @@ Motivo:
 - downgrade para Next 9 e incompatível com a arquitetura atual e tende a quebrar o frontend;
 - `npm run build` e teste visual com Playwright passaram em `next@16.2.6`;
 - a mitigacao segura e acompanhar nova versao compatível, nao forcar downgrade automatico.
+
+## D011 - Modelo compartilhado do modal de auditoria SQL
+
+O `Financeiro` adota o mesmo modelo visual aprovado na `PRINCIPAL_PROFESSORES` da Escola para o modal que mostra SQL.
+
+Decisao:
+
+- o cabecalho do modal concentra logotipo/origem/identificador a esquerda;
+- as abas `Outras informações` e `SQL` ficam no centro do cabecalho;
+- os botoes `Fechar` e `Copiar SQL` ficam a direita, com o mesmo tamanho;
+- `Copiar SQL` aparece somente quando a aba `SQL` estiver ativa;
+- o rodape do modal nao deve repetir os botoes de acao;
+- a aba `SQL` deve manter consulta/base logica copiavel com parametros reais sempre que possivel.
+
+Motivo:
+
+- manter Escola e Financeiro com o mesmo padrao de suporte tecnico;
+- evitar divergencia visual entre sistemas integrados;
+- garantir que SQL copiado seja utilizavel diretamente para validacao e diagnostico.

@@ -16,6 +16,7 @@ import {
   buildFinanceApiQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 const SCREEN_ID = 'FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO';
 const ORIGIN_TEXT =
@@ -80,7 +81,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - documento de origem
 - usuario/operador e observacao
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - sourceSystem e sourceTenantId da vertical consumidora
 - sourceBranchCode da filial operacional
 - busca textual por produto, codigo, codigo de barras, nota, chave de acesso ou observacao
@@ -109,6 +110,89 @@ WHERE SM.companyId = :companyId
   AND SM.branchCode = :sourceBranchCode
   AND SM.canceledAt IS NULL
 ORDER BY SM.occurredAt DESC, SM.createdAt DESC;`;
+
+type StockMovementAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  sourceBranchCode?: number | null;
+  search: string;
+  movementType: MovementTypeFilter;
+  displayedRowsCount: number;
+};
+
+function buildStockMovementAuditSql(params: StockMovementAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const movementType = String(params.movementType || 'ALL').toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :sourceBranchCode = ${toSqlLiteral(params.sourceBranchCode ?? '')}
+-- :search = ${toSqlLiteral(search)}
+-- :movementType = ${toSqlLiteral(movementType)}
+
+SELECT
+  SM.id,
+  SM.occurredAt,
+  SM.movementType,
+  PR.name AS productName,
+  SM.quantity,
+  SM.previousStock,
+  SM.resultingStock,
+  PII.invoiceNumber,
+  SM.createdBy
+FROM stock_movements SM
+JOIN companies CO ON CO.id = SM.companyId
+JOIN products PR ON PR.id = SM.productId
+LEFT JOIN payable_invoice_imports PII ON PII.id = SM.sourceImportId
+WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND CO.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND SM.branchCode = ${toSqlLiteral(params.sourceBranchCode ?? '')}
+  AND SM.canceledAt IS NULL
+  AND (${toSqlLiteral(movementType)} = 'ALL' OR SM.movementType = ${toSqlLiteral(movementType)})
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PR.internalCode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PR.barcode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PII.invoiceNumber, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(PII.accessKey, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(SM.notes, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY SM.occurredAt DESC, SM.createdAt DESC;`;
+}
+
+function buildStockMovementAuditText(params: StockMovementAuditParams) {
+  const search = params.search.trim().toUpperCase();
+  const movementType = String(params.movementType || 'ALL').toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Esta tela lista o historico de movimentacoes de estoque gravado pelo Financeiro.
+
+TABELAS PRINCIPAIS:
+- stock_movements (SM) - historico append-only das movimentacoes que alteraram saldo
+- products (PR) - cadastro do produto movimentado
+- payable_invoice_imports (PII) - origem fiscal quando a movimentacao veio de NF-e
+- companies (CO) - empresa financeira resolvida por origem
+
+RELACIONAMENTOS:
+- SM.companyId = companies.id
+- SM.productId = products.id
+- SM.sourceImportId = payable_invoice_imports.id
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- filial origem (:sourceBranchCode): ${formatAuditValue(params.sourceBranchCode, '1')}
+- busca digitada (:search): ${formatAuditValue(search)}
+- tipo de movimento (:movementType): ${movementType}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- ordenacao atual: movimentacao DESC, criacao DESC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- CO.sourceSystem e CO.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
 
 const MOVEMENT_GRID_COLUMNS: GridColumnDefinition<StockMovementItem, MovementGridColumnKey>[] = [
   {
@@ -462,6 +546,28 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
         .filter((column) => !hiddenColumns.includes(column.key)),
     [columnOrder, hiddenColumns],
   );
+  const stockMovementAuditContext = useMemo(() => {
+    const auditParams: StockMovementAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      sourceBranchCode: runtimeContext.sourceBranchCode,
+      search: appliedSearch,
+      movementType: movementTypeFilter,
+      displayedRowsCount: movements.length,
+    };
+
+    return {
+      auditText: buildStockMovementAuditText(auditParams),
+      sqlText: buildStockMovementAuditSql(auditParams),
+    };
+  }, [
+    appliedSearch,
+    movementTypeFilter,
+    movements.length,
+    runtimeContext.sourceBranchCode,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+  ]);
 
   const showClearSearchButton = Boolean(searchInput.trim() || appliedSearch.trim());
 
@@ -687,8 +793,8 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
                 screenId={SCREEN_ID}
                 className="justify-end"
                 originText={ORIGIN_TEXT}
-                auditText={auditText}
-                sqlText={sqlText}
+                auditText={stockMovementAuditContext.auditText || auditText}
+                sqlText={stockMovementAuditContext.sqlText || sqlText}
               />
             ) : null}
           </div>

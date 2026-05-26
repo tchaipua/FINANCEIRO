@@ -107,3 +107,31 @@ Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Fina
   - `frontend/src/app/produtos/page.tsx`
   - `DOCUMENTACAO/AI/UI_PATTERNS.md`
 - Status: aprovado
+
+### UIP-0009
+
+- Data: 2026-05-23
+- Padrao: auditoria SQL em abas e com parametros reais
+- Contexto: a validacao da `PRINCIPAL_PROFESSORES` no sistema Escola consolidou um padrao compartilhado para Escola e Financeiro: separar informacoes funcionais do SQL executavel e mostrar os filtros atuais da tela
+- Alteracao: a auditoria visual deve abrir na aba `Outras informações` e manter uma aba `SQL` separada contendo somente a consulta copiavel; parametros como `companyId`/`tenantId`, `branchCode`, status, periodo, busca e demais filtros visiveis devem vir preenchidos com valores reais sempre que possivel
+- Regra complementar: nomes humanos de apoio, como nome da empresa, escola consumidora ou filial, ficam apenas na aba de informacoes; o SQL deve permanecer executavel
+- Componentes/Telas:
+  - `frontend/src/app/components/screen-name-copy.tsx`
+  - `frontend/src/app/components/screen-audit-modal.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/CODING_RULES.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0010
+
+- Data: 2026-05-23
+- Padrao: layout do modal de auditoria SQL com abas no cabecalho
+- Contexto: o padrao aprovado na `PRINCIPAL_PROFESSORES` da Escola tambem passa a ser o modelo oficial do `Financeiro` para manter a auditoria SQL visualmente igual nos dois sistemas
+- Alteracao: o cabecalho do modal passa a concentrar logotipo, etiqueta `Auditoria SQL`, identificador tecnico, origem do sistema, abas centrais e botoes `Fechar`/`Copiar SQL` a direita; `Copiar SQL` aparece somente na aba `SQL` e nao ha botoes duplicados no rodape
+- Componentes/Telas:
+  - `frontend/src/app/components/screen-audit-modal.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/CODING_RULES.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado

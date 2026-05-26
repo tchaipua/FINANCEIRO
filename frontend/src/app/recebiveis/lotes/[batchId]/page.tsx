@@ -15,6 +15,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type BatchDetail = {
   id: string;
@@ -145,6 +146,77 @@ function buildBankLabel(bank: BankItem) {
   return `${bank.bankName} - AG ${agency} - CC ${account}`;
 }
 
+type BatchDetailAuditParams = {
+  batchId: string;
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  companyName?: string | null;
+  filters: InstallmentFilters;
+  displayedRowsCount: number;
+  selectedRowsCount: number;
+};
+
+function buildBatchDetailAuditSql(params: BatchDetailAuditParams) {
+  const search = params.filters.search.trim().toUpperCase();
+  const status = String(params.filters.status || 'ALL').toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :batchId = ${toSqlLiteral(params.batchId)}
+-- :status = ${toSqlLiteral(status)}
+-- :search = ${toSqlLiteral(search)}
+
+SELECT RI.*
+FROM receivable_installments RI
+WHERE RI.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND RI.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND RI.batchId = ${toSqlLiteral(params.batchId)}
+  AND (
+    ${toSqlLiteral(status)} = 'ALL'
+    OR (${toSqlLiteral(status)} = 'OPEN' AND RI.status <> 'PAID' AND RI.dueDate >= CURRENT_DATE)
+    OR (${toSqlLiteral(status)} = 'OVERDUE' AND RI.status <> 'PAID' AND RI.dueDate < CURRENT_DATE)
+    OR (${toSqlLiteral(status)} = 'PAID' AND RI.status = 'PAID')
+  )
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(RI.sourceEntityName, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(RI.payerNameSnapshot, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(RI.description, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY RI.dueDate ASC, RI.sourceEntityName ASC;`;
+}
+
+function buildBatchDetailAuditText(params: BatchDetailAuditParams) {
+  const search = params.filters.search.trim().toUpperCase();
+  const status = String(params.filters.status || 'ALL').toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Tela de detalhe do lote de recebiveis e suas parcelas.
+
+TABELAS PRINCIPAIS:
+- receivable_batches (RB) - lote financeiro
+- receivable_installments (RI) - parcelas do lote
+- banks (B) - contas bancarias usadas para boletos
+
+RELACIONAMENTOS:
+- receivable_installments.batchId = receivable_batches.id
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId, params.companyName)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- lote selecionado (:batchId): ${formatAuditValue(params.batchId)}
+- status selecionado (:status): ${status}
+- busca digitada (:search): ${formatAuditValue(search)}
+- parcelas exibidas apos os filtros: ${params.displayedRowsCount}
+- parcelas selecionadas: ${params.selectedRowsCount}
+- ordenacao atual: vencimento ASC, aluno/origem ASC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- RI.sourceSystem, RI.sourceTenantId e RI.batchId isolam as parcelas do lote atual
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
+
 export default function FinanceiroReceivableBatchDetailPage() {
   const params = useParams<{ batchId: string }>();
   const runtimeContext = useFinanceRuntimeContext();
@@ -270,6 +342,33 @@ export default function FinanceiroReceivableBatchDetailPage() {
     () => banks.find((bank) => bank.id === selectedBankId) || null,
     [banks, selectedBankId],
   );
+
+  const batchDetailAuditContext = useMemo(() => {
+    const auditParams: BatchDetailAuditParams = {
+      batchId,
+      sourceSystem: batch?.sourceSystem || runtimeContext.sourceSystem,
+      sourceTenantId: batch?.sourceTenantId || runtimeContext.sourceTenantId,
+      companyName: batch?.companyName,
+      filters,
+      displayedRowsCount: installments.length,
+      selectedRowsCount: selectedInstallmentIds.length,
+    };
+
+    return {
+      auditText: buildBatchDetailAuditText(auditParams),
+      sqlText: buildBatchDetailAuditSql(auditParams),
+    };
+  }, [
+    batch?.companyName,
+    batch?.sourceSystem,
+    batch?.sourceTenantId,
+    batchId,
+    filters,
+    installments.length,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    selectedInstallmentIds.length,
+  ]);
 
   async function handleAssignBank() {
     if (!batch) return;
@@ -461,7 +560,12 @@ export default function FinanceiroReceivableBatchDetailPage() {
           </div>
         </div>
         <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+          <ScreenNameCopy
+            screenId={SCREEN_ID}
+            className="justify-end"
+            auditText={batchDetailAuditContext.auditText}
+            sqlText={batchDetailAuditContext.sqlText}
+          />
         </div>
       </section>
 

@@ -13,6 +13,7 @@ import {
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type CompanyItem = {
   id: string;
@@ -74,6 +75,64 @@ type CompanyGridConfig = {
 };
 
 const EMBEDDED_COMPANY_SUCCESS_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_EMPRESA_SALVO_SUCESSO';
+const EMBEDDED_PARENT_COMPANY_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_EMPRESA';
+const EMPRESAS_ORIGIN_TEXT =
+  'Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\empresas\\page.tsx';
+
+type EmpresasAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  companyName?: string | null;
+  search: string;
+  displayedRowsCount: number;
+};
+
+function buildEmpresasAuditSql(params: EmpresasAuditParams) {
+  const search = params.search.trim().toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :search = ${toSqlLiteral(search)}
+
+SELECT CO.*
+FROM companies CO
+WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND CO.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(CO.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(CO.document, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(CO.sourceSystem, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(CO.sourceTenantId, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY CO.name ASC;`;
+}
+
+function buildEmpresasAuditText(params: EmpresasAuditParams) {
+  const search = params.search.trim().toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Tela de cadastro/configuracao da empresa financeira.
+
+TABELAS PRINCIPAIS:
+- companies (CO) - empresas financeiras vinculadas ao sistema de origem
+- company_branches - filiais/configuracoes operacionais da empresa
+
+RELACIONAMENTOS:
+- company_branches.companyId = companies.id
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId, params.companyName)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- busca digitada (:search): ${formatAuditValue(search)}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- ordenacao atual: nome ASC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- CO.sourceSystem e CO.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
 
 const COMPANY_GRID_COLUMNS: GridColumnDefinition<CompanyItem, CompanyGridColumnKey>[] = [
   { key: 'name', label: 'Empresa', getValue: (item) => item.name },
@@ -1093,8 +1152,53 @@ export default function FinanceiroEmpresasPage() {
   const embeddedCompanyScreenId = embeddedSingleCompany
     ? 'FINANCEIRO_EMPRESA_EDITAR_ATUAL'
     : 'FINANCEIRO_EMPRESAS_LISTAGEM_GERAL';
+  const embeddedParentCompanyScreenId = showEmbeddedSuccess
+    ? EMBEDDED_COMPANY_SUCCESS_SCREEN_ID
+    : EMBEDDED_PARENT_COMPANY_SCREEN_ID;
+  const empresasAuditContext = useMemo(() => {
+    const auditParams: EmpresasAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      companyName: embeddedCompany?.name || companies[0]?.name,
+      search,
+      displayedRowsCount: companies.length,
+    };
+
+    return {
+      auditText: buildEmpresasAuditText(auditParams),
+      sqlText: buildEmpresasAuditSql(auditParams),
+    };
+  }, [
+    companies,
+    embeddedCompany?.name,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    search,
+  ]);
   const successCompanyName =
     editingCompany?.name || embeddedCompany?.name || runtimeContext.companyName || 'ESCOLA';
+
+  useEffect(() => {
+    if (!runtimeContext.embedded || typeof window === 'undefined') {
+      return;
+    }
+
+    window.parent?.postMessage(
+      {
+        type: 'MSINFOR_SCREEN_CONTEXT',
+        screenId: embeddedParentCompanyScreenId,
+        originText: EMPRESAS_ORIGIN_TEXT,
+        auditText: empresasAuditContext.auditText,
+        sqlText: empresasAuditContext.sqlText,
+      },
+      '*',
+    );
+  }, [
+    embeddedParentCompanyScreenId,
+    empresasAuditContext.auditText,
+    empresasAuditContext.sqlText,
+    runtimeContext.embedded,
+  ]);
 
   function handleReturnAfterSave() {
     if (typeof window !== 'undefined' && window.history.length > 1) {
@@ -1382,7 +1486,12 @@ export default function FinanceiroEmpresasPage() {
                 </svg>
               </button>
             </div>
-            <ScreenNameCopy screenId={embeddedCompanyScreenId} className="justify-end" />
+            <ScreenNameCopy
+              screenId={embeddedCompanyScreenId}
+              className="justify-end"
+              auditText={empresasAuditContext.auditText}
+              sqlText={empresasAuditContext.sqlText}
+            />
           </div>
         </section>
       ) : null}

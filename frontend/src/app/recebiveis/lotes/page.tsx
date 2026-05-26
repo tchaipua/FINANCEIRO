@@ -14,6 +14,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type BatchItem = {
   id: string;
@@ -64,6 +65,61 @@ function getBatchStatusTone(status: string) {
     default:
       return 'border-slate-200 bg-slate-50 text-slate-700';
   }
+}
+
+type BatchAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  search: string;
+  displayedRowsCount: number;
+  totalInstallments: number;
+};
+
+function buildBatchAuditSql(params: BatchAuditParams) {
+  const search = params.search.trim().toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :search = ${toSqlLiteral(search)}
+
+SELECT RB.*
+FROM receivable_batches RB
+WHERE RB.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND RB.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (
+    ${toSqlLiteral(search)} = ''
+    OR UPPER(COALESCE(RB.companyName, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(RB.sourceBatchId, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(RB.sourceBatchType, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    OR UPPER(COALESCE(RB.sourceTenantId, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+  )
+ORDER BY RB.createdAt DESC;`;
+}
+
+function buildBatchAuditText(params: BatchAuditParams) {
+  const search = params.search.trim().toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Tela de grid/listagem dos lotes de recebiveis recebidos pelo Financeiro.
+
+TABELAS PRINCIPAIS:
+- receivable_batches (RB) - lotes de titulos/parcelas importados
+
+RELACIONAMENTOS:
+- cada lote pertence ao sistema/tenant de origem
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- busca digitada (:search): ${formatAuditValue(search)}
+- lotes exibidos apos os filtros: ${params.displayedRowsCount}
+- parcelas processadas nos lotes exibidos: ${params.totalInstallments}
+- ordenacao atual: criacao DESC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- RB.sourceSystem e RB.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
 }
 
 export default function FinanceiroReceivableBatchesPage() {
@@ -117,6 +173,20 @@ export default function FinanceiroReceivableBatchesPage() {
     () => batches.reduce((accumulator, current) => accumulator + current.processedCount, 0),
     [batches],
   );
+  const batchAuditContext = useMemo(() => {
+    const auditParams: BatchAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      search,
+      displayedRowsCount: batches.length,
+      totalInstallments,
+    };
+
+    return {
+      auditText: buildBatchAuditText(auditParams),
+      sqlText: buildBatchAuditSql(auditParams),
+    };
+  }, [batches.length, runtimeContext.sourceSystem, runtimeContext.sourceTenantId, search, totalInstallments]);
 
   return (
     <div className="space-y-6">
@@ -134,7 +204,12 @@ export default function FinanceiroReceivableBatchesPage() {
             </div>
           </div>
           <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
-            <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+            <ScreenNameCopy
+              screenId={SCREEN_ID}
+              className="justify-end"
+              auditText={batchAuditContext.auditText}
+              sqlText={batchAuditContext.sqlText}
+            />
           </div>
         </section>
       ) : null}

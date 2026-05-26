@@ -38,7 +38,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - status da última nota importada
 - fornecedor, emissão, itens e valor total da importação
 
-FILTROS APLICADOS:
+FILTROS APLICADOS AGORA:
 - company resolvida por sourceSystem + sourceTenantId
 - importação limitada ao tenant informado pelo sistema de origem
 

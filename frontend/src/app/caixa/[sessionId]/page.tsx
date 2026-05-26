@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import ScreenAuditModal from '@/app/components/screen-audit-modal';
 import { getJson, requestJson } from '@/app/lib/api';
+import { copyTextToClipboard } from '@/app/lib/clipboard';
 import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildFinanceApiQueryString,
@@ -31,6 +33,7 @@ type CashSessionDetail = {
   };
   movementCount: number;
   settlementCount: number;
+  companyName?: string | null;
   movements: Array<{
     id: string;
     movementType: string;
@@ -54,6 +57,7 @@ type CashMovementModalState = {
 
 type MovementFilter = {
   label: string;
+  sqlWhere?: string;
   predicate: (movement: CashSessionDetail['movements'][number]) => boolean;
 };
 
@@ -62,29 +66,48 @@ const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CAIXA_DETALHE';
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const SCREEN_ORIGIN_TEXT =
   'Origem: Sistema Financeiro - C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\caixa\\[sessionId]\\page.tsx';
-function buildAuditSqlText({
-  sessionId,
-  sourceTenantId,
-  sourceSystem,
-  movementFilterLabel,
-}: {
+
+type CashAuditTextInput = {
   sessionId?: string | null;
   sourceTenantId?: string | null;
   sourceSystem?: string | null;
+  companyName?: string | null;
   movementFilterLabel?: string | null;
-}) {
-  const sessionFilterText = sessionId
-    ? `- Caixa atual por :sessionId (${sessionId})`
-    : '- Caixa atual por :sessionId';
-  const originContext = [sourceSystem, sourceTenantId].filter(Boolean).join(' / ');
-  const originFilterText = originContext
-    ? `- Empresa/escola por contexto de origem (${originContext})`
-    : '- Empresa/escola por contexto de origem';
-  const visualFilterText = movementFilterLabel
-    ? `- Filtros visuais por grupo, forma de pagamento ou descrição (${movementFilterLabel})`
-    : '- Filtros visuais por grupo, forma de pagamento ou descrição';
+  movementFilterSqlWhere?: string | null;
+  filteredMovementCount?: number;
+  totalMovementCount?: number;
+};
 
-  return `--- ESTRUTURA SQL: PRINCIPAL_FINANCEIRO_CAIXA_DETALHE ---
+function toSqlLiteral(value?: string | number | null) {
+  return `'${String(value ?? '').replace(/'/g, "''")}'`;
+}
+
+function formatAuditValue(value?: string | number | null) {
+  const normalized = String(value ?? '').trim();
+  return normalized || 'NAO INFORMADO';
+}
+
+function buildAuditInfoText({
+  sessionId,
+  sourceTenantId,
+  sourceSystem,
+  companyName,
+  movementFilterLabel,
+  filteredMovementCount,
+  totalMovementCount,
+}: CashAuditTextInput) {
+  const tenantNameText = companyName ? ` (${companyName})` : '';
+  const movementFilterText = movementFilterLabel || 'ALL';
+  const filteredCountText = Number.isFinite(filteredMovementCount)
+    ? String(filteredMovementCount)
+    : '0';
+  const totalCountText = Number.isFinite(totalMovementCount)
+    ? String(totalMovementCount)
+    : '0';
+
+  return `--- LOGICA DA TELA ---
+Tela de detalhe do caixa financeiro, com resumo dos valores e grid de movimentos do caixa selecionado.
+
 TABELAS PRINCIPAIS:
 - cash_sessions (CS) - sessões de caixa abertas/fechadas por operador.
 - cash_movements (CM) - movimentos registrados no caixa, como recebimentos, entradas, saídas e ajustes.
@@ -92,14 +115,14 @@ TABELAS PRINCIPAIS:
 - receivable_installments (RI) - parcelas/títulos a receber vinculados aos recebimentos.
 
 RELACIONAMENTOS:
-- cash_movements.cash_session_id = cash_sessions.id
-- installment_settlements.cash_session_id = cash_sessions.id
-- installment_settlements.installment_id = receivable_installments.id
+- cash_movements.cashSessionId = cash_sessions.id
+- installment_settlements.cashSessionId = cash_sessions.id
+- installment_settlements.installmentId = receivable_installments.id
 
 MÉTRICAS / CAMPOS EXIBIDOS:
-- Troco inicial: cash_sessions.opening_amount
+- Troco inicial: cash_sessions.openingAmount
 - Valor movimentado:
-  opening_amount
+  openingAmount
   + recebimento dinheiro
   + recebimento cheque
   + venda dinheiro
@@ -108,38 +131,71 @@ MÉTRICAS / CAMPOS EXIBIDOS:
   - saída dinheiro
   +/- ajustes caixa
 - Troco final: cálculo local de fechamento previsto
-- Recebimentos por forma: cash_movements.payment_method
-- Movimentos: cash_movements.description, direction, amount, occurred_at
+- Recebimentos por forma: cash_movements.paymentMethod
+- Movimentos: cash_movements.description, direction, amount, occurredAt
 
-FILTROS APLICADOS:
-${sessionFilterText}
-${originFilterText}
-${visualFilterText}
+FILTROS APLICADOS AGORA:
+- caixa atual (:sessionId): ${formatAuditValue(sessionId)}
+- empresa/tenant atual (:sourceTenantId): ${formatAuditValue(sourceTenantId)}${tenantNameText}
+- sistema de origem (:sourceSystem): ${formatAuditValue(sourceSystem)}
+- filtro visual de movimentos: ${movementFilterText}
+- registros exibidos apos os filtros: ${filteredCountText}
+- registros totais do caixa: ${totalCountText}
 
 ORDENAÇÃO:
-- Movimentos exibidos conforme retorno da API do detalhe do caixa
+- movimentos exibidos por occurredAt ASC, conforme retorno da API do detalhe do caixa
 
---------------------------------------------------------
+OBSERVACAO SOBRE O FILTRO DA EMPRESA / TENANT:
+- cash_sessions.sourceTenantId e usado para isolar os dados da empresa/escola
+- sourceTenantId acima ja esta preenchido com o tenant real recebido do sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
+}
+
+function buildAuditSqlText({
+  sessionId,
+  sourceTenantId,
+  sourceSystem,
+  movementFilterLabel,
+  movementFilterSqlWhere,
+}: CashAuditTextInput) {
+  const normalizedSessionId = String(sessionId || '').trim();
+  const normalizedSourceTenantId = String(sourceTenantId || '').trim();
+  const normalizedSourceSystem = String(sourceSystem || '').trim();
+  const sourceSystemWhere = normalizedSourceSystem
+    ? `\n  AND cs."sourceSystem" = ${toSqlLiteral(normalizedSourceSystem)}`
+    : '';
+  const movementWhere = movementFilterSqlWhere?.trim()
+    ? `\n  AND ${movementFilterSqlWhere.trim()}`
+    : '';
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sessionId = ${toSqlLiteral(normalizedSessionId)}
+-- :sourceTenantId = ${toSqlLiteral(normalizedSourceTenantId)}
+-- :sourceSystem = ${normalizedSourceSystem ? toSqlLiteral(normalizedSourceSystem) : 'NAO INFORMADO'}
+-- :movementFilter = ${toSqlLiteral(movementFilterLabel || 'ALL')}
 
 SELECT
   cs.id AS cash_session_id,
-  cs.cashier_display_name,
+  cs."cashierDisplayName",
   cs.status,
-  cs.opening_amount,
-  cs.expected_closing_amount,
-  cm.occurred_at,
+  cs."openingAmount",
+  cs."expectedClosingAmount",
+  cm."occurredAt",
   cm.description,
-  cm.movement_type,
+  cm."movementType",
   cm.direction,
-  cm.payment_method,
+  cm."paymentMethod",
   cm.amount,
-  cm.reference_type,
-  cm.reference_id
+  cm."referenceType",
+  cm."referenceId"
 FROM cash_sessions cs
 LEFT JOIN cash_movements cm
-  ON cm.cash_session_id = cs.id
-WHERE cs.id = :sessionId
-ORDER BY cm.occurred_at DESC;`;
+  ON cm."cashSessionId" = cs.id
+  AND cm."canceledAt" IS NULL
+WHERE cs.id = ${toSqlLiteral(normalizedSessionId)}
+  AND cs."canceledAt" IS NULL
+  AND cs."sourceTenantId" = ${toSqlLiteral(normalizedSourceTenantId)}${sourceSystemWhere}${movementWhere}
+ORDER BY cm."occurredAt" ASC;`;
 }
 
 function formatDateTimeLabel(value?: string | null) {
@@ -185,53 +241,6 @@ function parseCurrencyInput(value: string) {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
-async function copyText(value: string) {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-
-  if (typeof document === 'undefined' || !document.body) return;
-
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', 'true');
-  textarea.style.position = 'fixed';
-  textarea.style.top = '-1000px';
-  textarea.style.left = '-1000px';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
-}
-
-function AuditSqlContent({ text }: { text: string }) {
-  return (
-    <>
-      {text.split('\n').map((line, index) => {
-        const tableMatch = line.match(/^(-\s)(cash_sessions|cash_movements|installment_settlements|receivable_installments)(\s\([A-Z]+\))(\s-\s.*)$/);
-        if (tableMatch) {
-          return (
-            <div key={`${line}-${index}`} className="text-[13px] leading-5">
-              {tableMatch[1]}
-              <strong className="text-[15px] font-black text-slate-950">{tableMatch[2]}</strong>
-              <strong className="font-black text-slate-950">{tableMatch[3]}</strong>
-              {tableMatch[4]}
-            </div>
-          );
-        }
-
-        return (
-          <div key={`${line}-${index}`} className="leading-4">
-            {line || '\u00A0'}
-          </div>
-        );
-      })}
-    </>
-  );
 }
 
 export default function FinanceiroCashDetailPage() {
@@ -435,6 +444,7 @@ export default function FinanceiroCashDetailPage() {
         count: cashSummary.cashEntryCount,
         toneClass: 'text-emerald-700',
         filterLabel: 'Entrada dinheiro',
+        sqlWhere: `cm."movementType" = ${toSqlLiteral('ENTRY')} AND cm.direction = ${toSqlLiteral('IN')}`,
         predicate: (movement: CashSessionDetail['movements'][number]) =>
           movement.movementType === 'ENTRY' && movement.direction === 'IN',
       },
@@ -444,6 +454,7 @@ export default function FinanceiroCashDetailPage() {
         count: cashSummary.cashExitCount,
         toneClass: 'text-rose-700',
         filterLabel: 'Saída dinheiro',
+        sqlWhere: `cm."movementType" = ${toSqlLiteral('EXIT')} AND cm.direction = ${toSqlLiteral('OUT')}`,
         predicate: (movement: CashSessionDetail['movements'][number]) =>
           movement.movementType === 'EXIT' && movement.direction === 'OUT',
       },
@@ -453,6 +464,7 @@ export default function FinanceiroCashDetailPage() {
         count: cashSummary.cashAdjustmentCount,
         toneClass: 'text-slate-900',
         filterLabel: 'Ajustes caixa',
+        sqlWhere: `cm."movementType" = ${toSqlLiteral('ADJUSTMENT')}`,
         predicate: (movement: CashSessionDetail['movements'][number]) =>
           movement.movementType === 'ADJUSTMENT',
       },
@@ -477,15 +489,38 @@ export default function FinanceiroCashDetailPage() {
     return movements.filter(movementFilter.predicate);
   }, [movementFilter, session]);
 
+  const auditInfoText = useMemo(() => {
+    return buildAuditInfoText({
+      sessionId,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      sourceSystem: runtimeContext.sourceSystem,
+      companyName: session?.companyName || runtimeContext.companyName,
+      movementFilterLabel: movementFilter?.label || null,
+      filteredMovementCount: filteredMovements.length,
+      totalMovementCount: allMovementCount,
+    });
+  }, [
+    allMovementCount,
+    filteredMovements.length,
+    movementFilter?.label,
+    runtimeContext.companyName,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    session?.companyName,
+    sessionId,
+  ]);
+
   const auditSqlText = useMemo(() => {
     return buildAuditSqlText({
       sessionId,
       sourceTenantId: runtimeContext.sourceTenantId,
       sourceSystem: runtimeContext.sourceSystem,
       movementFilterLabel: movementFilter?.label || null,
+      movementFilterSqlWhere: movementFilter?.sqlWhere || null,
     });
   }, [
     movementFilter?.label,
+    movementFilter?.sqlWhere,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
     sessionId,
@@ -575,21 +610,12 @@ export default function FinanceiroCashDetailPage() {
 
   async function handleOpenAuditModal() {
     try {
-      await copyText(EMBEDDED_SCREEN_ID);
-      setAuditCopyStatus('copied');
+      const copied = await copyTextToClipboard(EMBEDDED_SCREEN_ID);
+      setAuditCopyStatus(copied ? 'copied' : 'error');
     } catch {
       setAuditCopyStatus('error');
     } finally {
       setIsAuditModalOpen(true);
-    }
-  }
-
-  async function handleCopyAuditSql() {
-    try {
-      await copyText(auditSqlText);
-      setAuditCopyStatus('copied');
-    } catch {
-      setAuditCopyStatus('error');
     }
   }
 
@@ -718,6 +744,7 @@ export default function FinanceiroCashDetailPage() {
             type="button"
             onClick={() => handleSetMovementFilter({
               label: 'Recebimentos',
+              sqlWhere: 'cm."paymentMethod" IS NOT NULL',
               predicate: (movement) => Boolean(movement.paymentMethod),
             })}
             className={getGroupFilterClass(movementFilter?.label === 'Recebimentos')}
@@ -734,6 +761,7 @@ export default function FinanceiroCashDetailPage() {
               type="button"
               onClick={() => handleSetMovementFilter({
                 label: item.label,
+                sqlWhere: `cm."paymentMethod" = ${toSqlLiteral(item.paymentMethod)}`,
                 predicate: (movement) => movement.paymentMethod === item.paymentMethod,
               })}
               className={getFilterCardClass(movementFilter?.label === item.label)}
@@ -749,6 +777,7 @@ export default function FinanceiroCashDetailPage() {
             type="button"
             onClick={() => handleSetMovementFilter({
               label: 'Vendas',
+              sqlWhere: `cm."movementType" = ${toSqlLiteral('SALE')}`,
               predicate: () => false,
             })}
             className={getGroupFilterClass(movementFilter?.label === 'Vendas')}
@@ -765,6 +794,7 @@ export default function FinanceiroCashDetailPage() {
               type="button"
               onClick={() => handleSetMovementFilter({
                 label: `Vendas ${item.label}`,
+                sqlWhere: `cm."movementType" = ${toSqlLiteral('SALE')} AND cm."paymentMethod" = ${toSqlLiteral(item.paymentMethod)}`,
                 predicate: () => false,
               })}
               className={getFilterCardClass(movementFilter?.label === `Vendas ${item.label}`)}
@@ -780,6 +810,7 @@ export default function FinanceiroCashDetailPage() {
             type="button"
             onClick={() => handleSetMovementFilter({
               label: 'Outros',
+              sqlWhere: `cm."movementType" IN (${toSqlLiteral('ENTRY')}, ${toSqlLiteral('EXIT')}, ${toSqlLiteral('ADJUSTMENT')})`,
               predicate: (movement) =>
                 movement.movementType === 'ENTRY' ||
                 movement.movementType === 'EXIT' ||
@@ -796,6 +827,7 @@ export default function FinanceiroCashDetailPage() {
               type="button"
               onClick={() => handleSetMovementFilter({
                 label: item.filterLabel,
+                sqlWhere: item.sqlWhere,
                 predicate: item.predicate,
               })}
               className={getFilterCardClass(movementFilter?.label === item.filterLabel)}
@@ -871,6 +903,7 @@ export default function FinanceiroCashDetailPage() {
                       type="button"
                       onClick={() => handleSetMovementFilter({
                         label: movement.description,
+                        sqlWhere: `cm.description = ${toSqlLiteral(movement.description)}`,
                         predicate: (currentMovement) => currentMovement.description === movement.description,
                       })}
                       className="text-left font-semibold text-slate-700 transition hover:text-blue-700 hover:underline"
@@ -977,66 +1010,14 @@ export default function FinanceiroCashDetailPage() {
       ) : null}
 
       {isAuditModalOpen ? (
-        <div className="fixed inset-0 z-[94] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-md">
-          <div className="w-full max-w-5xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.45)]">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-slate-950 via-slate-800 to-blue-900 px-6 py-4 text-white">
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-200">
-                  Auditoria SQL
-                </div>
-                <div className="mt-1 text-sm font-black">
-                  {EMBEDDED_SCREEN_ID}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAuditModalOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-white/10 text-xl leading-none text-white transition hover:bg-white/20"
-                aria-label="Fechar auditoria SQL"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="bg-slate-100 px-6 py-6">
-              <div className="mb-5">
-                <div className="mb-4 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                  <img
-                    src="/logo-msinfor.jpg"
-                    alt="MSINFOR Sistemas"
-                    className="h-24 w-24 rounded-full border-4 border-white object-contain shadow-lg shadow-slate-950/15"
-                  />
-                  <div className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-blue-700 shadow-sm">
-                    Lógica Usada nessa Tela
-                  </div>
-                </div>
-                <div className="mx-auto mt-3 max-w-4xl rounded-full border border-red-100 bg-red-50 px-4 py-2 text-center text-xs font-black text-red-700">
-                  {SCREEN_ORIGIN_TEXT}
-                </div>
-              </div>
-
-              <div className="max-h-[55vh] overflow-auto rounded-2xl border border-slate-200 bg-white px-6 py-6 font-mono text-[12px] text-slate-950 shadow-inner">
-                <AuditSqlContent text={auditSqlText} />
-              </div>
-              <div className="mt-6 flex flex-wrap justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => void handleCopyAuditSql()}
-                  className="rounded-xl bg-emerald-700 px-10 py-3 text-sm font-black uppercase tracking-[0.08em] text-white shadow-lg shadow-emerald-700/20 transition hover:bg-emerald-800"
-                >
-                  Copiar SQL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAuditModalOpen(false)}
-                  className="rounded-xl bg-slate-700 px-12 py-3 text-sm font-black uppercase tracking-[0.08em] text-white shadow-lg shadow-slate-700/20 transition hover:bg-slate-800"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ScreenAuditModal
+          screenId={EMBEDDED_SCREEN_ID}
+          systemName="Sistema Financeiro"
+          originText={SCREEN_ORIGIN_TEXT}
+          auditText={auditInfoText}
+          sqlText={auditSqlText}
+          onClose={() => setIsAuditModalOpen(false)}
+        />
       ) : null}
     </div>
   );

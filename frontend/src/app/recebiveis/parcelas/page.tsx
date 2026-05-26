@@ -13,6 +13,7 @@ import {
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type InstallmentItem = {
   id: string;
@@ -104,6 +105,80 @@ function getInstallmentStatusMeta(item: InstallmentItem) {
     label: 'ABERTA',
     className: 'border-blue-200 bg-blue-50 text-blue-700',
   };
+}
+
+type InstallmentsAuditParams = {
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  filters: Filters;
+  displayedRowsCount: number;
+  openCount: number;
+  overdueCount: number;
+  paidCount: number;
+};
+
+function buildInstallmentsAuditSql(params: InstallmentsAuditParams) {
+  const status = String(params.filters.status || 'OPEN').toUpperCase();
+  const studentName = params.filters.studentName.trim().toUpperCase();
+  const payerName = params.filters.payerName.trim().toUpperCase();
+
+  return `-- PARAMETROS ATUAIS DO GRID
+-- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+-- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+-- :status = ${toSqlLiteral(status)}
+-- :studentName = ${toSqlLiteral(studentName)}
+-- :payerName = ${toSqlLiteral(payerName)}
+
+SELECT RI.*
+FROM receivable_installments RI
+WHERE RI.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
+  AND RI.sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
+  AND (
+    ${toSqlLiteral(status)} = 'ALL'
+    OR (${toSqlLiteral(status)} = 'OPEN' AND RI.status <> 'PAID' AND RI.dueDate >= CURRENT_DATE)
+    OR (${toSqlLiteral(status)} = 'OVERDUE' AND RI.status <> 'PAID' AND RI.dueDate < CURRENT_DATE)
+    OR (${toSqlLiteral(status)} = 'PAID' AND RI.status = 'PAID')
+  )
+  AND (
+    ${toSqlLiteral(studentName)} = ''
+    OR UPPER(COALESCE(RI.sourceEntityName, '')) LIKE '%' || UPPER(${toSqlLiteral(studentName)}) || '%'
+  )
+  AND (
+    ${toSqlLiteral(payerName)} = ''
+    OR UPPER(COALESCE(RI.payerNameSnapshot, '')) LIKE '%' || UPPER(${toSqlLiteral(payerName)}) || '%'
+  )
+ORDER BY RI.dueDate ASC, RI.sourceEntityName ASC;`;
+}
+
+function buildInstallmentsAuditText(params: InstallmentsAuditParams) {
+  const status = String(params.filters.status || 'OPEN').toUpperCase();
+  const studentName = params.filters.studentName.trim().toUpperCase();
+  const payerName = params.filters.payerName.trim().toUpperCase();
+
+  return `--- LOGICA DA TELA ---
+Tela de grid/listagem das parcelas a receber.
+
+TABELAS PRINCIPAIS:
+- receivable_installments (RI) - parcelas dos titulos a receber
+
+RELACIONAMENTOS:
+- as parcelas pertencem ao sistema/tenant de origem e podem ser baixadas pelo caixa
+
+FILTROS APLICADOS AGORA:
+- empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId)}
+- sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
+- status selecionado (:status): ${status}
+- aluno/origem (:studentName): ${formatAuditValue(studentName)}
+- pagador (:payerName): ${formatAuditValue(payerName)}
+- registros exibidos apos os filtros: ${params.displayedRowsCount}
+- abertas no resultado: ${params.openCount}
+- vencidas no resultado: ${params.overdueCount}
+- fechadas no resultado: ${params.paidCount}
+- ordenacao atual: vencimento ASC, aluno/origem ASC
+
+OBSERVACAO SOBRE O FILTRO DA EMPRESA:
+- RI.sourceSystem e RI.sourceTenantId isolam os dados da empresa/sistema de origem
+- os demais parametros acima refletem os filtros visiveis aplicados no grid`;
 }
 
 function getInstallmentGridStorageKey(tenantId: string | null) {
@@ -538,6 +613,30 @@ export default function FinanceiroInstallmentsPage() {
     () => installments.filter((item) => item.status === 'PAID').length,
     [installments],
   );
+  const installmentsAuditContext = useMemo(() => {
+    const auditParams: InstallmentsAuditParams = {
+      sourceSystem: runtimeContext.sourceSystem,
+      sourceTenantId: runtimeContext.sourceTenantId,
+      filters: appliedFilters,
+      displayedRowsCount: installments.length,
+      openCount: openCountLabel,
+      overdueCount: overdueCountLabel,
+      paidCount: paidCountLabel,
+    };
+
+    return {
+      auditText: buildInstallmentsAuditText(auditParams),
+      sqlText: buildInstallmentsAuditSql(auditParams),
+    };
+  }, [
+    appliedFilters,
+    installments.length,
+    openCountLabel,
+    overdueCountLabel,
+    paidCountLabel,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+  ]);
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
@@ -758,7 +857,12 @@ export default function FinanceiroInstallmentsPage() {
               Registros exibidos ({installments.length})
             </div>
             {!runtimeContext.embedded ? (
-              <ScreenNameCopy screenId={SCREEN_ID} className="justify-end" />
+              <ScreenNameCopy
+                screenId={SCREEN_ID}
+                className="justify-end"
+                auditText={installmentsAuditContext.auditText}
+                sqlText={installmentsAuditContext.sqlText}
+              />
             ) : null}
           </div>
         </div>
