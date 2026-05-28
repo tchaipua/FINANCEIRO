@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
 import {
   normalizeText,
@@ -282,6 +283,40 @@ export class CashSessionsService {
     return {
       ...this.mapCashSession(session),
       companyName: session.company.name,
+    };
+  }
+
+  private buildBankAccountLabel(bank: any) {
+    const agency = `${bank.branchNumber}${bank.branchDigit ? `-${bank.branchDigit}` : ""}`;
+    const account = `${bank.accountNumber}${bank.accountDigit ? `-${bank.accountDigit}` : ""}`;
+    return `${bank.bankName} - AG ${agency} - CC ${account}`;
+  }
+
+  private async resolvePixBankAccount(companyId: string, bankAccountId?: string | null) {
+    const normalizedBankAccountId = String(bankAccountId || "").trim();
+
+    if (!normalizedBankAccountId) {
+      throw new BadRequestException(
+        "Selecione o banco onde o PIX será creditado.",
+      );
+    }
+
+    const bank = await this.prisma.bankAccount.findFirst({
+      where: {
+        id: normalizedBankAccountId,
+        companyId,
+        status: "ACTIVE",
+        canceledAt: null,
+      },
+    });
+
+    if (!bank) {
+      throw new NotFoundException("BANCO DO PIX NÃO ENCONTRADO.");
+    }
+
+    return {
+      id: bank.id,
+      label: this.buildBankAccountLabel(bank),
     };
   }
 
@@ -667,6 +702,13 @@ export class CashSessionsService {
     const paymentMethod = this.resolvePaymentMethodMetadata(
       payload.paymentMethod,
     );
+    const pixBankAccount =
+      paymentMethod.code === "PIX"
+        ? await this.resolvePixBankAccount(company.id, payload.bankAccountId)
+        : null;
+    const bankMovementGroupId = pixBankAccount
+      ? normalizeText(payload.bankMovementGroupId) || `PIX-${randomUUID().toUpperCase()}`
+      : null;
     const settledAt = payload.receivedAt
       ? parseIsoDate(payload.receivedAt, "a data de recebimento")
       : new Date();
@@ -712,6 +754,9 @@ export class CashSessionsService {
           interestAmount,
           penaltyAmount,
           paymentMethod: paymentMethod.code,
+          bankAccountId: pixBankAccount?.id || null,
+          bankAccountLabel: pixBankAccount?.label || null,
+          bankMovementGroupId,
           settledAt,
           requestedBy: payload.requestedBy || null,
           notes: normalizeText(payload.notes),
@@ -730,6 +775,19 @@ export class CashSessionsService {
           status: "PAID",
           settlementMethod: paymentMethod.code,
           settledAt,
+          ...(pixBankAccount
+            ? {
+                bankAccountId: pixBankAccount.id,
+                bankAccountLabel: pixBankAccount.label,
+                bankAssignedAt: settledAt,
+                bankAssignedBy: payload.requestedBy || null,
+                bankMovementGroupId,
+                bankMovementStatus: "OPEN",
+                bankMovementCreatedAt: settledAt,
+                bankMovementConvertedAt: null,
+                bankMovementConvertedBy: null,
+              }
+            : {}),
           updatedBy: payload.requestedBy || null,
         },
       });
@@ -759,6 +817,9 @@ export class CashSessionsService {
           movementType: "SETTLEMENT",
           direction: "IN",
           paymentMethod: paymentMethod.code,
+          bankAccountId: pixBankAccount?.id || null,
+          bankAccountLabel: pixBankAccount?.label || null,
+          bankMovementGroupId,
           amount: receivedAmount,
           description: paymentMethod.description,
           occurredAt: settledAt,
@@ -782,6 +843,9 @@ export class CashSessionsService {
       receivedAmount,
       settledAt: settlement.settledAt.toISOString(),
       paymentMethod: paymentMethod.code,
+      bankAccountId: pixBankAccount?.id || null,
+      bankAccountLabel: pixBankAccount?.label || null,
+      bankMovementGroupId,
       discountAmount,
       interestAmount,
       penaltyAmount,

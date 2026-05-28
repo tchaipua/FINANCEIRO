@@ -23,6 +23,8 @@ const BRANCH_MODELS = [
   "InstallmentSettlement",
   "BankReturnImport",
   "BankReturnImportItem",
+  "BankStatementImport",
+  "BankStatementMovement",
 ];
 
 function modelSupportsBranchScope(model?: string | null) {

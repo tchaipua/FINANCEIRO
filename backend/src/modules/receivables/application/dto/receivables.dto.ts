@@ -319,6 +319,40 @@ export class AssignBankToInstallmentsDto {
   installmentIds!: string[];
 }
 
+export class ReverseBankPreparationDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installmentIds!: string[];
+}
+
+export class ExcludeInstallmentsFromBatchDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installmentIds!: string[];
+}
+
 export class IssueBankSlipsDto {
   @IsOptional()
   @IsString()

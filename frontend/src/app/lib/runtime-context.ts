@@ -77,18 +77,26 @@ function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
   };
 }
 
+function readCurrentRuntimeContext(): FinanceRuntimeContext {
+  if (typeof window === 'undefined') {
+    return EMPTY_RUNTIME_CONTEXT;
+  }
+
+  return readRuntimeContextFromSearch(window.location.search);
+}
+
 export function useFinanceRuntimeContext(): FinanceRuntimeContext {
   const pathname = usePathname();
   const [runtimeContext, setRuntimeContext] =
     useState<FinanceRuntimeContext>(EMPTY_RUNTIME_CONTEXT);
 
   useEffect(() => {
-    setRuntimeContext(readRuntimeContextFromSearch(window.location.search));
+    setRuntimeContext(readCurrentRuntimeContext());
   }, [pathname]);
 
   useEffect(() => {
     const syncRuntimeContext = () =>
-      setRuntimeContext(readRuntimeContextFromSearch(window.location.search));
+      setRuntimeContext(readCurrentRuntimeContext());
 
     window.addEventListener('popstate', syncRuntimeContext);
     window.addEventListener('hashchange', syncRuntimeContext);

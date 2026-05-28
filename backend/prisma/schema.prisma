@@ -40,6 +40,8 @@ model Company {
   receivableInstallments ReceivableInstallment[]
   bankReturnImports      BankReturnImport[]
   bankReturnImportItems  BankReturnImportItem[]
+  bankStatementImports   BankStatementImport[]
+  bankStatementMovements BankStatementMovement[]
   cashSessions           CashSession[]
   cashMovements          CashMovement[]
   settlements            InstallmentSettlement[]
@@ -51,17 +53,17 @@ model Company {
 }
 
 model CompanyBranch {
-  id                   String   @id @default(uuid())
+  id                   String    @id @default(uuid())
   companyId            String
   branchCode           Int
   name                 String
-  isActive             Boolean  @default(true)
-  isDefault            Boolean  @default(false)
-  inventoryControlType String   @default("TRADITIONAL")
-  quantityPrecision    String   @default("INTEGER_ONLY")
-  createdAt            DateTime @default(now())
+  isActive             Boolean   @default(true)
+  isDefault            Boolean   @default(false)
+  inventoryControlType String    @default("TRADITIONAL")
+  quantityPrecision    String    @default("INTEGER_ONLY")
+  createdAt            DateTime  @default(now())
   createdBy            String?
-  updatedAt            DateTime @updatedAt
+  updatedAt            DateTime  @updatedAt
   updatedBy            String?
   canceledAt           DateTime?
   canceledBy           String?
@@ -74,35 +76,35 @@ model CompanyBranch {
 }
 
 model Product {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   companyId       String
-  branchCode  Int      @default(1)
-  status          String   @default("ACTIVE")
+  branchCode      Int       @default(1)
+  status          String    @default("ACTIVE")
   name            String
   internalCode    String?
   sku             String?
   barcode         String?
-  unitCode        String   @default("UN")
-  productType     String   @default("GOODS")
-  tracksInventory Boolean  @default(true)
-  allowFraction   Boolean  @default(false)
-  usesColorSize    Boolean  @default(false)
-  usesLotControl   Boolean  @default(false)
-  currentStock    Float    @default(0)
-  minimumStock    Float    @default(0)
+  unitCode        String    @default("UN")
+  productType     String    @default("GOODS")
+  tracksInventory Boolean   @default(true)
+  allowFraction   Boolean   @default(false)
+  usesColorSize   Boolean   @default(false)
+  usesLotControl  Boolean   @default(false)
+  currentStock    Float     @default(0)
+  minimumStock    Float     @default(0)
   purchasePrice   Float?
   salePrice       Float?
   ncmCode         String?
   cestCode        String?
   notes           String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
   createdBy       String?
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
   updatedBy       String?
   canceledAt      DateTime?
   canceledBy      String?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImportItems PayableInvoiceImportItem[]
   stockMovements            StockMovement[]
   stockBalances             ProductStockBalance[]
@@ -145,37 +147,37 @@ model ProductStockBalance {
 }
 
 model FiscalCertificate {
-  id                  String   @id @default(uuid())
-  companyId           String
-  branchCode  Int      @default(1)
-  status              String   @default("ACTIVE")
-  certificateType     String   @default("A1")
-  environment         String   @default("PRODUCTION")
-  purpose             String   @default("NFE_DFE")
-  isDefault           Boolean  @default(false)
-  aliasName           String
-  authorStateCode     String
-  holderName          String
-  holderDocument      String
-  serialNumber        String?
-  thumbprint          String?
-  validFrom           DateTime?
-  validTo             DateTime?
-  pfxEncryptedBase64  String
-  passwordEncrypted   String
-  lastNsu             String?
-  lastMaxNsu          String?
-  lastSyncAt          DateTime?
-  lastSyncStatus      String?
-  lastSyncMessage     String?
-  createdAt           DateTime @default(now())
-  createdBy           String?
-  updatedAt           DateTime @updatedAt
-  updatedBy           String?
-  canceledAt          DateTime?
-  canceledBy          String?
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  status             String    @default("ACTIVE")
+  certificateType    String    @default("A1")
+  environment        String    @default("PRODUCTION")
+  purpose            String    @default("NFE_DFE")
+  isDefault          Boolean   @default(false)
+  aliasName          String
+  authorStateCode    String
+  holderName         String
+  holderDocument     String
+  serialNumber       String?
+  thumbprint         String?
+  validFrom          DateTime?
+  validTo            DateTime?
+  pfxEncryptedBase64 String
+  passwordEncrypted  String
+  lastNsu            String?
+  lastMaxNsu         String?
+  lastSyncAt         DateTime?
+  lastSyncStatus     String?
+  lastSyncMessage    String?
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+  updatedBy          String?
+  canceledAt         DateTime?
+  canceledBy         String?
 
-  company               Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImports PayableInvoiceImport[]
 
   @@index([companyId, status, environment, purpose, aliasName])
@@ -183,10 +185,10 @@ model FiscalCertificate {
 }
 
 model Supplier {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   companyId         String
-  branchCode  Int      @default(1)
-  status            String   @default("ACTIVE")
+  branchCode        Int       @default(1)
+  status            String    @default("ACTIVE")
   legalName         String
   tradeName         String?
   document          String?
@@ -194,14 +196,14 @@ model Supplier {
   email             String?
   phone             String?
   notes             String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
   createdBy         String?
-  updatedAt         DateTime @updatedAt
+  updatedAt         DateTime  @updatedAt
   updatedBy         String?
   canceledAt        DateTime?
   canceledBy        String?
 
-  company               Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImports PayableInvoiceImport[]
   payableTitles         PayableTitle[]
 
@@ -211,13 +213,13 @@ model Supplier {
 }
 
 model PayableInvoiceImport {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   companyId           String
-  branchCode  Int      @default(1)
+  branchCode          Int       @default(1)
   supplierId          String?
   fiscalCertificateId String?
-  status              String   @default("PENDING_APPROVAL")
-  importType          String   @default("XML_UPLOAD")
+  status              String    @default("PENDING_APPROVAL")
+  importType          String    @default("XML_UPLOAD")
   documentModel       String
   accessKey           String
   invoiceNumber       String
@@ -225,8 +227,8 @@ model PayableInvoiceImport {
   operationNature     String?
   issueDate           DateTime
   entryDate           DateTime?
-  totalProductsAmount Float    @default(0)
-  totalInvoiceAmount  Float    @default(0)
+  totalProductsAmount Float     @default(0)
+  totalInvoiceAmount  Float     @default(0)
   xmlHash             String
   xmlContentBlob      Bytes
   distributionNsu     String?
@@ -234,20 +236,20 @@ model PayableInvoiceImport {
   approvalNotes       String?
   approvedAt          DateTime?
   approvedBy          String?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime  @default(now())
   createdBy           String?
-  updatedAt           DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
   updatedBy           String?
   canceledAt          DateTime?
   canceledBy          String?
 
-  company     Company                      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  supplier    Supplier?                    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  fiscalCertificate FiscalCertificate?     @relation(fields: [fiscalCertificateId], references: [id], onDelete: SetNull)
-  items       PayableInvoiceImportItem[]
-  installments PayableInvoiceImportInstallment[]
-  payableTitle PayableTitle?
-  stockMovements StockMovement[]
+  company           Company                           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier          Supplier?                         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  fiscalCertificate FiscalCertificate?                @relation(fields: [fiscalCertificateId], references: [id], onDelete: SetNull)
+  items             PayableInvoiceImportItem[]
+  installments      PayableInvoiceImportInstallment[]
+  payableTitle      PayableTitle?
+  stockMovements    StockMovement[]
 
   @@unique([companyId, branchCode, accessKey])
   @@unique([companyId, branchCode, xmlHash])
@@ -258,27 +260,27 @@ model PayableInvoiceImport {
 }
 
 model PayableInvoiceImportItem {
-  id                  String   @id @default(uuid())
-  invoiceImportId     String
-  productId           String?
-  lineNumber          Int
-  approvalAction      String?
-  supplierItemCode    String?
-  barcode             String?
-  description         String
-  ncmCode             String?
-  cfopCode            String?
-  unitCode            String?
-  quantity            Float    @default(0)
-  unitPrice           Float    @default(0)
-  totalPrice          Float    @default(0)
-  tracksInventory     Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  createdBy           String?
-  updatedAt           DateTime @updatedAt
-  updatedBy           String?
-  canceledAt          DateTime?
-  canceledBy          String?
+  id               String    @id @default(uuid())
+  invoiceImportId  String
+  productId        String?
+  lineNumber       Int
+  approvalAction   String?
+  supplierItemCode String?
+  barcode          String?
+  description      String
+  ncmCode          String?
+  cfopCode         String?
+  unitCode         String?
+  quantity         Float     @default(0)
+  unitPrice        Float     @default(0)
+  totalPrice       Float     @default(0)
+  tracksInventory  Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
 
   invoiceImport  PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
   product        Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -290,26 +292,26 @@ model PayableInvoiceImportItem {
 }
 
 model PayableInvoiceImportInstallment {
-  id              String   @id @default(uuid())
-  invoiceImportId String
-  installmentLabel String?
+  id                String    @id @default(uuid())
+  invoiceImportId   String
+  installmentLabel  String?
   installmentNumber Int
-  dueDate         DateTime
-  originalAmount  Float    @default(0)
-  additionAmount  Float    @default(0)
-  discountAmount  Float    @default(0)
-  finalAmount     Float    @default(0)
-  amount          Float    @default(0)
-  status          String   @default("OPEN")
-  paymentMethod   String?
-  settledAt       DateTime?
-  notes           String?
-  createdAt       DateTime @default(now())
-  createdBy       String?
-  updatedAt       DateTime @updatedAt
-  updatedBy       String?
-  canceledAt      DateTime?
-  canceledBy      String?
+  dueDate           DateTime
+  originalAmount    Float     @default(0)
+  additionAmount    Float     @default(0)
+  discountAmount    Float     @default(0)
+  finalAmount       Float     @default(0)
+  amount            Float     @default(0)
+  status            String    @default("OPEN")
+  paymentMethod     String?
+  settledAt         DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
 
   invoiceImport PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
 
@@ -319,25 +321,25 @@ model PayableInvoiceImportInstallment {
 }
 
 model PayableTitle {
-  id                     String   @id @default(uuid())
-  companyId              String
-  branchCode  Int      @default(1)
-  supplierId             String?
-  sourceDocumentType     String
-  sourceDocumentId       String   @unique
-  status                 String   @default("OPEN")
-  documentNumber         String
-  description            String
-  issueDate              DateTime
-  totalAmount            Float    @default(0)
-  supplierNameSnapshot   String
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  supplierId               String?
+  sourceDocumentType       String
+  sourceDocumentId         String    @unique
+  status                   String    @default("OPEN")
+  documentNumber           String
+  description              String
+  issueDate                DateTime
+  totalAmount              Float     @default(0)
+  supplierNameSnapshot     String
   supplierDocumentSnapshot String?
-  createdAt              DateTime @default(now())
-  createdBy              String?
-  updatedAt              DateTime @updatedAt
-  updatedBy              String?
-  canceledAt             DateTime?
-  canceledBy             String?
+  createdAt                DateTime  @default(now())
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt
+  updatedBy                String?
+  canceledAt               DateTime?
+  canceledBy               String?
 
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -350,33 +352,33 @@ model PayableTitle {
 }
 
 model PayableInstallment {
-  id                    String   @id @default(uuid())
-  companyId             String
-  branchCode  Int      @default(1)
-  titleId               String
-  installmentNumber     Int
-  installmentCount      Int
-  dueDate               DateTime
-  originalAmount        Float    @default(0)
-  additionAmount        Float    @default(0)
-  discountAmount        Float    @default(0)
-  finalAmount           Float    @default(0)
-  amount                Float    @default(0)
-  openAmount            Float    @default(0)
-  paidAmount            Float    @default(0)
-  status                String   @default("OPEN")
-  paymentMethod         String?
-  settledAt             DateTime?
-  notes                 String?
-  descriptionSnapshot   String
-  supplierNameSnapshot  String
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  titleId                  String
+  installmentNumber        Int
+  installmentCount         Int
+  dueDate                  DateTime
+  originalAmount           Float     @default(0)
+  additionAmount           Float     @default(0)
+  discountAmount           Float     @default(0)
+  finalAmount              Float     @default(0)
+  amount                   Float     @default(0)
+  openAmount               Float     @default(0)
+  paidAmount               Float     @default(0)
+  status                   String    @default("OPEN")
+  paymentMethod            String?
+  settledAt                DateTime?
+  notes                    String?
+  descriptionSnapshot      String
+  supplierNameSnapshot     String
   supplierDocumentSnapshot String?
-  createdAt             DateTime @default(now())
-  createdBy             String?
-  updatedAt             DateTime @updatedAt
-  updatedBy             String?
-  canceledAt            DateTime?
-  canceledBy            String?
+  createdAt                DateTime  @default(now())
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt
+  updatedBy                String?
+  canceledAt               DateTime?
+  canceledBy               String?
 
   company Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
   title   PayableTitle @relation(fields: [titleId], references: [id], onDelete: Restrict)
@@ -387,29 +389,29 @@ model PayableInstallment {
 }
 
 model StockMovement {
-  id                String   @id @default(uuid())
-  companyId         String
-  branchCode  Int      @default(1)
-  productId         String
-  sourceImportId    String
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  productId          String
+  sourceImportId     String
   sourceImportItemId String
-  movementType      String
-  quantity          Float    @default(0)
-  previousStock     Float    @default(0)
-  resultingStock    Float    @default(0)
-  unitCost          Float?
-  notes             String?
-  occurredAt        DateTime
-  createdAt         DateTime @default(now())
-  createdBy         String?
-  updatedAt         DateTime @updatedAt
-  updatedBy         String?
-  canceledAt        DateTime?
-  canceledBy        String?
+  movementType       String
+  quantity           Float     @default(0)
+  previousStock      Float     @default(0)
+  resultingStock     Float     @default(0)
+  unitCost           Float?
+  notes              String?
+  occurredAt         DateTime
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+  updatedBy          String?
+  canceledAt         DateTime?
+  canceledBy         String?
 
-  company        Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  product        Product                  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  sourceImport   PayableInvoiceImport     @relation(fields: [sourceImportId], references: [id], onDelete: Restrict)
+  company          Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product          Product                  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceImport     PayableInvoiceImport     @relation(fields: [sourceImportId], references: [id], onDelete: Restrict)
   sourceImportItem PayableInvoiceImportItem @relation(fields: [sourceImportItemId], references: [id], onDelete: Restrict)
 
   @@index([companyId, occurredAt])
@@ -419,65 +421,67 @@ model StockMovement {
 }
 
 model BankAccount {
-  id                  String   @id @default(uuid())
-  companyId           String
-  branchCode  Int      @default(1)
-  status              String   @default("ACTIVE")
-  bankCode            String
-  bankName            String
-  branchNumber        String
-  branchDigit         String   @default("")
-  accountNumber       String
-  accountDigit        String   @default("")
-  walletCode          String?
-  agreementCode       String?
-  pixKey              String?
-  beneficiaryName     String?
-  beneficiaryDocument String?
-  billingProvider              String?
-  billingEnvironment           String?
-  billingApiClientId           String?
-  billingApiClientSecret       String?
-  billingCertificateBase64     String?
-  billingCertificatePassword   String?
-  billingBeneficiaryCode       String?
-  billingWalletVariation       String?
-  billingContractNumber        String?
-  billingModalityCode          String?
-  billingDocumentSpeciesCode   String?
-  billingAcceptanceCode        String?
-  billingIssueTypeCode         String?
-  billingDistributionTypeCode  String?
-  billingNextBoletoNumber      Int?
-  billingRegisterPixCode       Int?
-  billingInstructionLine1      String?
-  billingInstructionLine2      String?
-  billingDefaultFinePercent    Float?
+  id                            String    @id @default(uuid())
+  companyId                     String
+  branchCode                    Int       @default(1)
+  status                        String    @default("ACTIVE")
+  bankCode                      String
+  bankName                      String
+  branchNumber                  String
+  branchDigit                   String    @default("")
+  accountNumber                 String
+  accountDigit                  String    @default("")
+  walletCode                    String?
+  agreementCode                 String?
+  pixKey                        String?
+  beneficiaryName               String?
+  beneficiaryDocument           String?
+  billingProvider               String?
+  billingEnvironment            String?
+  billingApiClientId            String?
+  billingApiClientSecret        String?
+  billingCertificateBase64      String?
+  billingCertificatePassword    String?
+  billingBeneficiaryCode        String?
+  billingWalletVariation        String?
+  billingContractNumber         String?
+  billingModalityCode           String?
+  billingDocumentSpeciesCode    String?
+  billingAcceptanceCode         String?
+  billingIssueTypeCode          String?
+  billingDistributionTypeCode   String?
+  billingNextBoletoNumber       Int?
+  billingRegisterPixCode        Int?
+  billingInstructionLine1       String?
+  billingInstructionLine2       String?
+  billingDefaultFinePercent     Float?
   billingDefaultInterestPercent Float?
   billingDefaultDiscountPercent Float?
-  billingProtestDays           Int?
-  billingNegativeDays          Int?
-  notes               String?
-  createdAt           DateTime @default(now())
-  createdBy           String?
-  updatedAt           DateTime @updatedAt
-  updatedBy           String?
-  canceledAt          DateTime?
-  canceledBy          String?
+  billingProtestDays            Int?
+  billingNegativeDays           Int?
+  notes                         String?
+  createdAt                     DateTime  @default(now())
+  createdBy                     String?
+  updatedAt                     DateTime  @updatedAt
+  updatedBy                     String?
+  canceledAt                    DateTime?
+  canceledBy                    String?
 
-  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  bankReturnImports     BankReturnImport[]
-  bankReturnImportItems BankReturnImportItem[]
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankReturnImports      BankReturnImport[]
+  bankReturnImportItems  BankReturnImportItem[]
+  bankStatementImports   BankStatementImport[]
+  bankStatementMovements BankStatementMovement[]
 
-  @@index([companyId, status, bankName])
   @@unique([companyId, branchCode, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
+  @@index([companyId, status, bankName])
   @@map("bank_accounts")
 }
 
 model Party {
   id                 String    @id @default(uuid())
   companyId          String
-  branchCode  Int      @default(1)
+  branchCode         Int       @default(1)
   externalEntityType String
   externalEntityId   String
   name               String
@@ -507,7 +511,7 @@ model Party {
 model ReceivableBatch {
   id               String    @id @default(uuid())
   companyId        String
-  branchCode  Int      @default(1)
+  branchCode       Int       @default(1)
   sourceSystem     String
   sourceTenantId   String
   sourceBatchType  String
@@ -541,7 +545,7 @@ model ReceivableBatch {
 model ReceivableTitle {
   id                    String    @id @default(uuid())
   companyId             String
-  branchCode  Int      @default(1)
+  branchCode            Int       @default(1)
   batchId               String
   payerPartyId          String?
   sourceEntityType      String
@@ -575,62 +579,72 @@ model ReceivableTitle {
 }
 
 model ReceivableInstallment {
-  id                    String    @id @default(uuid())
-  companyId             String
-  branchCode  Int      @default(1)
-  batchId               String
-  titleId               String
-  bankAccountId         String?
-  bankAccountLabel      String?
-  bankAssignedAt        DateTime?
-  bankAssignedBy        String?
-  bankSlipStatus        String?
-  bankSlipMessage       String?
-  bankSlipProvider      String?
-  bankSlipOurNumber     String?
-  bankSlipYourNumber    String?
-  bankSlipDigitableLine String?
-  bankSlipBarcode       String?
-  bankSlipQrCode        String?
-  bankSlipPdfBase64     String?
-  bankSlipPayloadJson   String?
-  bankSlipResponseJson  String?
-  bankSlipIssuedAt      DateTime?
-  bankSlipIssuedBy      String?
-  sourceInstallmentKey  String
-  installmentNumber     Int
-  installmentCount      Int
-  dueDate               DateTime
-  amount                Float
-  openAmount            Float
-  paidAmount            Float     @default(0)
-  interestRate          Float?
-  interestGracePeriod   Int?
-  penaltyRate           Float?
-  penaltyValue          Float?
-  penaltyGracePeriod    Int?
-  status                String    @default("OPEN")
-  settlementMethod      String?
-  settledAt             DateTime?
-  descriptionSnapshot   String
-  payerNameSnapshot     String
-  payerDocumentSnapshot String?
-  createdAt             DateTime  @default(now())
-  createdBy             String?
-  updatedAt             DateTime  @updatedAt
-  updatedBy             String?
-  canceledAt            DateTime?
-  canceledBy            String?
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  batchId                 String
+  titleId                 String
+  bankAccountId           String?
+  bankAccountLabel        String?
+  bankAssignedAt          DateTime?
+  bankAssignedBy          String?
+  bankSlipStatus          String?
+  bankSlipMessage         String?
+  bankSlipProvider        String?
+  bankSlipOurNumber       String?
+  bankSlipYourNumber      String?
+  bankSlipDigitableLine   String?
+  bankSlipBarcode         String?
+  bankSlipQrCode          String?
+  bankSlipPdfBase64       String?
+  bankSlipPayloadJson     String?
+  bankSlipResponseJson    String?
+  bankSlipIssuedAt        DateTime?
+  bankSlipIssuedBy        String?
+  batchRemovedAt          DateTime?
+  batchRemovedBy          String?
+  batchRemovedReason      String?
+  sourceInstallmentKey    String
+  installmentNumber       Int
+  installmentCount        Int
+  dueDate                 DateTime
+  amount                  Float
+  openAmount              Float
+  paidAmount              Float     @default(0)
+  interestRate            Float?
+  interestGracePeriod     Int?
+  penaltyRate             Float?
+  penaltyValue            Float?
+  penaltyGracePeriod      Int?
+  bankMovementGroupId     String?
+  bankMovementStatus      String?
+  bankMovementCreatedAt   DateTime?
+  bankMovementConvertedAt DateTime?
+  bankMovementConvertedBy String?
+  status                  String    @default("OPEN")
+  settlementMethod        String?
+  settledAt               DateTime?
+  descriptionSnapshot     String
+  payerNameSnapshot       String
+  payerDocumentSnapshot   String?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
 
-  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  batch       ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  title       ReceivableTitle         @relation(fields: [titleId], references: [id], onDelete: Restrict)
-  settlements InstallmentSettlement[]
-  bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemInstallment")
+  company               Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch                 ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  title                 ReceivableTitle         @relation(fields: [titleId], references: [id], onDelete: Restrict)
+  settlements           InstallmentSettlement[]
+  bankReturnImportItems BankReturnImportItem[]  @relation("BankReturnImportItemInstallment")
 
   @@unique([companyId, branchCode, sourceInstallmentKey])
   @@index([companyId, status, dueDate])
   @@index([companyId, bankAccountId, status])
+  @@index([companyId, bankAccountId, bankMovementStatus])
+  @@index([companyId, bankMovementGroupId])
   @@index([titleId])
   @@map("receivable_installments")
 }
@@ -638,7 +652,7 @@ model ReceivableInstallment {
 model CashSession {
   id                    String    @id @default(uuid())
   companyId             String
-  branchCode  Int      @default(1)
+  branchCode            Int       @default(1)
   sourceSystem          String
   sourceTenantId        String
   cashierUserId         String
@@ -668,92 +682,100 @@ model CashSession {
 }
 
 model CashMovement {
-  id            String    @id @default(uuid())
-  companyId     String
-  branchCode  Int      @default(1)
-  cashSessionId String
-  movementType  String
-  direction     String
-  paymentMethod String?
-  amount        Float
-  description   String
-  occurredAt    DateTime
-  referenceType String?
-  referenceId   String?
-  createdAt     DateTime  @default(now())
-  createdBy     String?
-  updatedAt     DateTime  @updatedAt
-  updatedBy     String?
-  canceledAt    DateTime?
-  canceledBy    String?
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  cashSessionId       String
+  movementType        String
+  direction           String
+  paymentMethod       String?
+  bankAccountId       String?
+  bankAccountLabel    String?
+  bankMovementGroupId String?
+  amount              Float
+  description         String
+  occurredAt          DateTime
+  referenceType       String?
+  referenceId         String?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
 
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
   cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
 
   @@index([companyId, occurredAt])
+  @@index([companyId, bankAccountId, bankMovementGroupId])
   @@index([cashSessionId])
   @@map("cash_movements")
 }
 
 model InstallmentSettlement {
-  id             String    @id @default(uuid())
-  companyId      String
-  branchCode  Int      @default(1)
-  installmentId  String
-  cashSessionId  String
-  receivedAmount Float
-  discountAmount Float     @default(0)
-  interestAmount Float     @default(0)
-  penaltyAmount  Float     @default(0)
-  paymentMethod  String
-  settledAt      DateTime  @default(now())
-  requestedBy    String?
-  notes          String?
-  createdAt      DateTime  @default(now())
-  createdBy      String?
-  updatedAt      DateTime  @updatedAt
-  updatedBy      String?
-  canceledAt     DateTime?
-  canceledBy     String?
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  installmentId       String
+  cashSessionId       String
+  receivedAmount      Float
+  discountAmount      Float     @default(0)
+  interestAmount      Float     @default(0)
+  penaltyAmount       Float     @default(0)
+  paymentMethod       String
+  bankAccountId       String?
+  bankAccountLabel    String?
+  bankMovementGroupId String?
+  settledAt           DateTime  @default(now())
+  requestedBy         String?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
 
-  company     Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  installment ReceivableInstallment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
-  cashSession CashSession           @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  installment           ReceivableInstallment  @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+  cashSession           CashSession            @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
   bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemSettlement")
 
   @@index([companyId, settledAt])
+  @@index([companyId, bankAccountId, bankMovementGroupId])
   @@index([installmentId])
   @@index([cashSessionId])
   @@map("installment_settlements")
 }
 
 model BankReturnImport {
-  id                 String   @id @default(uuid())
-  companyId          String
-  branchCode  Int      @default(1)
-  bankAccountId      String
-  provider           String
-  periodStart        DateTime
-  periodEnd          DateTime
-  importedItemCount  Int      @default(0)
-  matchedItemCount   Int      @default(0)
-  liquidatedItemCount Int     @default(0)
-  bankClosedItemCount Int     @default(0)
-  readyToApplyCount  Int      @default(0)
-  appliedItemCount   Int      @default(0)
-  unmatchedItemCount Int      @default(0)
-  status             String   @default("IMPORTED")
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  bankAccountId       String
+  provider            String
+  periodStart         DateTime
+  periodEnd           DateTime
+  importedItemCount   Int       @default(0)
+  matchedItemCount    Int       @default(0)
+  liquidatedItemCount Int       @default(0)
+  bankClosedItemCount Int       @default(0)
+  readyToApplyCount   Int       @default(0)
+  appliedItemCount    Int       @default(0)
+  unmatchedItemCount  Int       @default(0)
+  status              String    @default("IMPORTED")
   requestSnapshotJson String?
-  summaryJson        String?
-  createdAt          DateTime @default(now())
-  createdBy          String?
-  updatedAt          DateTime @updatedAt
-  updatedBy          String?
-  canceledAt         DateTime?
-  canceledBy         String?
+  summaryJson         String?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
 
-  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  bankAccount BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  company     Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   items       BankReturnImportItem[]
 
   @@index([companyId, createdAt])
@@ -762,40 +784,40 @@ model BankReturnImport {
 }
 
 model BankReturnImportItem {
-  id                  String    @id @default(uuid())
-  importId            String
-  companyId           String
-  branchCode  Int      @default(1)
-  bankAccountId       String
+  id                   String    @id @default(uuid())
+  importId             String
+  companyId            String
+  branchCode           Int       @default(1)
+  bankAccountId        String
   matchedInstallmentId String?
-  appliedSettlementId String?
-  movementTypeCode    String
-  movementStatus      String
-  externalRequestCode String?
-  externalFileId      String?
-  dueDate             DateTime?
-  movementDate        DateTime?
-  paymentDate         DateTime?
-  expectedCreditDate  DateTime?
-  ourNumber           String?
-  yourNumber          String?
-  barcode             String?
-  contractNumber      String?
-  amount              Float     @default(0)
-  settledAmount       Float?
-  discountAmount      Float?
-  interestAmount      Float?
-  feeAmount           Float?
-  rawPayloadJson      String
-  appliedAt           DateTime?
-  appliedBy           String?
-  appliedStatus       String?
-  createdAt           DateTime  @default(now())
-  createdBy           String?
-  updatedAt           DateTime  @updatedAt
-  updatedBy           String?
-  canceledAt          DateTime?
-  canceledBy          String?
+  appliedSettlementId  String?
+  movementTypeCode     String
+  movementStatus       String
+  externalRequestCode  String?
+  externalFileId       String?
+  dueDate              DateTime?
+  movementDate         DateTime?
+  paymentDate          DateTime?
+  expectedCreditDate   DateTime?
+  ourNumber            String?
+  yourNumber           String?
+  barcode              String?
+  contractNumber       String?
+  amount               Float     @default(0)
+  settledAmount        Float?
+  discountAmount       Float?
+  interestAmount       Float?
+  feeAmount            Float?
+  rawPayloadJson       String
+  appliedAt            DateTime?
+  appliedBy            String?
+  appliedStatus        String?
+  createdAt            DateTime  @default(now())
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt
+  updatedBy            String?
+  canceledAt           DateTime?
+  canceledBy           String?
 
   importSession      BankReturnImport       @relation(fields: [importId], references: [id], onDelete: Restrict)
   company            Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -807,4 +829,81 @@ model BankReturnImportItem {
   @@index([companyId, bankAccountId, movementStatus])
   @@index([matchedInstallmentId])
   @@map("bank_return_import_items")
+}
+
+model BankStatementImport {
+  id                     String    @id @default(uuid())
+  companyId              String
+  branchCode             Int       @default(1)
+  bankAccountId          String
+  provider               String
+  periodStart            DateTime
+  periodEnd              DateTime
+  pulledAt               DateTime  @default(now())
+  importedMovementCount  Int       @default(0)
+  createdMovementCount   Int       @default(0)
+  duplicateMovementCount Int       @default(0)
+  creditAmount           Float     @default(0)
+  debitAmount            Float     @default(0)
+  currentBalance         Float?
+  status                 String    @default("IMPORTED")
+  requestSnapshotJson    String?
+  summaryJson            String?
+  createdAt              DateTime  @default(now())
+  createdBy              String?
+  updatedAt              DateTime  @updatedAt
+  updatedBy              String?
+  canceledAt             DateTime?
+  canceledBy             String?
+
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount    BankAccount             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  firstMovements BankStatementMovement[] @relation("BankStatementFirstImport")
+  lastMovements  BankStatementMovement[] @relation("BankStatementLastImport")
+
+  @@index([companyId, createdAt])
+  @@index([bankAccountId, pulledAt])
+  @@index([companyId, bankAccountId, periodStart, periodEnd])
+  @@map("bank_statement_imports")
+}
+
+model BankStatementMovement {
+  id                   String    @id @default(uuid())
+  companyId            String
+  branchCode           Int       @default(1)
+  bankAccountId        String
+  firstImportId        String
+  lastImportId         String
+  provider             String
+  externalId           String
+  occurredAt           DateTime
+  description          String
+  documentNumber       String?
+  movementType         String
+  amount               Float     @default(0)
+  balanceAfter         Float?
+  reconciliationStatus String    @default("PENDING")
+  reviewStatus         String    @default("NOT_REVIEWED")
+  reviewedAt           DateTime?
+  reviewedBy           String?
+  rawPayloadJson       String
+  createdAt            DateTime  @default(now())
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt
+  updatedBy            String?
+  canceledAt           DateTime?
+  canceledBy           String?
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  firstImport BankStatementImport @relation("BankStatementFirstImport", fields: [firstImportId], references: [id], onDelete: Restrict)
+  lastImport  BankStatementImport @relation("BankStatementLastImport", fields: [lastImportId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, bankAccountId, externalId])
+  @@index([companyId, bankAccountId, occurredAt])
+  @@index([companyId, bankAccountId, reconciliationStatus])
+  @@index([companyId, bankAccountId, reviewStatus])
+  @@index([firstImportId])
+  @@index([lastImportId])
+  @@map("bank_statement_movements")
 }

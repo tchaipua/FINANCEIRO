@@ -1,5 +1,14 @@
 import { Type } from "class-transformer";
-import { IsNumber, IsOptional, IsString, Min } from "class-validator";
+import {
+  ArrayNotEmpty,
+  IsDateString,
+  IsArray,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from "class-validator";
 
 export class ListBanksDto {
   @IsOptional()
@@ -47,6 +56,89 @@ export class GetBankDto {
 
   @IsString()
   sourceTenantId!: string;
+}
+
+export class GetBankStatementDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+
+  @IsDateString()
+  periodStart!: string;
+
+  @IsDateString()
+  periodEnd!: string;
+}
+
+export class ReconcileBankStatementMovementDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
+export class ReviewBankStatementMovementDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
+export class ReviewBankStatementMovementsDto extends ReviewBankStatementMovementDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  movementIds!: string[];
+
+  @IsString()
+  @IsIn(["REVIEWED", "NOT_REVIEWED"])
+  reviewStatus!: "REVIEWED" | "NOT_REVIEWED";
 }
 
 export class SaveBankDto {

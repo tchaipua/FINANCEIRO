@@ -213,4 +213,12 @@ export class SettleCashInstallmentDto extends BaseSettleInstallmentDto {}
 export class SettleManualInstallmentDto extends BaseSettleInstallmentDto {
   @IsIn(CASH_SESSION_PAYMENT_METHODS)
   paymentMethod!: (typeof CASH_SESSION_PAYMENT_METHODS)[number];
+
+  @IsOptional()
+  @IsString()
+  bankAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  bankMovementGroupId?: string;
 }

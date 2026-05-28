@@ -9,6 +9,16 @@ import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, useFinan
 
 type ManualPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CHECK';
 
+type BankItem = {
+  id: string;
+  status: string;
+  bankName: string;
+  branchNumber: string;
+  branchDigit?: string | null;
+  accountNumber: string;
+  accountDigit?: string | null;
+};
+
 type InstallmentItem = {
   id: string;
   sourceEntityName: string;
@@ -133,6 +143,21 @@ function formatMoneyInput(value: number) {
   });
 }
 
+function buildBankLabel(bank: BankItem) {
+  const agency = `${bank.branchNumber}${bank.branchDigit ? `-${bank.branchDigit}` : ''}`;
+  const account = `${bank.accountNumber}${bank.accountDigit ? `-${bank.accountDigit}` : ''}`;
+  return `${bank.bankName} - AG ${agency} - CC ${account}`;
+}
+
+function createBankMovementGroupId(paymentMethod: ManualPaymentMethod) {
+  const randomId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return `${paymentMethod}-${randomId}`.toUpperCase();
+}
+
 function roundMoney(value: number) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
@@ -179,6 +204,8 @@ export default function FinanceiroManualSettlementPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [installmentIds, setInstallmentIds] = useState<string[]>([]);
   const [installments, setInstallments] = useState<InstallmentItem[]>([]);
+  const [banks, setBanks] = useState<BankItem[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<ManualPaymentMethod>('CASH');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -201,6 +228,7 @@ export default function FinanceiroManualSettlementPage() {
     async function loadInstallments() {
       if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId || !installmentIds.length) {
         setInstallments([]);
+        setBanks([]);
         setIsLoading(false);
         return;
       }
@@ -209,21 +237,33 @@ export default function FinanceiroManualSettlementPage() {
         setIsLoading(true);
         setAlert(null);
 
-        const payload = await requestJson<InstallmentItem[]>(
-          `/receivables/installments${buildFinanceApiQueryString(runtimeContext, {
-            status: 'ALL',
-          })}`,
-          {
-            fallbackMessage: 'Não foi possível carregar as parcelas selecionadas.',
-          },
-        );
+        const [payload, loadedBanks] = await Promise.all([
+          requestJson<InstallmentItem[]>(
+            `/receivables/installments${buildFinanceApiQueryString(runtimeContext, {
+              status: 'ALL',
+            })}`,
+            {
+              fallbackMessage: 'Não foi possível carregar as parcelas selecionadas.',
+            },
+          ),
+          requestJson<BankItem[]>(
+            `/banks${buildFinanceApiQueryString(runtimeContext, { status: 'ACTIVE' })}`,
+            {
+              fallbackMessage: 'Não foi possível carregar os bancos para baixa Pix.',
+            },
+          ),
+        ]);
 
         const selectedIdSet = new Set(installmentIds);
         const selectedInstallments = (Array.isArray(payload) ? payload : []).filter((item) =>
           selectedIdSet.has(String(item.id || '').trim().toUpperCase()),
         );
+        const activeBanks = (Array.isArray(loadedBanks) ? loadedBanks : []).filter(
+          (item) => String(item.status || '').trim().toUpperCase() === 'ACTIVE',
+        );
 
         setInstallments(selectedInstallments);
+        setBanks(activeBanks);
         setCompletionState(null);
 
         if (!selectedInstallments.length) {
@@ -235,6 +275,7 @@ export default function FinanceiroManualSettlementPage() {
         }
       } catch (error) {
         setInstallments([]);
+        setBanks([]);
         setAlert({
           type: 'error',
           title: 'Erro ao carregar parcelas',
@@ -250,6 +291,17 @@ export default function FinanceiroManualSettlementPage() {
 
     void loadInstallments();
   }, [installmentIds, runtimeContext]);
+
+  useEffect(() => {
+    if (selectedPaymentMethod !== 'PIX') {
+      setSelectedBankId('');
+      return;
+    }
+
+    if (selectedBankId && !banks.some((bank) => bank.id === selectedBankId)) {
+      setSelectedBankId('');
+    }
+  }, [banks, selectedBankId, selectedPaymentMethod]);
 
   const selectedPaymentMethodOption =
     PAYMENT_METHOD_OPTIONS.find((option) => option.value === selectedPaymentMethod) || PAYMENT_METHOD_OPTIONS[0];
@@ -311,11 +363,24 @@ export default function FinanceiroManualSettlementPage() {
       return;
     }
 
+    if (selectedPaymentMethod === 'PIX' && !selectedBankId) {
+      setAlert({
+        type: 'warning',
+        title: 'Banco do Pix obrigatório',
+        message: 'Selecione o banco onde o Pix será creditado antes de confirmar a baixa.',
+      });
+      return;
+    }
+
     const settlementAuditNote = hasInterestOverride
       ? `AUDITORIA JUROS | CALCULADO=${formatMoneyInput(calculatedInterestAmount)} | INFORMADO=${formatMoneyInput(manualInterestAmount)} | DESCONTO=${formatMoneyInput(discountAmount)}`
       : `AUDITORIA JUROS | CALCULADO=${formatMoneyInput(calculatedInterestAmount)} | INFORMADO=${formatMoneyInput(manualInterestAmount)} | DESCONTO=${formatMoneyInput(discountAmount)}`;
     const discountByInstallment = distributeAmountByOpenAmount(installments, discountAmount);
     const interestByInstallment = distributeAmountByOpenAmount(installments, manualInterestAmount);
+    const bankMovementGroupId = selectedPaymentMethod === 'PIX'
+      ? createBankMovementGroupId(selectedPaymentMethod)
+      : undefined;
+    const receivedAt = new Date().toISOString();
 
     try {
       setIsSubmitting(true);
@@ -339,9 +404,12 @@ export default function FinanceiroManualSettlementPage() {
                 cashierUserId: runtimeContext.cashierUserId || undefined,
                 cashierDisplayName: runtimeContext.cashierDisplayName || undefined,
                 paymentMethod: selectedPaymentMethod,
+                bankAccountId: selectedPaymentMethod === 'PIX' ? selectedBankId : undefined,
+                bankMovementGroupId,
+                receivedAt,
                 discountAmount: installmentDiscountAmount,
                 interestAmount: installmentInterestAmount,
-                notes: `${settlementAuditNote} | PARCELA_DESCONTO=${formatMoneyInput(installmentDiscountAmount)} | PARCELA_ACRESCIMO=${formatMoneyInput(installmentInterestAmount)}`,
+                notes: `${settlementAuditNote} | PARCELA_DESCONTO=${formatMoneyInput(installmentDiscountAmount)} | PARCELA_ACRESCIMO=${formatMoneyInput(installmentInterestAmount)}${bankMovementGroupId ? ` | GRUPO_BANCO=${bankMovementGroupId}` : ''}`,
               }),
               fallbackMessage: `Não foi possível baixar a parcela de ${installment.sourceEntityName}.`,
             },
@@ -654,6 +722,29 @@ export default function FinanceiroManualSettlementPage() {
                   );
                 })}
               </div>
+              {selectedPaymentMethod === 'PIX' ? (
+                <label className="mt-4 block rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    Banco de destino do Pix
+                  </div>
+                  <select
+                    value={selectedBankId}
+                    onChange={(event) => setSelectedBankId(event.target.value)}
+                    disabled={isSubmitting}
+                    className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500"
+                  >
+                    <option value="">SELECIONE O BANCO</option>
+                    {banks.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {buildBankLabel(bank)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="mt-2 text-xs font-semibold text-slate-500">
+                    O movimento em aberto será gerado para a conta bancária selecionada.
+                  </div>
+                </label>
+              ) : null}
             </div>
           </div>
 
@@ -697,7 +788,7 @@ export default function FinanceiroManualSettlementPage() {
             <button
               type="button"
               onClick={() => void handleConfirmSettlement()}
-              disabled={isLoading || !installments.length || isSubmitting}
+              disabled={isLoading || !installments.length || isSubmitting || (selectedPaymentMethod === 'PIX' && !selectedBankId)}
               className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
             >
               {isSubmitting ? 'Processando...' : 'Confirmar baixa'}

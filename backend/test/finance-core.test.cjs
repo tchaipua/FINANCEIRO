@@ -39,8 +39,11 @@ async function resetDatabase(prisma) {
   await prisma.payableInvoiceImportItem.deleteMany();
   await prisma.payableInvoiceImport.deleteMany();
   await prisma.fiscalCertificate.deleteMany();
+  await prisma.productStockBalance.deleteMany();
   await prisma.product.deleteMany();
   await prisma.supplier.deleteMany();
+  await prisma.bankStatementMovement.deleteMany();
+  await prisma.bankStatementImport.deleteMany();
   await prisma.bankReturnImportItem.deleteMany();
   await prisma.bankReturnImport.deleteMany();
   await prisma.installmentSettlement.deleteMany();
@@ -51,6 +54,7 @@ async function resetDatabase(prisma) {
   await prisma.cashSession.deleteMany();
   await prisma.bankAccount.deleteMany();
   await prisma.party.deleteMany();
+  await prisma.companyBranch.deleteMany();
   await prisma.company.deleteMany();
 }
 
@@ -171,6 +175,119 @@ async function main() {
 
     assert.equal(activatedBank.status, "ACTIVE");
     assert.equal(activatedBank.canceledAt, null);
+
+    const statementBanksService = new BanksService(prisma, {
+      downloadStatement: async () => ({
+        accountNumber: 987651,
+        periodStart: "2026-05-01",
+        periodEnd: "2026-05-02",
+        balance: 1250.25,
+        months: [{ month: 5, year: 2026, statusCode: 200 }],
+        transactions: [
+          {
+            tipo: "CREDITO",
+            valor: 1500.5,
+            data: "2026-05-01",
+            descricao: "CRED.LIQUIDACAO COBRANCA",
+            numeroDocumento: "1001",
+          },
+          {
+            tipo: "DEBITO",
+            valor: 250.25,
+            data: "2026-05-02",
+            descricao: "TARIFA BANCARIA",
+            numeroDocumento: "2001",
+          },
+        ],
+      }),
+    });
+
+    const statementBank = await statementBanksService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      companyName: "ESCOLA BANCOS",
+      companyDocument: "11222333000144",
+      bankCode: "756",
+      bankName: "SICOOB EXTRATO",
+      branchNumber: "4321",
+      branchDigit: "4",
+      accountNumber: "964",
+      accountDigit: "4",
+      beneficiaryName: "ESCOLA BANCOS",
+      beneficiaryDocument: "11222333000144",
+      billingProvider: "SICOOB",
+      billingApiClientId: "CLIENT_ID_TESTE",
+      billingCertificateBase64: Buffer.from("CERTIFICADO TESTE").toString("base64"),
+      billingCertificatePassword: "SENHA_TESTE",
+    });
+
+    const firstStatement = await statementBanksService.getStatement(statementBank.id, {
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-02",
+      requestedBy: "CODEX",
+    });
+
+    assert.equal(firstStatement.movementCount, 2);
+    assert.equal(firstStatement.persistedMovementCount, 2);
+    assert.equal(firstStatement.createdMovementCount, 2);
+    assert.equal(firstStatement.duplicateMovementCount, 0);
+    assert.equal(firstStatement.creditAmount, 1500.5);
+    assert.equal(firstStatement.debitAmount, 250.25);
+    assert.equal(firstStatement.movements[0].balanceAfter, 1500.5);
+    assert.equal(firstStatement.movements[1].balanceAfter, 1250.25);
+
+    const storedStatementMovements = await prisma.bankStatementMovement.count({
+      where: {
+        bankAccountId: statementBank.id,
+      },
+    });
+
+    assert.equal(storedStatementMovements, 2);
+
+    const secondStatement = await statementBanksService.getStatement(statementBank.id, {
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-02",
+      requestedBy: "CODEX",
+    });
+
+    assert.equal(secondStatement.persistedMovementCount, 2);
+    assert.equal(secondStatement.createdMovementCount, 0);
+    assert.equal(secondStatement.duplicateMovementCount, 2);
+
+    const savedStatement = await statementBanksService.getSavedStatement(statementBank.id, {
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-02",
+    });
+
+    assert.equal(savedStatement.movementCount, 2);
+    assert.equal(savedStatement.persistedMovementCount, 2);
+    assert.equal(savedStatement.creditAmount, 1500.5);
+    assert.equal(savedStatement.debitAmount, 250.25);
+    assert.equal(savedStatement.movements[0].balanceAfter, 1500.5);
+    assert.equal(savedStatement.movements[1].balanceAfter, 1250.25);
+    assert.equal(
+      await prisma.bankStatementMovement.count({
+        where: {
+          bankAccountId: statementBank.id,
+        },
+      }),
+      2,
+    );
+    assert.equal(
+      await prisma.bankStatementImport.count({
+        where: {
+          bankAccountId: statementBank.id,
+        },
+      }),
+      2,
+    );
 
     const importResult = await receivablesService.import({
       requestedBy: "CODEX",
@@ -439,6 +556,61 @@ async function main() {
     assert.equal(currentSession.receivedByPaymentMethod.debitCard, 0);
     assert.equal(currentSession.receivedByPaymentMethod.check, 0);
 
+    const paidUnpreparedSettlement =
+      await cashSessionsService.settleManualInstallment(thirdInstallment.id, {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        cashierUserId: "USR_CAIXA_001",
+        cashierDisplayName: "CAIXA TESTE",
+        paymentMethod: "CASH",
+        receivedAt: "2026-06-10T10:00:00.000Z",
+        notes: "RECEBIMENTO SEM PREPARACAO",
+      });
+
+    assert.equal(paidUnpreparedSettlement.status, "PAID");
+
+    const excludedFromBatch =
+      await receivablesService.excludeInstallmentsFromBatch(
+        importedWithoutFinancialSettings.batchId,
+        {
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          installmentIds: [thirdInstallment.id],
+        },
+      );
+
+    assert.equal(excludedFromBatch.updatedCount, 1);
+
+    const installmentsAfterBatchExclusion =
+      await receivablesService.listInstallments({
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        batchId: importedWithoutFinancialSettings.batchId,
+        status: "ALL",
+      });
+
+    assert.equal(installmentsAfterBatchExclusion.length, 0);
+
+    const excludedInstallment = await prisma.receivableInstallment.findUnique({
+      where: { id: thirdInstallment.id },
+      select: {
+        batchId: true,
+        batchRemovedAt: true,
+        batchRemovedBy: true,
+        canceledAt: true,
+        status: true,
+      },
+    });
+
+    assert.ok(excludedInstallment);
+    assert.equal(excludedInstallment.batchId, importedWithoutFinancialSettings.batchId);
+    assert.ok(excludedInstallment.batchRemovedAt);
+    assert.equal(excludedInstallment.batchRemovedBy, "CODEX");
+    assert.equal(excludedInstallment.canceledAt, null);
+    assert.equal(excludedInstallment.status, "PAID");
+
     const installmentsAfterSettlement = await receivablesService.listInstallments(
       {
         sourceSystem: "ESCOLA",
@@ -447,7 +619,7 @@ async function main() {
       },
     );
 
-    assert.equal(installmentsAfterSettlement.length, 2);
+    assert.equal(installmentsAfterSettlement.length, 3);
     assert.ok(
       installmentsAfterSettlement.every((installment) => installment.status === "PAID"),
     );

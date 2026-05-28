@@ -119,8 +119,16 @@ export default function FinanceiroBankReturnImportDetailPage() {
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const scopeReady = Boolean(
+    runtimeContext.sourceSystem && runtimeContext.sourceTenantId,
+  );
 
   const loadImportDetail = useCallback(async () => {
+    if (!scopeReady) {
+      setIsLoading(false);
+      return;
+    }
+
     if (!importId) {
       setImportDetail(null);
       setError('Importacao de retorno bancario invalida.');
@@ -148,11 +156,16 @@ export default function FinanceiroBankReturnImportDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [importId, runtimeContext]);
+  }, [importId, runtimeContext, scopeReady]);
 
   useEffect(() => {
-    void loadImportDetail();
-  }, [loadImportDetail]);
+    if (scopeReady) {
+      void loadImportDetail();
+      return;
+    }
+
+    setIsLoading(false);
+  }, [loadImportDetail, scopeReady]);
 
   const canApplyLiquidations = useMemo(
     () => Number(importDetail?.readyToApplyCount || 0) > 0,
@@ -161,6 +174,11 @@ export default function FinanceiroBankReturnImportDetailPage() {
 
   async function handleApplyLiquidations() {
     if (!importDetail) return;
+
+    if (!scopeReady) {
+      setError('Origem financeira não identificada para aplicar o retorno.');
+      return;
+    }
 
     try {
       setIsApplying(true);

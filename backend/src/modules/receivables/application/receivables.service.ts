@@ -24,6 +24,7 @@ import {
 import {
   ApplyBankReturnLiquidationsDto,
   AssignBankToInstallmentsDto,
+  ExcludeInstallmentsFromBatchDto,
   ExistingBusinessKeysDto,
   GetBankReturnImportDto,
   ImportBankReturnDto,
@@ -32,6 +33,7 @@ import {
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
   ReceivablesImportDto,
+  ReverseBankPreparationDto,
   UpdateReceivableInstallmentDto,
 } from "./dto/receivables.dto";
 import { SicoobBillingService } from "./sicoob-billing.service";
@@ -79,6 +81,58 @@ export class ReceivablesService {
     }
 
     return roundMoney(Math.max(0, normalized));
+  }
+
+  private buildBatchBankSlipSummary(
+    installments: Array<{
+      status?: string | null;
+      openAmount?: number | null;
+      bankAccountId?: string | null;
+      bankSlipStatus?: string | null;
+    }>,
+  ) {
+    const billableInstallments = installments.filter(
+      (installment) =>
+        normalizeText(installment.status) === "OPEN" &&
+        Number(installment.openAmount || 0) > 0,
+    );
+    const totalCount = billableInstallments.length;
+    const issuedCount = billableInstallments.filter(
+      (installment) => normalizeText(installment.bankSlipStatus) === "ISSUED",
+    ).length;
+    const errorCount = billableInstallments.filter(
+      (installment) => normalizeText(installment.bankSlipStatus) === "ERROR",
+    ).length;
+    const preparedCount = billableInstallments.filter(
+      (installment) =>
+        Boolean(installment.bankAccountId) &&
+        normalizeText(installment.bankSlipStatus) !== "ISSUED" &&
+        normalizeText(installment.bankSlipStatus) !== "ERROR",
+    ).length;
+    const waitingCount = billableInstallments.filter(
+      (installment) =>
+        !installment.bankAccountId && !normalizeText(installment.bankSlipStatus),
+    ).length;
+
+    let status = "WAITING_PREPARATION";
+    if (totalCount > 0 && errorCount > 0) {
+      status = "PARTIAL_OR_ERROR";
+    } else if (totalCount > 0 && issuedCount === totalCount) {
+      status = "SENT_TO_BANK";
+    } else if (totalCount > 0 && preparedCount === totalCount) {
+      status = "READY_TO_SEND";
+    } else if (totalCount > 0 && (issuedCount > 0 || preparedCount > 0)) {
+      status = "PARTIAL_OR_ERROR";
+    }
+
+    return {
+      status,
+      totalCount,
+      waitingCount,
+      preparedCount,
+      issuedCount,
+      errorCount,
+    };
   }
 
   private buildFinancialSettingsPersistenceData(
@@ -1001,12 +1055,43 @@ export class ReceivablesService {
       orderBy: { createdAt: "desc" },
     });
 
-    return batches.map((batch: any) => ({
-      ...this.mapBatch(batch),
-      receivableTitles: batch.receivableTitles.map((title: any) => ({
-        totalAmount: title.totalAmount,
-      })),
-    }));
+    const batchIds = batches.map((batch: any) => batch.id);
+    const installments = batchIds.length
+      ? await this.prisma.receivableInstallment.findMany({
+          where: {
+            batchId: { in: batchIds },
+            canceledAt: null,
+            batchRemovedAt: null,
+          },
+          select: {
+            batchId: true,
+            status: true,
+            openAmount: true,
+            bankAccountId: true,
+            bankSlipStatus: true,
+          },
+        })
+      : [];
+    const installmentsByBatchId = new Map<string, typeof installments>();
+
+    for (const installment of installments) {
+      const batchInstallments =
+        installmentsByBatchId.get(installment.batchId) || [];
+      batchInstallments.push(installment);
+      installmentsByBatchId.set(installment.batchId, batchInstallments);
+    }
+
+    return batches.map((batch: any) => {
+      return {
+        ...this.mapBatch(batch),
+        bankSlipSummary: this.buildBatchBankSlipSummary(
+          installmentsByBatchId.get(batch.id) || [],
+        ),
+        receivableTitles: batch.receivableTitles.map((title: any) => ({
+          totalAmount: title.totalAmount,
+        })),
+      };
+    });
   }
 
   async getBatch(batchId: string, query: ListReceivableBatchesDto) {
@@ -1044,6 +1129,7 @@ export class ReceivablesService {
             installments: {
               where: {
                 canceledAt: null,
+                batchRemovedAt: null,
               },
               orderBy: [{ installmentNumber: "asc" }],
             },
@@ -1057,7 +1143,14 @@ export class ReceivablesService {
       throw new NotFoundException("LOTE NÃO ENCONTRADO.");
     }
 
-    return this.mapBatch(batch);
+    const batchInstallments = (batch.receivableTitles || []).flatMap(
+      (title: any) => title.installments || [],
+    );
+
+    return {
+      ...this.mapBatch(batch),
+      bankSlipSummary: this.buildBatchBankSlipSummary(batchInstallments),
+    };
   }
 
   async listInstallments(query: ListReceivableInstallmentsDto) {
@@ -1068,7 +1161,9 @@ export class ReceivablesService {
     const installments = await this.prisma.receivableInstallment.findMany({
       where: {
         ...this.buildInstallmentFilters(query),
-        ...(normalizedBatchId ? { batchId: normalizedBatchId } : {}),
+        ...(normalizedBatchId
+          ? { batchId: normalizedBatchId, batchRemovedAt: null }
+          : {}),
         ...(normalizedSourceSystem || normalizedSourceTenantId
           ? {
               batch: {
@@ -1153,6 +1248,13 @@ export class ReceivablesService {
         bankAccountLabel: installment.bankAccountLabel || null,
         bankAssignedAt: installment.bankAssignedAt?.toISOString() || null,
         bankAssignedBy: installment.bankAssignedBy || null,
+        bankMovementGroupId: installment.bankMovementGroupId || null,
+        bankMovementStatus: installment.bankMovementStatus || null,
+        bankMovementCreatedAt:
+          installment.bankMovementCreatedAt?.toISOString() || null,
+        bankMovementConvertedAt:
+          installment.bankMovementConvertedAt?.toISOString() || null,
+        bankMovementConvertedBy: installment.bankMovementConvertedBy || null,
         bankSlipStatus: installment.bankSlipStatus || null,
         bankSlipMessage: installment.bankSlipMessage || null,
         bankSlipProvider: installment.bankSlipProvider || null,
@@ -1412,6 +1514,7 @@ export class ReceivablesService {
         companyId: batch.companyId,
         batchId: batch.id,
         canceledAt: null,
+        batchRemovedAt: null,
       },
       select: {
         id: true,
@@ -1445,6 +1548,7 @@ export class ReceivablesService {
         companyId: batch.companyId,
         batchId: batch.id,
         canceledAt: null,
+        batchRemovedAt: null,
       },
       data: {
         bankAccountId: bank.id,
@@ -1464,6 +1568,234 @@ export class ReceivablesService {
         result.count === 1
           ? "1 parcela vinculada ao banco de envio de boletos."
           : `${result.count} parcelas vinculadas ao banco de envio de boletos.`,
+    };
+  }
+
+  async reverseBankPreparation(
+    batchId: string,
+    payload: ReverseBankPreparationDto,
+  ) {
+    const normalizedBatchId = String(batchId || "").trim();
+    if (!normalizedBatchId) {
+      throw new BadRequestException("Lote financeiro inválido.");
+    }
+
+    const normalizedSourceSystem = normalizeText(payload.sourceSystem);
+    const normalizedSourceTenantId = normalizeText(payload.sourceTenantId);
+    const installmentIds = Array.from(
+      new Set(
+        payload.installmentIds
+          .map((item) => String(item || "").trim())
+          .filter((item): item is string => Boolean(item)),
+      ),
+    );
+
+    if (!normalizedSourceSystem || !normalizedSourceTenantId) {
+      throw new BadRequestException(
+        "Informe o sistema e o tenant de origem para localizar o lote.",
+      );
+    }
+
+    if (!installmentIds.length) {
+      throw new BadRequestException(
+        "Selecione ao menos uma parcela para estornar a preparação.",
+      );
+    }
+
+    const batch = await this.prisma.receivableBatch.findFirst({
+      where: {
+        id: normalizedBatchId,
+        sourceSystem: normalizedSourceSystem,
+        sourceTenantId: normalizedSourceTenantId,
+        canceledAt: null,
+      },
+      select: {
+        id: true,
+        companyId: true,
+      },
+    });
+
+    if (!batch) {
+      throw new NotFoundException("LOTE NÃO ENCONTRADO.");
+    }
+
+    const installments = await this.prisma.receivableInstallment.findMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: batch.companyId,
+        batchId: batch.id,
+        canceledAt: null,
+        batchRemovedAt: null,
+      },
+      select: {
+        id: true,
+        status: true,
+        openAmount: true,
+        bankAccountId: true,
+        bankSlipStatus: true,
+      },
+    });
+
+    if (installments.length !== installmentIds.length) {
+      throw new BadRequestException(
+        "Uma ou mais parcelas selecionadas não pertencem a este lançamento.",
+      );
+    }
+
+    const blockedInstallments = installments.filter((installment) => {
+      const bankSlipStatus = normalizeText(installment.bankSlipStatus);
+
+      return (
+        installment.status !== "OPEN" ||
+        Number(installment.openAmount || 0) <= 0 ||
+        !installment.bankAccountId ||
+        bankSlipStatus === "ISSUED" ||
+        bankSlipStatus === "ERROR"
+      );
+    });
+
+    if (blockedInstallments.length) {
+      throw new BadRequestException(
+        "Selecione apenas boletos preparados, em aberto e ainda não enviados ao banco.",
+      );
+    }
+
+    const result = await this.prisma.receivableInstallment.updateMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: batch.companyId,
+        batchId: batch.id,
+        canceledAt: null,
+        batchRemovedAt: null,
+      },
+      data: {
+        bankAccountId: null,
+        bankAccountLabel: null,
+        bankAssignedAt: null,
+        bankAssignedBy: null,
+        bankSlipStatus: null,
+        bankSlipMessage: null,
+        bankSlipProvider: null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return {
+      batchId: batch.id,
+      updatedCount: result.count,
+      message:
+        result.count === 1
+          ? "1 preparação de boleto estornada."
+          : `${result.count} preparações de boletos estornadas.`,
+    };
+  }
+
+  async excludeInstallmentsFromBatch(
+    batchId: string,
+    payload: ExcludeInstallmentsFromBatchDto,
+  ) {
+    const normalizedBatchId = String(batchId || "").trim();
+    if (!normalizedBatchId) {
+      throw new BadRequestException("Lote financeiro inválido.");
+    }
+
+    const normalizedSourceSystem = normalizeText(payload.sourceSystem);
+    const normalizedSourceTenantId = normalizeText(payload.sourceTenantId);
+    const installmentIds = Array.from(
+      new Set(
+        payload.installmentIds
+          .map((item) => String(item || "").trim())
+          .filter((item): item is string => Boolean(item)),
+      ),
+    );
+
+    if (!normalizedSourceSystem || !normalizedSourceTenantId) {
+      throw new BadRequestException(
+        "Informe o sistema e o tenant de origem para localizar o lote.",
+      );
+    }
+
+    if (!installmentIds.length) {
+      throw new BadRequestException(
+        "Selecione ao menos uma parcela paga para excluir do lote.",
+      );
+    }
+
+    const batch = await this.prisma.receivableBatch.findFirst({
+      where: {
+        id: normalizedBatchId,
+        sourceSystem: normalizedSourceSystem,
+        sourceTenantId: normalizedSourceTenantId,
+        canceledAt: null,
+      },
+      select: {
+        id: true,
+        companyId: true,
+      },
+    });
+
+    if (!batch) {
+      throw new NotFoundException("LOTE NÃO ENCONTRADO.");
+    }
+
+    const installments = await this.prisma.receivableInstallment.findMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: batch.companyId,
+        batchId: batch.id,
+        canceledAt: null,
+        batchRemovedAt: null,
+      },
+      select: {
+        id: true,
+        status: true,
+        bankAccountId: true,
+        bankSlipStatus: true,
+      },
+    });
+
+    if (installments.length !== installmentIds.length) {
+      throw new BadRequestException(
+        "Uma ou mais parcelas selecionadas não pertencem a este lote.",
+      );
+    }
+
+    const blockedInstallments = installments.filter(
+      (installment) =>
+        installment.status !== "PAID" ||
+        Boolean(installment.bankAccountId) ||
+        Boolean(normalizeText(installment.bankSlipStatus)),
+    );
+
+    if (blockedInstallments.length) {
+      throw new BadRequestException(
+        "Selecione apenas parcelas pagas que ainda não entraram em preparação.",
+      );
+    }
+
+    const result = await this.prisma.receivableInstallment.updateMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: batch.companyId,
+        batchId: batch.id,
+        canceledAt: null,
+        batchRemovedAt: null,
+      },
+      data: {
+        batchRemovedAt: new Date(),
+        batchRemovedBy: payload.requestedBy || null,
+        batchRemovedReason: "PARCELA PAGA ANTES DA PREPARACAO DO LOTE",
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return {
+      batchId: batch.id,
+      updatedCount: result.count,
+      message:
+        result.count === 1
+          ? "1 parcela paga excluída do lote."
+          : `${result.count} parcelas pagas excluídas do lote.`,
     };
   }
 
@@ -1593,6 +1925,7 @@ export class ReceivablesService {
         companyId: batch.companyId,
         batchId: batch.id,
         canceledAt: null,
+        batchRemovedAt: null,
       },
       include: {
         title: {

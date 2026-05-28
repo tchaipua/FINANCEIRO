@@ -4,6 +4,7 @@ import { ReceivablesService } from "../application/receivables.service";
 import {
   ApplyBankReturnLiquidationsDto,
   AssignBankToInstallmentsDto,
+  ExcludeInstallmentsFromBatchDto,
   ExistingBusinessKeysDto,
   GetBankReturnImportDto,
   GetInstallmentBankSlipPdfDto,
@@ -13,6 +14,7 @@ import {
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
   ReceivablesImportDto,
+  ReverseBankPreparationDto,
   UpdateReceivableInstallmentDto,
 } from "../application/dto/receivables.dto";
 
@@ -65,6 +67,28 @@ export class ReceivablesController {
     @Body() payload: AssignBankToInstallmentsDto,
   ) {
     return this.receivablesService.assignBankToInstallments(batchId, payload);
+  }
+
+  @Post("batches/:batchId/reverse-bank-preparation")
+  @ApiOperation({
+    summary: "Estorna a preparação de boletos das parcelas selecionadas",
+  })
+  reverseBankPreparation(
+    @Param("batchId") batchId: string,
+    @Body() payload: ReverseBankPreparationDto,
+  ) {
+    return this.receivablesService.reverseBankPreparation(batchId, payload);
+  }
+
+  @Post("batches/:batchId/exclude-installments")
+  @ApiOperation({
+    summary: "Exclui logicamente parcelas pagas do lote de envio",
+  })
+  excludeInstallmentsFromBatch(
+    @Param("batchId") batchId: string,
+    @Body() payload: ExcludeInstallmentsFromBatchDto,
+  ) {
+    return this.receivablesService.excludeInstallmentsFromBatch(batchId, payload);
   }
 
   @Post("batches/:batchId/issue-bank-slips")

@@ -129,6 +129,101 @@ WHERE BRI.canceledAt IS NULL
   AND (:sourceTenantId IS NULL OR CO.sourceTenantId = :sourceTenantId)
 ORDER BY BRI.createdAt DESC;`,
   },
+  PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO: {
+    originText: buildFinanceOriginText('bancos/extrato/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Tela de extrato bancario aberta a partir do grid de bancos.
+
+TABELAS PRINCIPAIS:
+- companies (CO) - empresa financeira resolvida pelo contexto da Escola
+- bank_accounts (BA) - conta bancaria selecionada para consulta do extrato
+
+RELACIONAMENTOS:
+- bank_accounts.companyId = companies.id
+
+FILTROS APLICADOS AGORA:
+- empresa por sourceSystem/sourceTenantId
+- banco selecionado por bankAccountId
+- periodo digitado para consultar extrato bancario
+- registros sem cancelamento logico
+- endpoint real usado na acao: GET /banks/:bankId/statement
+- ordenacao bancaria retornada pela API Sicoob`,
+    sqlText: `SELECT
+  BA.id,
+  BA.bankCode,
+  BA.bankName,
+  BA.branchNumber,
+  BA.branchDigit,
+  BA.accountNumber,
+  BA.accountDigit,
+  BA.billingProvider,
+  BA.status,
+  BA.updatedAt
+FROM bank_accounts BA
+INNER JOIN companies CO
+  ON CO.id = BA.companyId
+ AND CO.canceledAt IS NULL
+WHERE BA.canceledAt IS NULL
+  AND BA.status = 'ACTIVE'
+  AND CO.sourceSystem = :sourceSystem
+  AND CO.sourceTenantId = :sourceTenantId
+  AND (:bankAccountId IS NULL OR BA.id = :bankAccountId)
+ORDER BY BA.bankName ASC, BA.branchNumber ASC, BA.accountNumber ASC;`,
+  },
+  PRINCIPAL_FINANCEIRO_BANCOS_MOVIMENTOS_ABERTOS: {
+    originText: buildFinanceOriginText('bancos/movimentos-abertos/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Tela de movimentos em aberto para conferencia/conciliacao bancaria.
+
+TABELAS PRINCIPAIS:
+- companies (CO) - empresa financeira resolvida pelo contexto da Escola
+- bank_accounts (BA) - banco selecionado no grid
+- receivable_installments (RI) - parcelas recebidas vinculadas a banco
+- receivable_titles (RT) - titulo financeiro da parcela
+
+RELACIONAMENTOS:
+- receivable_installments.companyId = companies.id
+- receivable_installments.bankAccountId = bank_accounts.id
+- receivable_installments.titleId = receivable_titles.id
+
+FILTROS APLICADOS AGORA:
+- empresa por sourceSystem/sourceTenantId
+- parcelas pagas com banco vinculado
+- banco selecionado por bankAccountId quando informado
+- busca por pagador, historico ou parcela
+- registros sem cancelamento logico
+- ordenacao atual: dueDate ASC`,
+    sqlText: `SELECT
+  RI.id,
+  RI.settledAt,
+  RI.descriptionSnapshot,
+  RI.payerNameSnapshot,
+  RI.paidAmount,
+  RI.settlementMethod,
+  RI.bankAccountId,
+  RI.bankAccountLabel,
+  RT.businessKey,
+  BA.bankName
+FROM receivable_installments RI
+INNER JOIN companies CO
+  ON CO.id = RI.companyId
+ AND CO.canceledAt IS NULL
+LEFT JOIN receivable_titles RT
+  ON RT.id = RI.titleId
+ AND RT.companyId = RI.companyId
+ AND RT.canceledAt IS NULL
+LEFT JOIN bank_accounts BA
+  ON BA.id = RI.bankAccountId
+ AND BA.companyId = RI.companyId
+ AND BA.canceledAt IS NULL
+WHERE RI.canceledAt IS NULL
+  AND RI.status = 'PAID'
+  AND RI.bankAccountId IS NOT NULL
+  AND CO.sourceSystem = :sourceSystem
+  AND CO.sourceTenantId = :sourceTenantId
+  AND (:bankAccountId IS NULL OR RI.bankAccountId = :bankAccountId)
+ORDER BY RI.dueDate ASC, RI.createdAt ASC;`,
+  },
   FINANCEIRO_RETORNOS_BANCARIOS_DETALHE: {
     originText: buildFinanceOriginText('recebiveis/retornos/[importId]/page.tsx'),
     auditText: `--- LOGICA DA TELA ---

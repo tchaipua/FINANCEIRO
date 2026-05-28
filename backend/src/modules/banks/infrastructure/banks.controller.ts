@@ -4,7 +4,11 @@ import { BanksService } from "../application/banks.service";
 import {
   ChangeBankStatusDto,
   GetBankDto,
+  GetBankStatementDto,
   ListBanksDto,
+  ReconcileBankStatementMovementDto,
+  ReviewBankStatementMovementDto,
+  ReviewBankStatementMovementsDto,
   SaveBankDto,
 } from "../application/dto/banks.dto";
 
@@ -27,6 +31,87 @@ export class BanksController {
   })
   get(@Param("bankId") bankId: string, @Query() query: GetBankDto) {
     return this.banksService.get(bankId, query);
+  }
+
+  @Get(":bankId/statement/saved")
+  @ApiOperation({
+    summary: "Carrega o extrato bancário já gravado para a conta informada",
+  })
+  getSavedStatement(
+    @Param("bankId") bankId: string,
+    @Query() query: GetBankStatementDto,
+  ) {
+    return this.banksService.getSavedStatement(bankId, query);
+  }
+
+  @Get(":bankId/statement")
+  @ApiOperation({
+    summary: "Consulta o extrato bancário real da conta informada",
+  })
+  getStatement(
+    @Param("bankId") bankId: string,
+    @Query() query: GetBankStatementDto,
+  ) {
+    return this.banksService.getStatement(bankId, query);
+  }
+
+  @Post(":bankId/statement/movements/:movementId/reconcile")
+  @ApiOperation({
+    summary: "Marca um lançamento do extrato bancário como conciliado",
+  })
+  reconcileStatementMovement(
+    @Param("bankId") bankId: string,
+    @Param("movementId") movementId: string,
+    @Body() payload: ReconcileBankStatementMovementDto,
+  ) {
+    return this.banksService.reconcileStatementMovement(
+      bankId,
+      movementId,
+      payload,
+    );
+  }
+
+  @Post(":bankId/statement/movements/:movementId/unreconcile")
+  @ApiOperation({
+    summary: "Volta um lançamento do extrato bancário conciliado para pendente",
+  })
+  unreconcileStatementMovement(
+    @Param("bankId") bankId: string,
+    @Param("movementId") movementId: string,
+    @Body() payload: ReconcileBankStatementMovementDto,
+  ) {
+    return this.banksService.unreconcileStatementMovement(
+      bankId,
+      movementId,
+      payload,
+    );
+  }
+
+  @Post(":bankId/statement/movements/:movementId/review")
+  @ApiOperation({
+    summary: "Alterna a conferência manual de um lançamento do extrato bancário",
+  })
+  reviewStatementMovement(
+    @Param("bankId") bankId: string,
+    @Param("movementId") movementId: string,
+    @Body() payload: ReviewBankStatementMovementDto,
+  ) {
+    return this.banksService.reviewStatementMovement(
+      bankId,
+      movementId,
+      payload,
+    );
+  }
+
+  @Post(":bankId/statement/movements/review-bulk")
+  @ApiOperation({
+    summary: "Marca lançamentos do extrato bancário em lote como conferidos ou não conferidos",
+  })
+  reviewStatementMovements(
+    @Param("bankId") bankId: string,
+    @Body() payload: ReviewBankStatementMovementsDto,
+  ) {
+    return this.banksService.reviewStatementMovements(bankId, payload);
   }
 
   @Post()

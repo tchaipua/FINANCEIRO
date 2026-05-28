@@ -3,17 +3,30 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { createHash } from "crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
 import {
+  dateToDateOnly,
   normalizeDigits,
   normalizeText,
+  roundMoney,
 } from "../../../common/finance-core.utils";
 import {
   ChangeBankStatusDto,
   GetBankDto,
+  GetBankStatementDto,
   ListBanksDto,
+  ReconcileBankStatementMovementDto,
+  ReviewBankStatementMovementDto,
+  ReviewBankStatementMovementsDto,
   SaveBankDto,
 } from "./dto/banks.dto";
+import {
+  DownloadSicoobStatementResult,
+  SicoobBankStatementService,
+  SicoobStatementApiError,
+  SicoobStatementTransaction,
+} from "./sicoob-bank-statement.service";
 
 type NormalizedBankPayload = {
   bankCode: string;
@@ -53,9 +66,76 @@ type NormalizedBankPayload = {
   notes: string | null;
 };
 
+type MappedBankStatementMovement = {
+  id: string;
+  externalId: string;
+  occurredAt: string;
+  description: string;
+  detailLines: string[];
+  documentNumber: string | null;
+  movementType: string;
+  amount: number;
+  balanceAfter: number | null;
+  status: string;
+  reviewStatus?: string;
+  isReviewed?: boolean;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  rawPayloadJson: string;
+};
+
+type MappedBankStatement = {
+  provider: string;
+  bankAccountId: string;
+  bankAccountLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  currentBalance: number | null;
+  creditAmount: number;
+  debitAmount: number;
+  movementCount: number;
+  months: Array<{
+    month: number;
+    year: number;
+    statusCode: number;
+  }>;
+  pulledAt: string;
+  movements: MappedBankStatementMovement[];
+  message: string;
+};
+
+type StatementRequestedByInput = {
+  requestedBy?: string | null;
+  cashierUserId?: string | null;
+  cashierDisplayName?: string | null;
+};
+
+type PersistedStatementMovement = {
+  id: string;
+  occurredAt: Date;
+  description: string;
+  rawPayloadJson?: string | null;
+  documentNumber: string | null;
+  movementType: string;
+  amount: number;
+  balanceAfter: number | null;
+  reconciliationStatus: string;
+  reviewStatus: string;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
+};
+
 @Injectable()
 export class BanksService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly sicoobBankStatementService: SicoobBankStatementService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    sicoobBankStatementService?: SicoobBankStatementService,
+  ) {
+    this.sicoobBankStatementService =
+      sicoobBankStatementService || new SicoobBankStatementService();
+  }
 
   private normalizeOptionalRawText(value: string | null | undefined) {
     const normalized = String(value || "").trim();
@@ -81,6 +161,492 @@ export class BanksService {
     }
 
     return normalized;
+  }
+
+  private parseDateOnly(value?: string | null, label = "a data") {
+    const normalized = String(value || "").trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      throw new BadRequestException(`Informe ${label} válida.`);
+    }
+
+    const [year, month, day] = normalized.split("-").map((item) => Number(item));
+    const parsed = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() !== month - 1 ||
+      parsed.getUTCDate() !== day
+    ) {
+      throw new BadRequestException(`Informe ${label} válida.`);
+    }
+
+    return parsed;
+  }
+
+  private parseStatementPeriod(periodStart?: string | null, periodEnd?: string | null) {
+    const parsedStart = this.parseDateOnly(periodStart, "a data inicial");
+    const parsedEnd = this.parseDateOnly(periodEnd, "a data final");
+
+    if (parsedStart > parsedEnd) {
+      throw new BadRequestException(
+        "A data inicial do extrato bancário não pode ser maior que a data final.",
+      );
+    }
+
+    const rangeInDays =
+      Math.floor(
+        (parsedEnd.getTime() - parsedStart.getTime()) / (24 * 60 * 60 * 1000),
+      ) + 1;
+
+    if (rangeInDays > 93) {
+      throw new BadRequestException(
+        "Consulte no máximo 3 meses por vez no extrato bancário do Sicoob.",
+      );
+    }
+
+    return {
+      parsedStart,
+      parsedEnd,
+      periodStart: dateToDateOnly(parsedStart)!,
+      periodEnd: dateToDateOnly(parsedEnd)!,
+      rangeInDays,
+    };
+  }
+
+  private buildSicoobAccountNumber(bank: {
+    accountNumber: string;
+    accountDigit?: string | null;
+  }) {
+    return normalizeDigits(`${bank.accountNumber || ""}${bank.accountDigit || ""}`);
+  }
+
+  private normalizeStatementDirection(transaction: SicoobStatementTransaction) {
+    const normalizedType = normalizeText(transaction.tipo);
+    const amount = Number(transaction.valor || 0);
+
+    if (
+      normalizedType === "D" ||
+      normalizedType === "DEBITO" ||
+      normalizedType === "DÉBITO" ||
+      normalizedType?.includes("DEB") ||
+      amount < 0
+    ) {
+      return "DEBIT";
+    }
+
+    return "CREDIT";
+  }
+
+  private parseStatementDate(value?: string | null) {
+    const parsed = new Date(String(value || ""));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private buildStatementMovementBaseKey(transaction: SicoobStatementTransaction) {
+    return [
+      transaction.data || "",
+      transaction.dataLote || "",
+      normalizeText(transaction.numeroDocumento) || "",
+      normalizeText(transaction.descricao) || "",
+      normalizeText(transaction.descInfComplementar) || "",
+      normalizeText(transaction.tipo) || "",
+      roundMoney(Math.abs(Number(transaction.valor || 0))),
+    ].join("|");
+  }
+
+  private buildStatementMovementExternalId(
+    bankAccountId: string,
+    transaction: SicoobStatementTransaction,
+    occurrence: number,
+  ) {
+    return createHash("sha1")
+      .update([bankAccountId, this.buildStatementMovementBaseKey(transaction), occurrence].join("|"))
+      .digest("hex");
+  }
+
+  private buildBankAccountLabel(bank: {
+    bankName: string;
+    branchNumber: string;
+    branchDigit?: string | null;
+    accountNumber: string;
+    accountDigit?: string | null;
+  }) {
+    return `${bank.bankName} - AG ${bank.branchNumber}${bank.branchDigit ? `-${bank.branchDigit}` : ""} - CC ${bank.accountNumber}${bank.accountDigit ? `-${bank.accountDigit}` : ""}`;
+  }
+
+  private buildStatementDateBounds(period: {
+    periodStart: string;
+    periodEnd: string;
+  }) {
+    return {
+      start: new Date(`${period.periodStart}T00:00:00.000Z`),
+      end: new Date(`${period.periodEnd}T23:59:59.999Z`),
+    };
+  }
+
+  private buildStatementDetailLines(payload?: {
+    descInfComplementar?: string | null;
+    cpfCnpj?: string | null;
+  }) {
+    const detailLines = [
+      ...String(payload?.descInfComplementar || "")
+        .split(/\r?\n/g)
+        .map((line) => normalizeText(line))
+        .filter((line): line is string => Boolean(line)),
+      normalizeText(payload?.cpfCnpj),
+    ].filter((line): line is string => Boolean(line));
+
+    return Array.from(new Set(detailLines));
+  }
+
+  private parseStatementRawPayload(rawPayloadJson?: string | null) {
+    if (!rawPayloadJson) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(rawPayloadJson) as SicoobStatementTransaction;
+    } catch {
+      return null;
+    }
+  }
+
+  private applyRunningStatementBalances<
+    T extends {
+      movementType: string;
+      amount: number;
+      balanceAfter: number | null;
+    },
+  >(movements: T[], finalBalance?: number | null) {
+    if (typeof finalBalance !== "number") {
+      return movements;
+    }
+
+    let nextBalance = roundMoney(finalBalance);
+
+    for (let index = movements.length - 1; index >= 0; index -= 1) {
+      const movement = movements[index];
+      movement.balanceAfter = nextBalance;
+      nextBalance = roundMoney(
+        movement.movementType === "DEBIT"
+          ? nextBalance + movement.amount
+          : nextBalance - movement.amount,
+      );
+    }
+
+    return movements;
+  }
+
+  private mapSicoobStatement(
+    bank: {
+      id: string;
+      bankName: string;
+      branchNumber: string;
+      branchDigit?: string | null;
+      accountNumber: string;
+      accountDigit?: string | null;
+    },
+    period: {
+      periodStart: string;
+      periodEnd: string;
+    },
+    result: DownloadSicoobStatementResult,
+  ): MappedBankStatement {
+    const bankAccountLabel = this.buildBankAccountLabel(bank);
+    const orderedTransactions = [...result.transactions].sort((left, right) => {
+      const leftDate = this.parseStatementDate(left.data)?.getTime() || 0;
+      const rightDate = this.parseStatementDate(right.data)?.getTime() || 0;
+      return leftDate - rightDate;
+    });
+    const occurrenceByBaseKey = new Map<string, number>();
+
+    const movements = orderedTransactions.map((transaction, index) => {
+      const movementType = this.normalizeStatementDirection(transaction);
+      const amount = roundMoney(Math.abs(Number(transaction.valor || 0)));
+      const occurredAt =
+        this.parseStatementDate(transaction.data)?.toISOString() ||
+        this.parseStatementDate(transaction.dataLote)?.toISOString() ||
+        `${period.periodStart}T12:00:00.000Z`;
+      const baseKey = this.buildStatementMovementBaseKey(transaction);
+      const occurrence = (occurrenceByBaseKey.get(baseKey) || 0) + 1;
+      occurrenceByBaseKey.set(baseKey, occurrence);
+      const externalId = this.buildStatementMovementExternalId(
+        bank.id,
+        transaction,
+        occurrence,
+      );
+
+      return {
+        id: externalId,
+        externalId,
+        occurredAt,
+        description:
+          normalizeText(transaction.descricao) ||
+          normalizeText(transaction.descInfComplementar) ||
+          "LANÇAMENTO BANCÁRIO",
+        detailLines: this.buildStatementDetailLines(transaction),
+        documentNumber:
+          normalizeText(transaction.numeroDocumento) || null,
+        movementType,
+        amount,
+        balanceAfter: null,
+        status: "PENDENTE",
+        rawPayloadJson: JSON.stringify(transaction),
+      };
+    });
+    this.applyRunningStatementBalances(movements, result.balance);
+
+    const creditAmount = roundMoney(
+      movements
+        .filter((movement) => movement.movementType === "CREDIT")
+        .reduce((total, movement) => total + movement.amount, 0),
+    );
+    const debitAmount = roundMoney(
+      movements
+        .filter((movement) => movement.movementType === "DEBIT")
+        .reduce((total, movement) => total + movement.amount, 0),
+    );
+
+    return {
+      provider: "SICOOB",
+      bankAccountId: bank.id,
+      bankAccountLabel,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      currentBalance:
+        typeof result.balance === "number" ? roundMoney(result.balance) : null,
+      creditAmount,
+      debitAmount,
+      movementCount: movements.length,
+      months: result.months,
+      pulledAt: new Date().toISOString(),
+      movements,
+      message:
+        movements.length === 1
+          ? "1 lançamento de extrato bancário encontrado no Sicoob."
+          : `${movements.length} lançamentos de extrato bancário encontrados no Sicoob.`,
+    };
+  }
+
+  private resolveStatementRequestedBy(query: StatementRequestedByInput) {
+    return (
+      normalizeText(query.requestedBy) ||
+      normalizeText(query.cashierDisplayName) ||
+      normalizeText(query.cashierUserId) ||
+      "SISTEMA"
+    );
+  }
+
+  private mapPersistedStatementMovement(movement: PersistedStatementMovement) {
+    const rawPayload = this.parseStatementRawPayload(movement.rawPayloadJson);
+
+    return {
+      id: movement.id,
+      occurredAt: movement.occurredAt.toISOString(),
+      description: movement.description,
+      detailLines: this.buildStatementDetailLines(rawPayload || undefined),
+      documentNumber: movement.documentNumber,
+      movementType: movement.movementType,
+      amount: movement.amount,
+      balanceAfter: movement.balanceAfter,
+      status:
+        movement.reconciliationStatus === "PENDING"
+          ? "PENDENTE"
+          : movement.reconciliationStatus === "RECONCILED"
+            ? "CONCILIADO"
+          : movement.reconciliationStatus,
+      reviewStatus:
+        movement.reviewStatus === "REVIEWED"
+          ? "CONFERIDO"
+          : "NAO_CONFERIDO",
+      isReviewed: movement.reviewStatus === "REVIEWED",
+      reviewedAt: movement.reviewedAt?.toISOString() || null,
+      reviewedBy: movement.reviewedBy || null,
+    };
+  }
+
+  private buildPersistedStatementMessage(
+    movementCount: number,
+    createdMovementCount: number,
+    duplicateMovementCount: number,
+  ) {
+    const foundMessage =
+      movementCount === 1
+        ? "1 lançamento de extrato bancário encontrado no Sicoob."
+        : `${movementCount} lançamentos de extrato bancário encontrados no Sicoob.`;
+
+    if (!movementCount) {
+      return "Nenhum lançamento de extrato bancário encontrado no Sicoob para o período informado.";
+    }
+
+    if (duplicateMovementCount > 0) {
+      return `${foundMessage} ${createdMovementCount} novo(s) gravado(s) e ${duplicateMovementCount} já existente(s) mantido(s).`;
+    }
+
+    return `${foundMessage} ${createdMovementCount} lançamento(s) gravado(s) no Financeiro.`;
+  }
+
+  private async persistSicoobStatement(
+    company: {
+      id: string;
+      sourceSystem: string;
+      sourceTenantId: string;
+    },
+    bank: {
+      id: string;
+      branchCode: number;
+    },
+    period: {
+      parsedStart: Date;
+      parsedEnd: Date;
+      periodStart: string;
+      periodEnd: string;
+    },
+    mappedStatement: MappedBankStatement,
+    query: GetBankStatementDto,
+  ) {
+    const requestedBy = this.resolveStatementRequestedBy(query);
+    const pulledAt = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const importSession = await tx.bankStatementImport.create({
+        data: {
+          companyId: company.id,
+          branchCode: bank.branchCode,
+          bankAccountId: bank.id,
+          provider: mappedStatement.provider,
+          periodStart: period.parsedStart,
+          periodEnd: period.parsedEnd,
+          pulledAt,
+          importedMovementCount: mappedStatement.movementCount,
+          creditAmount: mappedStatement.creditAmount,
+          debitAmount: mappedStatement.debitAmount,
+          currentBalance: mappedStatement.currentBalance,
+          status: "IMPORTED",
+          requestSnapshotJson: JSON.stringify({
+            sourceSystem: company.sourceSystem,
+            sourceTenantId: company.sourceTenantId,
+            bankAccountId: bank.id,
+            provider: mappedStatement.provider,
+            periodStart: period.periodStart,
+            periodEnd: period.periodEnd,
+            months: mappedStatement.months,
+          }),
+          createdBy: requestedBy,
+          updatedBy: requestedBy,
+        },
+      });
+
+      let createdMovementCount = 0;
+      let duplicateMovementCount = 0;
+      const persistedMovements: PersistedStatementMovement[] = [];
+
+      for (const movement of mappedStatement.movements) {
+        const occurredAt = new Date(movement.occurredAt);
+        const existingMovement = await tx.bankStatementMovement.findUnique({
+          where: {
+            companyId_bankAccountId_externalId: {
+              companyId: company.id,
+              bankAccountId: bank.id,
+              externalId: movement.externalId,
+            },
+          },
+        });
+
+        const movementData = {
+          lastImportId: importSession.id,
+          provider: mappedStatement.provider,
+          occurredAt,
+          description: movement.description,
+          documentNumber: movement.documentNumber,
+          movementType: movement.movementType,
+          amount: movement.amount,
+          balanceAfter: movement.balanceAfter,
+          rawPayloadJson: movement.rawPayloadJson,
+          updatedBy: requestedBy,
+        };
+
+        if (existingMovement) {
+          duplicateMovementCount += 1;
+          persistedMovements.push(
+            await tx.bankStatementMovement.update({
+              where: {
+                id: existingMovement.id,
+              },
+              data: movementData,
+            }),
+          );
+          continue;
+        }
+
+        createdMovementCount += 1;
+        persistedMovements.push(
+          await tx.bankStatementMovement.create({
+            data: {
+              companyId: company.id,
+              branchCode: bank.branchCode,
+              bankAccountId: bank.id,
+              firstImportId: importSession.id,
+              externalId: movement.externalId,
+              reconciliationStatus: "PENDING",
+              createdBy: requestedBy,
+              ...movementData,
+            },
+          }),
+        );
+      }
+
+      const sortedMovements = persistedMovements.sort(
+        (left, right) => left.occurredAt.getTime() - right.occurredAt.getTime(),
+      );
+      const persistedMovementCount = sortedMovements.length;
+      const message = this.buildPersistedStatementMessage(
+        mappedStatement.movementCount,
+        createdMovementCount,
+        duplicateMovementCount,
+      );
+      const summary = {
+        provider: mappedStatement.provider,
+        bankAccountId: bank.id,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        movementCount: mappedStatement.movementCount,
+        persistedMovementCount,
+        createdMovementCount,
+        duplicateMovementCount,
+        creditAmount: mappedStatement.creditAmount,
+        debitAmount: mappedStatement.debitAmount,
+        currentBalance: mappedStatement.currentBalance,
+        pulledAt: pulledAt.toISOString(),
+      };
+
+      await tx.bankStatementImport.update({
+        where: {
+          id: importSession.id,
+        },
+        data: {
+          createdMovementCount,
+          duplicateMovementCount,
+          summaryJson: JSON.stringify(summary),
+          updatedBy: requestedBy,
+        },
+      });
+
+      return {
+        ...mappedStatement,
+        importSessionId: importSession.id,
+        persistedMovementCount,
+        createdMovementCount,
+        duplicateMovementCount,
+        pulledAt: pulledAt.toISOString(),
+        message,
+        movements: sortedMovements.map((movement) =>
+          this.mapPersistedStatementMovement(movement),
+        ),
+      };
+    });
   }
 
   private normalizeOptionalPercent(
@@ -461,6 +1027,371 @@ export class BanksService {
     );
 
     return this.mapBank(bank, true);
+  }
+
+  async getSavedStatement(bankId: string, query: GetBankStatementDto) {
+    const period = this.parseStatementPeriod(query.periodStart, query.periodEnd);
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      query.sourceSystem,
+      query.sourceTenantId,
+    );
+    const dateBounds = this.buildStatementDateBounds(period);
+
+    const [movements, latestImport] = await Promise.all([
+      this.prisma.bankStatementMovement.findMany({
+        where: {
+          companyId: bank.companyId,
+          bankAccountId: bank.id,
+          canceledAt: null,
+          occurredAt: {
+            gte: dateBounds.start,
+            lte: dateBounds.end,
+          },
+        },
+        orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+      }),
+      this.prisma.bankStatementImport.findFirst({
+        where: {
+          companyId: bank.companyId,
+          bankAccountId: bank.id,
+          canceledAt: null,
+          periodStart: period.parsedStart,
+          periodEnd: period.parsedEnd,
+        },
+        orderBy: {
+          pulledAt: "desc",
+        },
+      }),
+    ]);
+    const latestMovementBalance = [...movements]
+      .reverse()
+      .find((movement) => typeof movement.balanceAfter === "number");
+    const currentBalance =
+      typeof latestImport?.currentBalance === "number"
+        ? latestImport.currentBalance
+        : latestMovementBalance?.balanceAfter ?? null;
+    const movementsWithBalance = this.applyRunningStatementBalances(
+      movements.map((movement) => ({ ...movement })),
+      currentBalance,
+    );
+    const creditAmount = roundMoney(
+      movements
+        .filter((movement) => movement.movementType === "CREDIT")
+        .reduce((total, movement) => total + movement.amount, 0),
+    );
+    const debitAmount = roundMoney(
+      movements
+        .filter((movement) => movement.movementType === "DEBIT")
+        .reduce((total, movement) => total + movement.amount, 0),
+    );
+
+    return {
+      provider: latestImport?.provider || normalizeText(bank.billingProvider) || "SICOOB",
+      bankAccountId: bank.id,
+      bankAccountLabel: this.buildBankAccountLabel(bank),
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      currentBalance,
+      creditAmount,
+      debitAmount,
+      movementCount: movements.length,
+      persistedMovementCount: movements.length,
+      pulledAt: latestImport?.pulledAt?.toISOString() || null,
+      message: movements.length
+        ? `${movements.length} lançamento(s) de extrato bancário gravado(s) carregado(s).`
+        : "Nenhum lançamento de extrato bancário gravado para o período informado.",
+      movements: movementsWithBalance.map((movement) =>
+        this.mapPersistedStatementMovement(movement),
+      ),
+    };
+  }
+
+  async reconcileStatementMovement(
+    bankId: string,
+    movementId: string,
+    payload: ReconcileBankStatementMovementDto,
+  ) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const normalizedMovementId = String(movementId || "").trim();
+
+    if (!normalizedMovementId) {
+      throw new BadRequestException("Informe o lançamento do extrato bancário.");
+    }
+
+    const movement = await this.prisma.bankStatementMovement.findFirst({
+      where: {
+        id: normalizedMovementId,
+        companyId: bank.companyId,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+    });
+
+    if (!movement) {
+      throw new NotFoundException("LANÇAMENTO DO EXTRATO BANCÁRIO NÃO ENCONTRADO.");
+    }
+
+    if (movement.reconciliationStatus === "RECONCILED") {
+      return this.mapPersistedStatementMovement(movement);
+    }
+
+    const updatedMovement = await this.prisma.bankStatementMovement.update({
+      where: {
+        id: movement.id,
+      },
+      data: {
+        reconciliationStatus: "RECONCILED",
+        updatedBy: this.resolveStatementRequestedBy(payload),
+      },
+    });
+
+    return this.mapPersistedStatementMovement(updatedMovement);
+  }
+
+  async unreconcileStatementMovement(
+    bankId: string,
+    movementId: string,
+    payload: ReconcileBankStatementMovementDto,
+  ) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const normalizedMovementId = String(movementId || "").trim();
+
+    if (!normalizedMovementId) {
+      throw new BadRequestException("Informe o lançamento do extrato bancário.");
+    }
+
+    const movement = await this.prisma.bankStatementMovement.findFirst({
+      where: {
+        id: normalizedMovementId,
+        companyId: bank.companyId,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+    });
+
+    if (!movement) {
+      throw new NotFoundException("LANÇAMENTO DO EXTRATO BANCÁRIO NÃO ENCONTRADO.");
+    }
+
+    if (movement.reconciliationStatus === "PENDING") {
+      return this.mapPersistedStatementMovement(movement);
+    }
+
+    const updatedMovement = await this.prisma.bankStatementMovement.update({
+      where: {
+        id: movement.id,
+      },
+      data: {
+        reconciliationStatus: "PENDING",
+        updatedBy: this.resolveStatementRequestedBy(payload),
+      },
+    });
+
+    return this.mapPersistedStatementMovement(updatedMovement);
+  }
+
+  async reviewStatementMovement(
+    bankId: string,
+    movementId: string,
+    payload: ReviewBankStatementMovementDto,
+  ) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const normalizedMovementId = String(movementId || "").trim();
+
+    if (!normalizedMovementId) {
+      throw new BadRequestException("Informe o lançamento do extrato bancário.");
+    }
+
+    const movement = await this.prisma.bankStatementMovement.findFirst({
+      where: {
+        id: normalizedMovementId,
+        companyId: bank.companyId,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+    });
+
+    if (!movement) {
+      throw new NotFoundException("LANÇAMENTO DO EXTRATO BANCÁRIO NÃO ENCONTRADO.");
+    }
+
+    const requestedBy = this.resolveStatementRequestedBy(payload);
+    const shouldMarkReviewed = movement.reviewStatus !== "REVIEWED";
+    const updatedMovement = await this.prisma.bankStatementMovement.update({
+      where: {
+        id: movement.id,
+      },
+      data: shouldMarkReviewed
+        ? {
+            reviewStatus: "REVIEWED",
+            reviewedAt: new Date(),
+            reviewedBy: requestedBy,
+            updatedBy: requestedBy,
+          }
+        : {
+            reviewStatus: "NOT_REVIEWED",
+            reviewedAt: null,
+            reviewedBy: null,
+            updatedBy: requestedBy,
+          },
+    });
+
+    return this.mapPersistedStatementMovement(updatedMovement);
+  }
+
+  async reviewStatementMovements(
+    bankId: string,
+    payload: ReviewBankStatementMovementsDto,
+  ) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const movementIds = Array.from(
+      new Set(
+        (payload.movementIds || [])
+          .map((movementId) => String(movementId || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (!movementIds.length) {
+      throw new BadRequestException("Informe os lançamentos do extrato bancário.");
+    }
+
+    const reviewStatus = normalizeText(payload.reviewStatus) || "";
+
+    if (!["REVIEWED", "NOT_REVIEWED"].includes(reviewStatus)) {
+      throw new BadRequestException("Informe o status de conferência válido.");
+    }
+
+    const requestedBy = this.resolveStatementRequestedBy(payload);
+    const data =
+      reviewStatus === "REVIEWED"
+        ? {
+            reviewStatus: "REVIEWED",
+            reviewedAt: new Date(),
+            reviewedBy: requestedBy,
+            updatedBy: requestedBy,
+          }
+        : {
+            reviewStatus: "NOT_REVIEWED",
+            reviewedAt: null,
+            reviewedBy: null,
+            updatedBy: requestedBy,
+          };
+
+    const result = await this.prisma.bankStatementMovement.updateMany({
+      where: {
+        id: {
+          in: movementIds,
+        },
+        companyId: bank.companyId,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+      data,
+    });
+    const movements = await this.prisma.bankStatementMovement.findMany({
+      where: {
+        id: {
+          in: movementIds,
+        },
+        companyId: bank.companyId,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+    });
+
+    return {
+      updatedCount: result.count,
+      movements: movements.map((movement) =>
+        this.mapPersistedStatementMovement(movement),
+      ),
+    };
+  }
+
+  async getStatement(bankId: string, query: GetBankStatementDto) {
+    const period = this.parseStatementPeriod(query.periodStart, query.periodEnd);
+    const { company, bank } = await this.loadScopedBank(
+      bankId,
+      query.sourceSystem,
+      query.sourceTenantId,
+    );
+
+    if (bank.status !== "ACTIVE" || bank.canceledAt) {
+      throw new BadRequestException("BANCO INATIVO PARA CONSULTA DE EXTRATO.");
+    }
+
+    if (normalizeText(bank.billingProvider) !== "SICOOB") {
+      throw new BadRequestException(
+        "A consulta automática de extrato disponível no momento atende apenas bancos configurados como SICOOB.",
+      );
+    }
+
+    if (!bank.billingApiClientId) {
+      throw new BadRequestException(
+        "Client ID não configurado no cadastro do banco.",
+      );
+    }
+
+    if (!bank.billingCertificateBase64 || !bank.billingCertificatePassword) {
+      throw new BadRequestException(
+        "Certificado digital não configurado no cadastro do banco.",
+      );
+    }
+
+    const accountNumber = Number(this.buildSicoobAccountNumber(bank));
+    if (!Number.isInteger(accountNumber) || accountNumber <= 0) {
+      throw new BadRequestException(
+        "Conta corrente inválida para consultar o extrato do Sicoob.",
+      );
+    }
+
+    try {
+      const statement = await this.sicoobBankStatementService.downloadStatement(
+        {
+          clientId: bank.billingApiClientId,
+          certificateBase64: bank.billingCertificateBase64,
+          certificatePassword: bank.billingCertificatePassword,
+        },
+        {
+          accountNumber,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+        },
+      );
+
+      const mappedStatement = this.mapSicoobStatement(bank, period, statement);
+      return this.persistSicoobStatement(
+        company,
+        bank,
+        period,
+        mappedStatement,
+        query,
+      );
+    } catch (error) {
+      if (error instanceof SicoobStatementApiError) {
+        throw new BadRequestException(error.message);
+      }
+
+      throw error;
+    }
   }
 
   async create(payload: SaveBankDto) {

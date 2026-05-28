@@ -79,6 +79,29 @@ Arquivos de referencia tecnica no Financeiro:
 - o uso continua manual, tela por tela, e nunca deve ser aplicado em paginas sem listagem
 - a toolbar pode variar nas acoes especificas da tela, mas deve preservar a distribuicao visual esquerda/centro/direita aprovada
 
+### PAT-015.1 - Filtros diretos nas colunas do grid
+
+- quando o usuario pedir "filtros direto nas colunas do grid", aplicar este padrao apenas nas colunas informadas no pedido
+- o filtro deve aparecer no proprio cabecalho da coluna, ao lado do nome da coluna, preferencialmente como icone de lupa com tooltip `Filtrar <coluna>`
+- ao clicar na lupa, abrir um painel compacto proximo ao cabecalho da coluna, sem criar faixa adicional acima do grid
+- tipos de filtro aprovados:
+  - data/periodo: campos `De` e `Ate`
+  - texto, historico, documento ou nome: campo de busca textual
+  - status, tipo ou categoria fechada: seletor com `TODOS` e opcoes da coluna
+  - valor numerico/monetario: campos de valor minimo e valor maximo
+- cada painel deve ter acao local `Limpar` para zerar somente o filtro daquela coluna
+- sempre que houver filtro direto em coluna, deve existir tambem um botao iconico para limpar todos os filtros de uma vez
+- a posicao aprovada para `Limpar todos os filtros` e no lado esquerdo do cabecalho do grid, antes da primeira coluna filtravel, normalmente antes de `Data`
+- o botao de limpar todos deve ser iconico, ter tooltip/aria-label `Limpar todos os filtros`, zerar todos os filtros do grid e fechar qualquer painel aberto
+- o botao de limpar todos deve ter estado visual discreto quando nenhum filtro estiver ativo e ganhar destaque quando existir filtro ativo
+- os filtros devem responder na hora quando forem filtros locais; se a tela exigir consulta no backend, preservar tenant/RBAC e atualizar tambem a auditoria SQL da tela
+- nao adicionar filtros em colunas nao solicitadas pelo usuario no prompt atual
+- nao alterar layout aprovado da tela alem do menor ajuste necessario no cabecalho do grid
+
+Referencia aprovada:
+
+- `PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO`
+
 ### PAT-016 - Tela do Financeiro embutida na vertical consumidora
 
 - quando uma tela do `Financeiro` for aberta dentro da `Escola` ou de outra vertical consumidora, o layout principal visivel deve continuar sendo da vertical consumidora

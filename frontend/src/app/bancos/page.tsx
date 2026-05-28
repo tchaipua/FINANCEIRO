@@ -123,7 +123,9 @@ const gridActionButtonClass =
   'inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-70';
 const gridActionToneClass = {
   blue: 'bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800',
+  amber: 'bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-800',
   emerald: 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800',
+  violet: 'bg-violet-50 text-violet-600 hover:bg-violet-100 hover:text-violet-800',
   rose: 'bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-800',
 };
 const fieldLabelClass = 'mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500';
@@ -342,6 +344,17 @@ function buildBankFormPath(queryString: string, bankId?: string | null) {
 
   const query = params.toString();
   return `/bancos/novo${query ? `?${query}` : ''}`;
+}
+
+function buildBankRelatedPath(path: string, queryString: string, bankId: string) {
+  const params = new URLSearchParams(
+    queryString.startsWith('?') ? queryString.slice(1) : queryString,
+  );
+
+  params.set('bankId', bankId);
+
+  const query = params.toString();
+  return `${path}${query ? `?${query}` : ''}`;
 }
 
 function formatOptionalNumericField(value: string | number | null | undefined) {
@@ -829,10 +842,6 @@ export default function FinanceiroBanksPage() {
     search: '',
     status: 'ACTIVE',
   });
-  const [query, setQuery] = useState({
-    search: '',
-    status: 'ACTIVE',
-  });
   const [columnOrder, setColumnOrder] = useState<BankGridColumnKey[]>(
     DEFAULT_BANK_GRID_CONFIG.order,
   );
@@ -1031,7 +1040,7 @@ export default function FinanceiroBanksPage() {
   }, [runtimeContext.sourceTenantId, columnOrder, hiddenColumns]);
 
   const loadBanks = useCallback(
-    async (currentQuery = query) => {
+    async (currentQuery = filters) => {
       if (!scopeReady) {
         setBanks([]);
         setIsLoading(false);
@@ -1069,15 +1078,12 @@ export default function FinanceiroBanksPage() {
         setIsLoading(false);
       }
     },
-    [query, runtimeContext, scope.sourceSystem, scope.sourceTenantId, scopeReady],
+    [filters, runtimeContext, scope.sourceSystem, scope.sourceTenantId, scopeReady],
   );
 
   useEffect(() => {
     void loadBanks();
   }, [loadBanks]);
-
-  const showClearQueryButton =
-    Boolean(filters.search.trim()) || filters.status !== 'ACTIVE';
 
   function resetForm() {
     setError(null);
@@ -1092,29 +1098,11 @@ export default function FinanceiroBanksPage() {
     setForm(buildEmptyBankForm(scope.companyName));
   }
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const nextQuery = {
-      search: filters.search,
-      status: filters.status,
-    };
-
-    setQuery(nextQuery);
-    void loadBanks(nextQuery);
-  }
-
   function handleStatusFilter(nextStatus: 'ALL' | 'ACTIVE' | 'INACTIVE') {
-    const nextQuery = {
-      search: filters.search,
-      status: nextStatus,
-    };
-
     setFilters((current) => ({
       ...current,
       status: nextStatus,
     }));
-    setQuery(nextQuery);
-    void loadBanks(nextQuery);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1404,46 +1392,12 @@ export default function FinanceiroBanksPage() {
 
       {!isCreateRoute ? (
         <section className={`${cardClass} p-6`}>
-          <form
-            onSubmit={handleSearch}
-            className="grid gap-4 xl:grid-cols-[auto_1fr_auto_auto]"
-          >
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href={bankFormHref}
               title="INCLUIR NOVO BANCO"
               aria-label="INCLUIR NOVO BANCO"
-              className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-6 w-6"
-              >
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
-              </svg>
-            </Link>
-            <input
-              value={filters.search}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  search: event.target.value,
-                }))
-              }
-              className={inputClass}
-              placeholder="PESQUISAR POR BANCO, CÓDIGO, AGÊNCIA, CONTA OU BENEFICIÁRIO"
-            />
-            <button
-              type="submit"
-              title="PESQUISAR"
-              aria-label="PESQUISAR"
-              className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-500 active:scale-95"
             >
               <svg
                 aria-hidden="true"
@@ -1455,44 +1409,33 @@ export default function FinanceiroBanksPage() {
                 strokeLinejoin="round"
                 className="h-5 w-5"
               >
-                <circle cx="11" cy="11" r="6" />
-                <path d="M20 20l-3.5-3.5" />
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
               </svg>
-            </button>
-            {showClearQueryButton ? (
-              <button
-                type="button"
-                title="LIMPAR CONSULTA"
-                aria-label="LIMPAR CONSULTA"
-                onClick={() => {
-                  const resetQuery = {
-                    search: '',
-                    status: 'ACTIVE',
-                  };
-
-                  setFilters(resetQuery);
-                  setQuery(resetQuery);
-                  void loadBanks(resetQuery);
-                }}
-                className="inline-flex items-center justify-center rounded-2xl bg-rose-500 px-6 py-3 text-white shadow-lg shadow-rose-500/25 transition hover:bg-rose-600"
+            </Link>
+            <div className="relative w-full max-w-xs">
+              <input
+                value={filters.search}
+                onChange={(event) =>
+                  setFilters((current) => ({
+                    ...current,
+                    search: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                placeholder="Buscar banco..."
+              />
+              <svg
+                aria-hidden="true"
+                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
               >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-6 w-6"
-                >
-                  <circle cx="12" cy="12" r="8" />
-                  <path d="M9 9l6 6" />
-                  <path d="M15 9l-6 6" />
-                </svg>
-              </button>
-            ) : null}
-          </form>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
         </section>
       ) : null}
 
@@ -2276,6 +2219,28 @@ export default function FinanceiroBanksPage() {
                     })}
                     <td className="px-4 py-4">
                       <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={buildBankRelatedPath('/bancos/extrato', preservedQueryString, bank.id)}
+                          title="Controlar Extrato do banco"
+                          aria-label="Controlar Extrato do banco"
+                          className={`${gridActionButtonClass} ${gridActionToneClass.violet}`}
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l4 4v14H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v5h4M9 12h6M9 16h4" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 8h1.5a1.5 1.5 0 010 3H10" />
+                          </svg>
+                        </Link>
+                        <Link
+                          href={buildBankRelatedPath('/bancos/movimentos-abertos', preservedQueryString, bank.id)}
+                          title="Abrir movimentos em aberto"
+                          aria-label="Abrir movimentos em aberto"
+                          className={`${gridActionButtonClass} ${gridActionToneClass.amber}`}
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                          </svg>
+                        </Link>
                         <Link
                           href={buildBankFormPath(preservedQueryString, bank.id)}
                           title="Editar banco"
