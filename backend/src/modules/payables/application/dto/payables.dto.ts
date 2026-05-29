@@ -135,6 +135,26 @@ export class ApprovePayableInvoiceImportItemDto {
   allowFraction?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesLotControl?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesExpirationControl?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesColorSize?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  allowsNegativeStock?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
@@ -159,6 +179,42 @@ export class ApprovePayableInvoiceImportDto {
   @IsOptional()
   @IsString()
   approvalNotes?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockIntegerQuantityMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockLotControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockExpirationControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockGridControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockNegativeControlMode?: string;
 
   @IsOptional()
   @IsArray()

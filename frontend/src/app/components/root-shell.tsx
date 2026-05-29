@@ -1,7 +1,70 @@
 'use client';
 
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+
+function hasIntegratedNavigationContext() {
+  if (typeof window === 'undefined') return false;
+
+  const params = new URLSearchParams(window.location.search);
+  return [
+    'embedded',
+    'sourceSystem',
+    'sourceTenantId',
+    'sourceBranchCode',
+    'cashierUserId',
+    'cashierDisplayName',
+    'companyName',
+  ].some((key) => params.has(key));
+}
+
+function isTopLevelWindow() {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    return window.self === window.top;
+  } catch {
+    return false;
+  }
+}
+
+function resolveSchoolShellOrigin() {
+  if (typeof window === 'undefined') return null;
+
+  if (typeof document !== 'undefined' && document.referrer) {
+    try {
+      const referrerUrl = new URL(document.referrer);
+      if (referrerUrl.origin !== window.location.origin) {
+        return referrerUrl.origin;
+      }
+    } catch {
+      // Mantem fallback local abaixo.
+    }
+  }
+
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    return `${window.location.protocol}//${window.location.hostname}:3000`;
+  }
+
+  return null;
+}
+
+function resolveSchoolFinancePath(pathname: string) {
+  if (pathname.startsWith('/bancos')) return '/principal/financeiro/bancos';
+  if (pathname.startsWith('/empresas')) return '/principal/financeiro/empresa';
+  if (pathname.startsWith('/resumo')) return '/principal/financeiro/resumo';
+  if (pathname.startsWith('/contas-a-pagar')) return '/principal/financeiro/contas-a-pagar';
+  if (pathname.startsWith('/estoque') || pathname.startsWith('/produtos')) {
+    return '/principal/financeiro/estoque';
+  }
+  if (pathname.startsWith('/recebiveis/lotes')) return '/principal/financeiro/lotes';
+  if (pathname.startsWith('/recebiveis/retornos')) return '/principal/financeiro/retornos';
+  if (pathname.startsWith('/recebiveis/parcelas')) return '/principal/financeiro/parcelas';
+  if (pathname.startsWith('/caixa')) return '/principal/financeiro/caixa';
+
+  return null;
+}
 
 export default function RootShell({
   children,
@@ -9,6 +72,20 @@ export default function RootShell({
   children: React.ReactNode;
 }>) {
   const runtimeContext = useFinanceRuntimeContext();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!isTopLevelWindow() || !hasIntegratedNavigationContext()) return;
+
+    const schoolPath = resolveSchoolFinancePath(pathname || window.location.pathname);
+    const schoolOrigin = resolveSchoolShellOrigin();
+
+    if (!schoolPath || !schoolOrigin || schoolOrigin === window.location.origin) {
+      return;
+    }
+
+    window.location.replace(`${schoolOrigin}${schoolPath}`);
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;

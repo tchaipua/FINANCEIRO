@@ -25,6 +25,8 @@ import type {
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_APROVACAO_NOTA';
 const INSTALLMENT_POPUP_SCREEN_ID =
   'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_APROVACAO_NOTA_DUPLICATA';
+const PRODUCT_POPUP_SCREEN_ID =
+  'POPUP_PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_APROVACAO_NOTA_PRODUTO_NOVO';
 
 const auditText = `--- LOGICA DA TELA ---
 Esta tela aprova a nota já importada no contas a pagar do Financeiro.
@@ -113,6 +115,64 @@ SET dueDate = :dueDate,
     updatedBy = :requestedBy
 WHERE id = :installmentId;`;
 
+const productPopupAuditText = `--- LOGICA DO POPUP ---
+Este popup concentra as informacoes do produto novo que sera criado ao aprovar a nota.
+
+TABELAS PRINCIPAIS:
+- payable_invoice_import_items (PIIT) - item da nota importada.
+- products (PR) - produto criado durante a aprovacao.
+- stock_movements (SM) - entrada de estoque vinculada ao item aprovado.
+
+CAMPOS AJUSTADOS:
+- nome do produto
+- codigo interno
+- codigo de barras
+- unidade
+- parametros de estoque por produto quando a filial estiver configurada para tratar por produto`;
+
+const productPopupSqlText = `SELECT
+  PIIT.id,
+  PIIT.lineNumber,
+  PIIT.description,
+  PIIT.supplierItemCode,
+  PIIT.barcode,
+  PIIT.unitCode,
+  PIIT.quantity,
+  PIIT.totalPrice
+FROM payable_invoice_import_items PIIT
+WHERE PIIT.invoiceImportId = :importId
+  AND PIIT.id = :itemId
+  AND PIIT.canceledAt IS NULL;
+
+-- Na aprovacao da nota:
+INSERT INTO products (
+  companyId,
+  name,
+  internalCode,
+  barcode,
+  unitCode,
+  tracksInventory,
+  allowFraction,
+  usesLotControl,
+  usesExpirationControl,
+  usesColorSize,
+  allowsNegativeStock,
+  createdBy
+) VALUES (
+  :companyId,
+  :productName,
+  :internalCode,
+  :barcode,
+  :unitCode,
+  :tracksInventory,
+  :allowFraction,
+  :usesLotControl,
+  :usesExpirationControl,
+  :usesColorSize,
+  :allowsNegativeStock,
+  :requestedBy
+);`;
+
 type InstallmentPaymentMethod =
   | 'CASH'
   | 'PIX'
@@ -177,6 +237,79 @@ function formatDateInput(value?: string | null) {
   return parsedDate.toISOString().slice(0, 10);
 }
 
+function normalizeBarcodeValue(value?: string | null) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function findProductByBarcode(products: ProductOption[], barcode?: string | null) {
+  const normalizedBarcode = normalizeBarcodeValue(barcode);
+  if (!normalizedBarcode) {
+    return null;
+  }
+
+  return (
+    products.find(
+      (product) => normalizeBarcodeValue(product.barcode) === normalizedBarcode,
+    ) || null
+  );
+}
+
+function quantityAllowsFraction(quantity?: number | null) {
+  const normalized = Number(quantity || 0);
+  return Number.isFinite(normalized) && !Number.isInteger(normalized);
+}
+
+function hasProductStockParameters(runtimeContext: ReturnType<typeof useFinanceRuntimeContext>) {
+  return (
+    runtimeContext.stockControlMode === 'BY_PRODUCT' ||
+    runtimeContext.stockIntegerQuantityMode === 'BY_PRODUCT' ||
+    runtimeContext.stockLotControlMode === 'BY_PRODUCT' ||
+    runtimeContext.stockExpirationControlMode === 'BY_PRODUCT' ||
+    runtimeContext.stockGridControlMode === 'BY_PRODUCT' ||
+    runtimeContext.stockNegativeControlMode === 'BY_PRODUCT'
+  );
+}
+
+function stockParameterButtonClass(active: boolean, disabled = false) {
+  const activeClass = active
+    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+    : 'border-rose-300 bg-rose-50 text-rose-800';
+  const disabledClass = disabled ? 'opacity-55' : 'hover:border-blue-300 hover:bg-blue-50';
+
+  return `rounded-3xl border px-4 py-4 text-left transition ${activeClass} ${disabledClass}`;
+}
+
+function approvalActionButtonClass(
+  action: ApprovalItemState['action'],
+  selectedAction: ApprovalItemState['action'],
+  disabled = false,
+) {
+  const selected = action === selectedAction;
+  const disabledClass = disabled ? 'cursor-not-allowed opacity-60' : 'hover:-translate-y-0.5';
+
+  if (action === 'CREATE_PRODUCT') {
+    return `rounded-3xl border px-4 py-3 text-center text-xs font-black uppercase tracking-[0.16em] shadow-sm transition ${disabledClass} ${
+      selected
+        ? 'border-emerald-600 bg-emerald-500 text-white shadow-emerald-100 ring-4 ring-emerald-100'
+        : 'border-emerald-200 bg-emerald-100 text-emerald-800'
+    }`;
+  }
+
+  if (action === 'LINK_EXISTING') {
+    return `rounded-3xl border px-4 py-3 text-center text-xs font-black uppercase tracking-[0.16em] shadow-sm transition ${disabledClass} ${
+      selected
+        ? 'border-blue-600 bg-blue-500 text-white shadow-blue-100 ring-4 ring-blue-100'
+        : 'border-blue-200 bg-blue-50 text-blue-800'
+    }`;
+  }
+
+  return `rounded-3xl border px-4 py-3 text-center text-xs font-black uppercase tracking-[0.16em] shadow-sm transition ${disabledClass} ${
+    selected
+      ? 'border-amber-500 bg-amber-400 text-slate-950 shadow-amber-100 ring-4 ring-amber-100'
+      : 'border-amber-200 bg-amber-50 text-amber-800'
+  }`;
+}
+
 function buildInstallmentEditorState(
   installment: PayableInvoiceImportInstallment,
 ): InstallmentEditorState {
@@ -195,18 +328,29 @@ function buildInstallmentEditorState(
   };
 }
 
-function buildInitialApprovalState(item: PayableInvoiceImportDetail['items'][number]): ApprovalItemState {
+function buildInitialApprovalState(
+  item: PayableInvoiceImportDetail['items'][number],
+  existingBarcodeProduct?: ProductOption | null,
+): ApprovalItemState {
+  const mustLinkExistingBarcodeProduct = Boolean(existingBarcodeProduct);
+
   return {
-    action: item.approvalAction || 'IGNORE_STOCK',
-    productId: item.productId || '',
-    productName: item.productName || item.description,
+    action: mustLinkExistingBarcodeProduct
+      ? 'LINK_EXISTING'
+      : item.approvalAction || 'IGNORE_STOCK',
+    productId: item.productId || existingBarcodeProduct?.id || '',
+    productName: item.productName || existingBarcodeProduct?.name || item.description,
     internalCode: item.supplierItemCode || '',
     sku: '',
     barcode: item.barcode || '',
     unitCode: item.unitCode || 'UN',
     productType: 'GOODS',
-    tracksInventory: item.productTracksInventory ?? false,
-    allowFraction: false,
+    tracksInventory: item.productTracksInventory ?? item.tracksInventory ?? true,
+    allowFraction: quantityAllowsFraction(item.quantity),
+    usesLotControl: false,
+    usesExpirationControl: false,
+    usesColorSize: false,
+    allowsNegativeStock: false,
     minimumStock: '0',
     notes: '',
   };
@@ -232,6 +376,7 @@ export default function FinanceiroAprovacaoNotaPage() {
     useState<string | null>(null);
   const [editingInstallment, setEditingInstallment] =
     useState<InstallmentEditorState | null>(null);
+  const [editingProductItemId, setEditingProductItemId] = useState<string | null>(null);
 
   const loadPageData = useCallback(async () => {
     if (!hydrated) {
@@ -275,7 +420,10 @@ export default function FinanceiroAprovacaoNotaPage() {
       setApprovalNotes(detailResponse.approvalNotes || '');
       setApprovalItems(
         detailResponse.items.reduce<Record<string, ApprovalItemState>>((accumulator, item) => {
-          accumulator[item.id] = buildInitialApprovalState(item);
+          accumulator[item.id] = buildInitialApprovalState(
+            item,
+            findProductByBarcode(productsResponse, item.barcode),
+          );
           return accumulator;
         }, {}),
       );
@@ -369,27 +517,51 @@ export default function FinanceiroAprovacaoNotaPage() {
           body: JSON.stringify({
             sourceSystem: runtimeContext.sourceSystem,
             sourceTenantId: runtimeContext.sourceTenantId,
+            sourceBranchCode: runtimeContext.sourceBranchCode,
+            stockControlMode: runtimeContext.stockControlMode,
+            stockIntegerQuantityMode: runtimeContext.stockIntegerQuantityMode,
+            stockLotControlMode: runtimeContext.stockLotControlMode,
+            stockExpirationControlMode: runtimeContext.stockExpirationControlMode,
+            stockGridControlMode: runtimeContext.stockGridControlMode,
+            stockNegativeControlMode: runtimeContext.stockNegativeControlMode,
             requestedBy: runtimeContext.cashierDisplayName || runtimeContext.userRole || 'OPERADOR',
             approvalNotes,
             items: detail.items.map((item) => {
-              const current = approvalItems[item.id] || buildInitialApprovalState(item);
+              const existingBarcodeProduct = findProductByBarcode(products, item.barcode);
+              const current =
+                approvalItems[item.id] ||
+                buildInitialApprovalState(item, existingBarcodeProduct);
+              const action =
+                existingBarcodeProduct && current.action === 'CREATE_PRODUCT'
+                  ? 'LINK_EXISTING'
+                  : current.action;
+
               return {
                 itemId: item.id,
-                action: current.action,
-                productId: current.action === 'LINK_EXISTING' ? current.productId : undefined,
-                productName: current.action === 'CREATE_PRODUCT' ? current.productName : undefined,
-                internalCode: current.action === 'CREATE_PRODUCT' ? current.internalCode : undefined,
-                sku: current.action === 'CREATE_PRODUCT' ? current.sku : undefined,
-                barcode: current.action === 'CREATE_PRODUCT' ? current.barcode : undefined,
-                unitCode: current.action === 'CREATE_PRODUCT' ? current.unitCode : undefined,
-                productType: current.action === 'CREATE_PRODUCT' ? current.productType : undefined,
-                tracksInventory: current.action === 'CREATE_PRODUCT' ? current.tracksInventory : undefined,
-                allowFraction: current.action === 'CREATE_PRODUCT' ? current.allowFraction : undefined,
+                action,
+                productId:
+                  action === 'LINK_EXISTING'
+                    ? current.productId || existingBarcodeProduct?.id
+                    : undefined,
+                productName: action === 'CREATE_PRODUCT' ? current.productName : undefined,
+                internalCode: action === 'CREATE_PRODUCT' ? current.internalCode : undefined,
+                sku: action === 'CREATE_PRODUCT' ? current.sku : undefined,
+                barcode: action === 'CREATE_PRODUCT' ? current.barcode : undefined,
+                unitCode: action === 'CREATE_PRODUCT' ? current.unitCode : undefined,
+                productType: action === 'CREATE_PRODUCT' ? current.productType : undefined,
+                tracksInventory: action === 'CREATE_PRODUCT' ? current.tracksInventory : undefined,
+                allowFraction: action === 'CREATE_PRODUCT' ? current.allowFraction : undefined,
+                usesLotControl: action === 'CREATE_PRODUCT' ? current.usesLotControl : undefined,
+                usesExpirationControl:
+                  action === 'CREATE_PRODUCT' ? current.usesExpirationControl : undefined,
+                usesColorSize: action === 'CREATE_PRODUCT' ? current.usesColorSize : undefined,
+                allowsNegativeStock:
+                  action === 'CREATE_PRODUCT' ? current.allowsNegativeStock : undefined,
                 minimumStock:
-                  current.action === 'CREATE_PRODUCT'
+                  action === 'CREATE_PRODUCT'
                     ? Number(current.minimumStock.replace(',', '.') || '0')
                     : undefined,
-                notes: current.action === 'CREATE_PRODUCT' ? current.notes : undefined,
+                notes: action === 'CREATE_PRODUCT' ? current.notes : undefined,
               };
             }),
           }),
@@ -402,10 +574,14 @@ export default function FinanceiroAprovacaoNotaPage() {
       setApprovalNotes(response.approvalNotes || '');
       setApprovalItems(
         response.items.reduce<Record<string, ApprovalItemState>>((accumulator, item) => {
-          accumulator[item.id] = buildInitialApprovalState(item);
+          accumulator[item.id] = buildInitialApprovalState(
+            item,
+            findProductByBarcode(products, item.barcode),
+          );
           return accumulator;
         }, {}),
       );
+      setEditingProductItemId(null);
       setSuccessMessage(
         response.message ||
           'Nota aprovada com sucesso. Estoque e duplicatas foram gerados.',
@@ -420,7 +596,7 @@ export default function FinanceiroAprovacaoNotaPage() {
     } finally {
       setSaving(false);
     }
-  }, [approvalItems, approvalNotes, detail, runtimeContext]);
+  }, [approvalItems, approvalNotes, detail, products, runtimeContext]);
 
   const productOptions = useMemo(() => {
     return products
@@ -439,6 +615,22 @@ export default function FinanceiroAprovacaoNotaPage() {
       ) || null
     );
   }, [detail, editingInstallment]);
+
+  const selectedProductItem = useMemo(() => {
+    if (!detail || !editingProductItemId) {
+      return null;
+    }
+
+    return detail.items.find((item) => item.id === editingProductItemId) || null;
+  }, [detail, editingProductItemId]);
+
+  const selectedProductApprovalState = selectedProductItem
+    ? approvalItems[selectedProductItem.id] ||
+      buildInitialApprovalState(
+        selectedProductItem,
+        findProductByBarcode(productOptions, selectedProductItem.barcode),
+      )
+    : null;
 
   const editedInstallmentFinalAmount = useMemo(() => {
     if (!selectedInstallment || !editingInstallment) {
@@ -463,6 +655,41 @@ export default function FinanceiroAprovacaoNotaPage() {
   const closeInstallmentEditor = useCallback(() => {
     setInstallmentSuccessMessage(null);
     setEditingInstallment(null);
+  }, []);
+
+  const openProductEditor = useCallback(
+    (item: PayableInvoiceImportDetail['items'][number]) => {
+      const existingBarcodeProduct = findProductByBarcode(products, item.barcode);
+
+      if (existingBarcodeProduct) {
+        setApprovalItems((current) => ({
+          ...current,
+          [item.id]: {
+            ...buildInitialApprovalState(item, existingBarcodeProduct),
+            ...current[item.id],
+            action: 'LINK_EXISTING',
+            productId: current[item.id]?.productId || existingBarcodeProduct.id,
+          },
+        }));
+        setEditingProductItemId(null);
+        return;
+      }
+
+      setApprovalItems((current) => ({
+        ...current,
+        [item.id]: {
+          ...buildInitialApprovalState(item),
+          ...current[item.id],
+          action: 'CREATE_PRODUCT',
+        },
+      }));
+      setEditingProductItemId(item.id);
+    },
+    [products],
+  );
+
+  const closeProductEditor = useCallback(() => {
+    setEditingProductItemId(null);
   }, []);
 
   const handleAcknowledgeInstallmentSave = useCallback(() => {
@@ -733,8 +960,14 @@ export default function FinanceiroAprovacaoNotaPage() {
 
               <div className="space-y-4">
                 {detail.items.map((item) => {
+                  const existingBarcodeProduct = findProductByBarcode(
+                    productOptions,
+                    item.barcode,
+                  );
                   const approvalState =
-                    approvalItems[item.id] || buildInitialApprovalState(item);
+                    approvalItems[item.id] ||
+                    buildInitialApprovalState(item, existingBarcodeProduct);
+                  const canCreateProduct = !existingBarcodeProduct;
 
                   return (
                     <div key={item.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -755,25 +988,73 @@ export default function FinanceiroAprovacaoNotaPage() {
                         </div>
 
                         <div className="grid gap-4">
-                          <label className="block">
+                          <div className="block">
                             <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                               Ação na aprovação
                             </span>
-                            <select
-                              value={approvalState.action}
-                              onChange={(event) =>
-                                updateApprovalItem(item.id, {
-                                  action: event.target.value as ApprovalItemState['action'],
-                                })
-                              }
-                              disabled={detail.status === 'APPROVED'}
-                              className={FINANCE_GRID_PAGE_LAYOUT.input}
+                            <div
+                              className={`grid gap-2 ${
+                                canCreateProduct ? 'grid-cols-3' : 'grid-cols-2'
+                              }`}
                             >
-                              <option value="LINK_EXISTING">VINCULAR PRODUTO EXISTENTE</option>
-                              <option value="CREATE_PRODUCT">CRIAR NOVO PRODUTO</option>
-                              <option value="IGNORE_STOCK">SEM CONTROLE DE ESTOQUE</option>
-                            </select>
-                          </label>
+                              <button
+                                type="button"
+                                aria-pressed={approvalState.action === 'LINK_EXISTING'}
+                                onClick={() =>
+                                  updateApprovalItem(item.id, {
+                                    action: 'LINK_EXISTING',
+                                    productId:
+                                      approvalState.productId ||
+                                      existingBarcodeProduct?.id ||
+                                      '',
+                                  })
+                                }
+                                disabled={detail.status === 'APPROVED'}
+                                className={approvalActionButtonClass(
+                                  'LINK_EXISTING',
+                                  approvalState.action,
+                                  detail.status === 'APPROVED',
+                                )}
+                              >
+                                Vincular
+                              </button>
+                              {canCreateProduct ? (
+                                <button
+                                  type="button"
+                                  aria-pressed={approvalState.action === 'CREATE_PRODUCT'}
+                                  onClick={() => openProductEditor(item)}
+                                  disabled={detail.status === 'APPROVED'}
+                                  className={approvalActionButtonClass(
+                                    'CREATE_PRODUCT',
+                                    approvalState.action,
+                                    detail.status === 'APPROVED',
+                                  )}
+                                >
+                                  Produto novo
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                aria-pressed={approvalState.action === 'IGNORE_STOCK'}
+                                onClick={() =>
+                                  updateApprovalItem(item.id, { action: 'IGNORE_STOCK' })
+                                }
+                                disabled={detail.status === 'APPROVED'}
+                                className={approvalActionButtonClass(
+                                  'IGNORE_STOCK',
+                                  approvalState.action,
+                                  detail.status === 'APPROVED',
+                                )}
+                              >
+                                Sem estoque
+                              </button>
+                            </div>
+                            {existingBarcodeProduct ? (
+                              <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-blue-800">
+                                EAN já cadastrado no estoque: {existingBarcodeProduct.name}
+                              </div>
+                            ) : null}
+                          </div>
 
                           {approvalState.action === 'LINK_EXISTING' ? (
                             <label className="block">
@@ -781,7 +1062,11 @@ export default function FinanceiroAprovacaoNotaPage() {
                                 Produto existente
                               </span>
                               <select
-                                value={approvalState.productId}
+                                value={
+                                  approvalState.productId ||
+                                  existingBarcodeProduct?.id ||
+                                  ''
+                                }
                                 onChange={(event) =>
                                   updateApprovalItem(item.id, { productId: event.target.value })
                                 }
@@ -800,62 +1085,18 @@ export default function FinanceiroAprovacaoNotaPage() {
                           ) : null}
 
                           {approvalState.action === 'CREATE_PRODUCT' ? (
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <label className="block">
-                                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                  Nome do produto
-                                </span>
-                                <input
-                                  value={approvalState.productName}
-                                  onChange={(event) =>
-                                    updateApprovalItem(item.id, { productName: event.target.value })
-                                  }
-                                  disabled={detail.status === 'APPROVED'}
-                                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                                />
-                              </label>
-
-                              <label className="block">
-                                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                  Código interno
-                                </span>
-                                <input
-                                  value={approvalState.internalCode}
-                                  onChange={(event) =>
-                                    updateApprovalItem(item.id, { internalCode: event.target.value })
-                                  }
-                                  disabled={detail.status === 'APPROVED'}
-                                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                                />
-                              </label>
-
-                              <label className="block">
-                                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                  Código de barras
-                                </span>
-                                <input
-                                  value={approvalState.barcode}
-                                  onChange={(event) =>
-                                    updateApprovalItem(item.id, { barcode: event.target.value })
-                                  }
-                                  disabled={detail.status === 'APPROVED'}
-                                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                                />
-                              </label>
-
-                              <label className="block">
-                                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                                  Unidade
-                                </span>
-                                <input
-                                  value={approvalState.unitCode}
-                                  onChange={(event) =>
-                                    updateApprovalItem(item.id, { unitCode: event.target.value })
-                                  }
-                                  disabled={detail.status === 'APPROVED'}
-                                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                                />
-                              </label>
+                            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                                Produto novo
+                              </div>
+                              <div className="mt-1 text-sm font-black text-slate-900">
+                                {approvalState.productName || item.description}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-3 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-800">
+                                <span>Cód.: {approvalState.internalCode || '---'}</span>
+                                <span>EAN: {approvalState.barcode || '---'}</span>
+                                <span>Un.: {approvalState.unitCode || 'UN'}</span>
+                              </div>
                             </div>
                           ) : null}
                         </div>
@@ -937,6 +1178,326 @@ export default function FinanceiroAprovacaoNotaPage() {
                 auditText={auditText}
               />
             </section>
+
+            <AuditedPopupShell
+              isOpen={Boolean(selectedProductItem && selectedProductApprovalState)}
+              screenId={PRODUCT_POPUP_SCREEN_ID}
+              eyebrow="Produto novo"
+              title="Cadastro do produto da nota"
+              description="Dados do produto que será criado na aprovação da nota."
+              brandingName={runtimeContext.companyName || 'FINANCEIRO'}
+              logoUrl={runtimeContext.logoUrl}
+              originText="Origem: Sistema Financeiro - frontend/src/app/contas-a-pagar/notas-importadas/[importId]/page.tsx"
+              auditText={productPopupAuditText}
+              sqlText={productPopupSqlText}
+              onClose={closeProductEditor}
+              panelClassName="max-w-[1180px]"
+              bodyClassName="overflow-y-auto pb-2"
+              footerActions={
+                <>
+                  <button
+                    type="button"
+                    onClick={closeProductEditor}
+                    className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-black uppercase tracking-[0.16em] text-slate-600 shadow-sm transition hover:bg-slate-50"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeProductEditor}
+                    className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                  >
+                    Confirmar produto
+                  </button>
+                </>
+              }
+            >
+              {selectedProductItem && selectedProductApprovalState ? (
+                <div className="grid gap-5">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Item da nota
+                      </div>
+                      <div className="mt-2 text-lg font-black text-slate-900">
+                        {selectedProductItem.lineNumber}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Quantidade
+                      </div>
+                      <div className="mt-2 text-lg font-black text-slate-900">
+                        {selectedProductItem.quantity}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Valor total
+                      </div>
+                      <div className="mt-2 text-lg font-black text-slate-900">
+                        {formatCurrency(selectedProductItem.totalPrice)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                      Descrição importada
+                    </div>
+                    <div className="mt-2 text-lg font-black text-slate-900">
+                      {selectedProductItem.description}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Nome do produto
+                      </span>
+                      <input
+                        value={selectedProductApprovalState.productName}
+                        onChange={(event) =>
+                          updateApprovalItem(selectedProductItem.id, {
+                            productName: event.target.value,
+                          })
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Código interno
+                      </span>
+                      <input
+                        value={selectedProductApprovalState.internalCode}
+                        onChange={(event) =>
+                          updateApprovalItem(selectedProductItem.id, {
+                            internalCode: event.target.value,
+                          })
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Código de barras
+                      </span>
+                      <input
+                        value={selectedProductApprovalState.barcode}
+                        onChange={(event) =>
+                          updateApprovalItem(selectedProductItem.id, {
+                            barcode: event.target.value,
+                          })
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Unidade
+                      </span>
+                      <input
+                        value={selectedProductApprovalState.unitCode}
+                        onChange={(event) =>
+                          updateApprovalItem(selectedProductItem.id, {
+                            unitCode: event.target.value,
+                          })
+                        }
+                        disabled={detail.status === 'APPROVED'}
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                      />
+                    </label>
+
+                    {hasProductStockParameters(runtimeContext) ? (
+                      <div className="md:col-span-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {runtimeContext.stockControlMode === 'BY_PRODUCT' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateApprovalItem(selectedProductItem.id, {
+                                tracksInventory:
+                                  !selectedProductApprovalState.tracksInventory,
+                              })
+                            }
+                            disabled={detail.status === 'APPROVED'}
+                            className={stockParameterButtonClass(
+                              selectedProductApprovalState.tracksInventory,
+                              detail.status === 'APPROVED',
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-[0.16em]">
+                              Controla estoque
+                            </div>
+                            <div className="mt-1 text-sm font-medium">
+                              {selectedProductApprovalState.tracksInventory
+                                ? 'Sim, movimenta estoque.'
+                                : 'Não movimenta estoque.'}
+                            </div>
+                          </button>
+                        ) : null}
+
+                        {runtimeContext.stockIntegerQuantityMode === 'BY_PRODUCT' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateApprovalItem(selectedProductItem.id, {
+                                allowFraction:
+                                  !selectedProductApprovalState.allowFraction,
+                              })
+                            }
+                            disabled={
+                              detail.status === 'APPROVED' ||
+                              !selectedProductApprovalState.tracksInventory
+                            }
+                            className={stockParameterButtonClass(
+                              !selectedProductApprovalState.allowFraction,
+                              detail.status === 'APPROVED' ||
+                                !selectedProductApprovalState.tracksInventory,
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-[0.16em]">
+                              Quantidade inteira
+                            </div>
+                            <div className="mt-1 text-sm font-medium">
+                              {selectedProductApprovalState.allowFraction
+                                ? 'Não, aceita fracionar.'
+                                : 'Sim, somente inteira.'}
+                            </div>
+                          </button>
+                        ) : null}
+
+                        {runtimeContext.stockLotControlMode === 'BY_PRODUCT' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateApprovalItem(selectedProductItem.id, {
+                                usesLotControl:
+                                  !selectedProductApprovalState.usesLotControl,
+                              })
+                            }
+                            disabled={
+                              detail.status === 'APPROVED' ||
+                              !selectedProductApprovalState.tracksInventory
+                            }
+                            className={stockParameterButtonClass(
+                              selectedProductApprovalState.usesLotControl,
+                              detail.status === 'APPROVED' ||
+                                !selectedProductApprovalState.tracksInventory,
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-[0.16em]">
+                              Controla lote
+                            </div>
+                            <div className="mt-1 text-sm font-medium">
+                              {selectedProductApprovalState.usesLotControl
+                                ? 'Sim, produto por lote.'
+                                : 'Não controla lote.'}
+                            </div>
+                          </button>
+                        ) : null}
+
+                        {runtimeContext.stockExpirationControlMode === 'BY_PRODUCT' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateApprovalItem(selectedProductItem.id, {
+                                usesExpirationControl:
+                                  !selectedProductApprovalState.usesExpirationControl,
+                              })
+                            }
+                            disabled={
+                              detail.status === 'APPROVED' ||
+                              !selectedProductApprovalState.tracksInventory
+                            }
+                            className={stockParameterButtonClass(
+                              selectedProductApprovalState.usesExpirationControl,
+                              detail.status === 'APPROVED' ||
+                                !selectedProductApprovalState.tracksInventory,
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-[0.16em]">
+                              Controla validade
+                            </div>
+                            <div className="mt-1 text-sm font-medium">
+                              {selectedProductApprovalState.usesExpirationControl
+                                ? 'Sim, exige validade.'
+                                : 'Não controla validade.'}
+                            </div>
+                          </button>
+                        ) : null}
+
+                        {runtimeContext.stockGridControlMode === 'BY_PRODUCT' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateApprovalItem(selectedProductItem.id, {
+                                usesColorSize:
+                                  !selectedProductApprovalState.usesColorSize,
+                              })
+                            }
+                            disabled={
+                              detail.status === 'APPROVED' ||
+                              !selectedProductApprovalState.tracksInventory
+                            }
+                            className={stockParameterButtonClass(
+                              selectedProductApprovalState.usesColorSize,
+                              detail.status === 'APPROVED' ||
+                                !selectedProductApprovalState.tracksInventory,
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-[0.16em]">
+                              Controla grade
+                            </div>
+                            <div className="mt-1 text-sm font-medium">
+                              {selectedProductApprovalState.usesColorSize
+                                ? 'Sim, produto com grade.'
+                                : 'Não usa grade.'}
+                            </div>
+                          </button>
+                        ) : null}
+
+                        {runtimeContext.stockNegativeControlMode === 'BY_PRODUCT' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateApprovalItem(selectedProductItem.id, {
+                                allowsNegativeStock:
+                                  !selectedProductApprovalState.allowsNegativeStock,
+                              })
+                            }
+                            disabled={
+                              detail.status === 'APPROVED' ||
+                              !selectedProductApprovalState.tracksInventory
+                            }
+                            className={stockParameterButtonClass(
+                              selectedProductApprovalState.allowsNegativeStock,
+                              detail.status === 'APPROVED' ||
+                                !selectedProductApprovalState.tracksInventory,
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-[0.16em]">
+                              Permite negativo
+                            </div>
+                            <div className="mt-1 text-sm font-medium">
+                              {selectedProductApprovalState.allowsNegativeStock
+                                ? 'Sim, pode ficar negativo.'
+                                : 'Não permite negativo.'}
+                            </div>
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </AuditedPopupShell>
 
             <AuditedPopupShell
               isOpen={Boolean(editingInstallment && selectedInstallment)}

@@ -89,6 +89,16 @@ Arquivos de referencia tecnica no Financeiro:
   - texto, historico, documento ou nome: campo de busca textual
   - status, tipo ou categoria fechada: seletor com `TODOS` e opcoes da coluna
   - valor numerico/monetario: campos de valor minimo e valor maximo
+- para filtros fechados com poucas opcoes, preferir botoes/pills em vez de select quando o usuario aprovar esse modelo visual
+- os botoes/pills do mesmo painel devem ter exatamente a mesma largura, texto centralizado e alinhamento central no popup
+- o botao/pill equivalente a `TODOS` deve usar o texto `AMBOS` quando o usuario pedir essa linguagem para o contexto da tela
+- cores aprovadas para botoes/pills de filtro:
+  - debito: vermelho/rose
+  - credito: verde/emerald
+  - pendente/nao conferido: amarelo/amber ou vermelho/rose quando o usuario pedir destaque de nao conferido
+  - conciliado/conferido: verde/emerald
+  - ambos/todos: azul/blue
+- quando houver acoes em lote dentro do painel de filtro, como `Marcar todos como conferidos` ou `Marcar todos como nao conferidos`, elas devem respeitar somente os registros exibidos no grid naquele momento, incluindo filtros ativos
 - cada painel deve ter acao local `Limpar` para zerar somente o filtro daquela coluna
 - sempre que houver filtro direto em coluna, deve existir tambem um botao iconico para limpar todos os filtros de uma vez
 - a posicao aprovada para `Limpar todos os filtros` e no lado esquerdo do cabecalho do grid, antes da primeira coluna filtravel, normalmente antes de `Data`
@@ -101,6 +111,7 @@ Arquivos de referencia tecnica no Financeiro:
 Referencia aprovada:
 
 - `PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO`
+- filtros `Conf.`, `Tipo` e `Situacao` da tela `PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO`
 
 ### PAT-016 - Tela do Financeiro embutida na vertical consumidora
 

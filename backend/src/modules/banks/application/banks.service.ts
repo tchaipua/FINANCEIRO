@@ -14,6 +14,7 @@ import {
 import {
   ChangeBankStatusDto,
   GetBankDto,
+  GetBankDdaDto,
   GetBankStatementDto,
   ListBanksDto,
   ReconcileBankStatementMovementDto,
@@ -27,6 +28,12 @@ import {
   SicoobStatementApiError,
   SicoobStatementTransaction,
 } from "./sicoob-bank-statement.service";
+import {
+  DownloadSicoobDdaResult,
+  SicoobDdaApiError,
+  SicoobDdaBoleto,
+  SicoobDdaService,
+} from "./sicoob-dda.service";
 
 type NormalizedBankPayload = {
   bankCode: string;
@@ -104,6 +111,36 @@ type MappedBankStatement = {
   message: string;
 };
 
+type MappedBankDdaItem = {
+  id: string;
+  externalId: string;
+  dueDate: string | null;
+  issueDate: string | null;
+  beneficiaryName: string;
+  beneficiaryDocument: string | null;
+  payerName: string | null;
+  payerDocument: string | null;
+  documentNumber: string | null;
+  digitableLine: string | null;
+  barcode: string | null;
+  amount: number;
+  status: string;
+  rawPayloadJson: string;
+};
+
+type MappedBankDda = {
+  provider: string;
+  bankAccountId: string;
+  bankAccountLabel: string;
+  accountNumber: number;
+  ddaCount: number;
+  openAmount: number;
+  pulledAt: string;
+  scope: string | null;
+  items: MappedBankDdaItem[];
+  message: string;
+};
+
 type StatementRequestedByInput = {
   requestedBy?: string | null;
   cashierUserId?: string | null;
@@ -128,13 +165,16 @@ type PersistedStatementMovement = {
 @Injectable()
 export class BanksService {
   private readonly sicoobBankStatementService: SicoobBankStatementService;
+  private readonly sicoobDdaService: SicoobDdaService;
 
   constructor(
     private readonly prisma: PrismaService,
     sicoobBankStatementService?: SicoobBankStatementService,
+    sicoobDdaService?: SicoobDdaService,
   ) {
     this.sicoobBankStatementService =
       sicoobBankStatementService || new SicoobBankStatementService();
+    this.sicoobDdaService = sicoobDdaService || new SicoobDdaService();
   }
 
   private normalizeOptionalRawText(value: string | null | undefined) {
@@ -274,6 +314,106 @@ export class BanksService {
     accountDigit?: string | null;
   }) {
     return `${bank.bankName} - AG ${bank.branchNumber}${bank.branchDigit ? `-${bank.branchDigit}` : ""} - CC ${bank.accountNumber}${bank.accountDigit ? `-${bank.accountDigit}` : ""}`;
+  }
+
+  private parseDdaDateOnly(value?: string | null) {
+    const normalized = String(value || "").trim();
+    if (!normalized) {
+      return null;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(normalized)) {
+      return normalized.slice(0, 10);
+    }
+
+    const brDate = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brDate) {
+      return `${brDate[3]}-${brDate[2]}-${brDate[1]}`;
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return normalized;
+    }
+
+    return dateToDateOnly(parsed);
+  }
+
+  private buildDdaExternalId(
+    bankAccountId: string,
+    item: SicoobDdaBoleto,
+    index: number,
+  ) {
+    return createHash("sha1")
+      .update(
+        [
+          bankAccountId,
+          normalizeText(item.id),
+          normalizeText(item.digitableLine),
+          normalizeText(item.barcode),
+          normalizeText(item.documentNumber),
+          this.parseDdaDateOnly(item.dueDate),
+          roundMoney(Math.abs(Number(item.amount || 0))),
+          index,
+        ].join("|"),
+      )
+      .digest("hex");
+  }
+
+  private mapSicoobDda(
+    bank: {
+      id: string;
+      bankName: string;
+      branchNumber: string;
+      branchDigit?: string | null;
+      accountNumber: string;
+      accountDigit?: string | null;
+    },
+    result: DownloadSicoobDdaResult,
+  ): MappedBankDda {
+    const bankAccountLabel = this.buildBankAccountLabel(bank);
+    const items = result.items.map((item, index) => {
+      const externalId = this.buildDdaExternalId(bank.id, item, index + 1);
+      const amount = roundMoney(Math.abs(Number(item.amount || 0)));
+
+      return {
+        id: externalId,
+        externalId,
+        dueDate: this.parseDdaDateOnly(item.dueDate),
+        issueDate: this.parseDdaDateOnly(item.issueDate),
+        beneficiaryName:
+          normalizeText(item.beneficiaryName) || "BENEFICIÁRIO NÃO INFORMADO",
+        beneficiaryDocument: normalizeDigits(item.beneficiaryDocument) || null,
+        payerName: normalizeText(item.payerName) || null,
+        payerDocument: normalizeDigits(item.payerDocument) || null,
+        documentNumber: normalizeText(item.documentNumber) || null,
+        digitableLine: String(item.digitableLine || "").trim() || null,
+        barcode: normalizeDigits(item.barcode) || null,
+        amount,
+        status: normalizeText(item.status) || "EM ABERTO",
+        rawPayloadJson: item.rawPayloadJson || JSON.stringify(item),
+      };
+    });
+
+    const openAmount = roundMoney(
+      items.reduce((total, item) => total + item.amount, 0),
+    );
+
+    return {
+      provider: "SICOOB",
+      bankAccountId: bank.id,
+      bankAccountLabel,
+      accountNumber: result.accountNumber,
+      ddaCount: items.length,
+      openAmount,
+      pulledAt: result.pulledAt,
+      scope: result.scope,
+      items,
+      message:
+        items.length === 1
+          ? "1 DDA em aberto encontrado no Sicoob."
+          : `${items.length} DDAs em aberto encontrados no Sicoob.`,
+    };
   }
 
   private buildStatementDateBounds(period: {
@@ -821,6 +961,22 @@ export class BanksService {
       normalizedProvider === "SICOOB"
         ? Boolean(bank.billingApiClientId)
         : Boolean(bank.billingApiClientId && bank.billingApiClientSecret);
+    const latestStatementImport = Array.isArray(bank.bankStatementImports)
+      ? bank.bankStatementImports[0]
+      : null;
+    const latestBalanceMovement = Array.isArray(bank.bankStatementMovements)
+      ? bank.bankStatementMovements[0]
+      : null;
+    const lastStatementBalance =
+      typeof latestStatementImport?.currentBalance === "number"
+        ? latestStatementImport.currentBalance
+        : typeof latestBalanceMovement?.balanceAfter === "number"
+          ? latestBalanceMovement.balanceAfter
+          : null;
+    const lastStatementBalanceDate =
+      lastStatementBalance !== null
+        ? latestStatementImport?.periodEnd || latestBalanceMovement?.occurredAt || null
+        : null;
 
     return {
       id: bank.id,
@@ -884,6 +1040,15 @@ export class BanksService {
       hasBillingCertificate: Boolean(
         bank.billingCertificateBase64 && bank.billingCertificatePassword,
       ),
+      lastStatementBalance,
+      lastStatementBalanceDate:
+        lastStatementBalanceDate instanceof Date
+          ? lastStatementBalanceDate.toISOString()
+          : null,
+      lastStatementPulledAt:
+        latestStatementImport?.pulledAt instanceof Date
+          ? latestStatementImport.pulledAt.toISOString()
+          : null,
       ...(includeSecrets
         ? {
             billingApiClientId: bank.billingApiClientId || null,
@@ -920,6 +1085,34 @@ export class BanksService {
       },
       include: {
         company: true,
+        bankStatementImports: {
+          where: {
+            canceledAt: null,
+          },
+          orderBy: {
+            pulledAt: "desc",
+          },
+          take: 1,
+          select: {
+            currentBalance: true,
+            periodEnd: true,
+            pulledAt: true,
+          },
+        },
+        bankStatementMovements: {
+          where: {
+            canceledAt: null,
+            balanceAfter: {
+              not: null,
+            },
+          },
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            balanceAfter: true,
+            occurredAt: true,
+          },
+        },
       },
     });
 
@@ -1012,6 +1205,34 @@ export class BanksService {
       },
       include: {
         company: true,
+        bankStatementImports: {
+          where: {
+            canceledAt: null,
+          },
+          orderBy: {
+            pulledAt: "desc",
+          },
+          take: 1,
+          select: {
+            currentBalance: true,
+            periodEnd: true,
+            pulledAt: true,
+          },
+        },
+        bankStatementMovements: {
+          where: {
+            canceledAt: null,
+            balanceAfter: {
+              not: null,
+            },
+          },
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+          take: 1,
+          select: {
+            balanceAfter: true,
+            occurredAt: true,
+          },
+        },
       },
       orderBy: [{ bankName: "asc" }, { branchNumber: "asc" }, { accountNumber: "asc" }],
     });
@@ -1324,6 +1545,64 @@ export class BanksService {
         this.mapPersistedStatementMovement(movement),
       ),
     };
+  }
+
+  async getOpenDda(bankId: string, query: GetBankDdaDto) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      query.sourceSystem,
+      query.sourceTenantId,
+    );
+
+    if (bank.status !== "ACTIVE" || bank.canceledAt) {
+      throw new BadRequestException("BANCO INATIVO PARA CONSULTA DE DDA.");
+    }
+
+    if (normalizeText(bank.billingProvider) !== "SICOOB") {
+      throw new BadRequestException(
+        "A consulta automática de DDA disponível no momento atende apenas bancos configurados como SICOOB.",
+      );
+    }
+
+    if (!bank.billingApiClientId) {
+      throw new BadRequestException(
+        "Client ID não configurado no cadastro do banco.",
+      );
+    }
+
+    if (!bank.billingCertificateBase64 || !bank.billingCertificatePassword) {
+      throw new BadRequestException(
+        "Certificado digital não configurado no cadastro do banco.",
+      );
+    }
+
+    const accountNumber = Number(this.buildSicoobAccountNumber(bank));
+    if (!Number.isInteger(accountNumber) || accountNumber <= 0) {
+      throw new BadRequestException(
+        "Conta corrente inválida para consultar DDA no Sicoob.",
+      );
+    }
+
+    try {
+      const dda = await this.sicoobDdaService.downloadOpenDda(
+        {
+          clientId: bank.billingApiClientId,
+          certificateBase64: bank.billingCertificateBase64,
+          certificatePassword: bank.billingCertificatePassword,
+        },
+        {
+          accountNumber,
+        },
+      );
+
+      return this.mapSicoobDda(bank, dda);
+    } catch (error) {
+      if (error instanceof SicoobDdaApiError) {
+        throw new BadRequestException(error.message);
+      }
+
+      throw error;
+    }
   }
 
   async getStatement(bankId: string, query: GetBankStatementDto) {

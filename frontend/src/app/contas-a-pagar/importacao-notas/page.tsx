@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   ChangeEvent,
   FormEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -212,6 +213,41 @@ type InstallmentEditorItem = {
   amount: number;
 };
 
+type RecentImportFilterColumn =
+  | 'status'
+  | 'invoice'
+  | 'supplier'
+  | 'issueDate'
+  | 'total'
+  | 'installments';
+
+type RecentImportSortDirection = 'asc' | 'desc';
+
+type RecentImportSortState = {
+  column: RecentImportFilterColumn;
+  direction: RecentImportSortDirection;
+} | null;
+
+type RecentImportFilters = {
+  status: string;
+  invoice: string;
+  supplier: string;
+  issueDateFrom: string;
+  issueDateTo: string;
+  total: string;
+  installments: string;
+};
+
+const EMPTY_RECENT_IMPORT_FILTERS: RecentImportFilters = {
+  status: 'ALL',
+  invoice: '',
+  supplier: '',
+  issueDateFrom: '',
+  issueDateTo: '',
+  total: '',
+  installments: '',
+};
+
 const emptyCertificateForm: CertificateFormState = {
   id: null,
   aliasName: '',
@@ -249,6 +285,80 @@ function buildDateOnlyInputValue(value?: string | null) {
   }
 
   return normalized.slice(0, 10);
+}
+
+function normalizeRecentImportFilterValue(value?: string | number | null) {
+  return String(value ?? '').trim().toUpperCase();
+}
+
+function normalizeRecentImportDigits(value?: string | number | null) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function matchesRecentImportTextFilter(
+  values: Array<string | number | null | undefined>,
+  filterValue: string,
+) {
+  const normalizedFilter = normalizeRecentImportFilterValue(filterValue);
+  const filterDigits = normalizeRecentImportDigits(filterValue);
+
+  if (!normalizedFilter) {
+    return true;
+  }
+
+  return values.some((value) => {
+    const normalizedValue = normalizeRecentImportFilterValue(value);
+
+    if (normalizedValue.includes(normalizedFilter)) {
+      return true;
+    }
+
+    return Boolean(
+      filterDigits &&
+        normalizeRecentImportDigits(value).includes(filterDigits),
+    );
+  });
+}
+
+function getRecentImportSortValue(
+  item: PayableInvoiceImportSummary,
+  column: RecentImportFilterColumn,
+) {
+  if (column === 'status') {
+    return item.statusLabel || item.status || '';
+  }
+
+  if (column === 'invoice') {
+    return `${item.invoiceNumber || ''} ${item.series || ''}`;
+  }
+
+  if (column === 'supplier') {
+    return item.supplierName || item.supplierDocument || '';
+  }
+
+  if (column === 'issueDate') {
+    return buildDateOnlyInputValue(item.issueDate);
+  }
+
+  if (column === 'total') {
+    return Number(item.totalInvoiceAmount || 0);
+  }
+
+  return Number(item.installmentsCount || 0);
+}
+
+function compareRecentImportSortValues(
+  left: string | number,
+  right: string | number,
+) {
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right;
+  }
+
+  return String(left).localeCompare(String(right), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base',
+  });
 }
 
 function splitInstallmentAmounts(totalAmount: number, count: number) {
@@ -1056,9 +1166,12 @@ export default function FinanceiroImportacaoNotasPage() {
   const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
   const [xmlContent, setXmlContent] = useState('');
   const [recentImports, setRecentImports] = useState<PayableInvoiceImportSummary[]>([]);
-  const [recentImportsSearch, setRecentImportsSearch] = useState('');
-  const [recentImportsIssueDateFrom, setRecentImportsIssueDateFrom] = useState('');
-  const [recentImportsIssueDateTo, setRecentImportsIssueDateTo] = useState('');
+  const [recentImportFilters, setRecentImportFilters] =
+    useState<RecentImportFilters>(EMPTY_RECENT_IMPORT_FILTERS);
+  const [recentImportActiveFilter, setRecentImportActiveFilter] =
+    useState<RecentImportFilterColumn | null>(null);
+  const [recentImportSort, setRecentImportSort] =
+    useState<RecentImportSortState>(null);
   const [certificates, setCertificates] = useState<FiscalCertificateItem[]>([]);
   const [importResult, setImportResult] = useState<PayableInvoiceImportDetail | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -1168,48 +1281,173 @@ export default function FinanceiroImportacaoNotasPage() {
     );
   }, [runtimeContext.embedded]);
 
-  const filteredRecentImports = useMemo(() => {
-    const normalizedSearch = recentImportsSearch.trim().toUpperCase();
-    const normalizedSearchDigits = recentImportsSearch.replace(/\D/g, '');
+  const recentImportStatusOptions = useMemo(() => {
+    const options = new Map<string, string>();
 
-    return recentImports.filter((item) => {
+    recentImports.forEach((item) => {
+      if (item.status) {
+        options.set(item.status, item.statusLabel || item.status);
+      }
+    });
+
+    return Array.from(options.entries()).map(([value, label]) => ({
+      value,
+      label,
+    }));
+  }, [recentImports]);
+
+  const hasRecentImportFilters = useMemo(
+    () =>
+      recentImportFilters.status !== EMPTY_RECENT_IMPORT_FILTERS.status ||
+      recentImportFilters.invoice !== EMPTY_RECENT_IMPORT_FILTERS.invoice ||
+      recentImportFilters.supplier !== EMPTY_RECENT_IMPORT_FILTERS.supplier ||
+      recentImportFilters.issueDateFrom !==
+        EMPTY_RECENT_IMPORT_FILTERS.issueDateFrom ||
+      recentImportFilters.issueDateTo !==
+        EMPTY_RECENT_IMPORT_FILTERS.issueDateTo ||
+      recentImportFilters.total !== EMPTY_RECENT_IMPORT_FILTERS.total ||
+      recentImportFilters.installments !==
+        EMPTY_RECENT_IMPORT_FILTERS.installments ||
+      Boolean(recentImportSort),
+    [recentImportFilters, recentImportSort],
+  );
+
+  const updateRecentImportFilters = useCallback(
+    (patch: Partial<RecentImportFilters>) => {
+      setRecentImportFilters((current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [],
+  );
+
+  const clearRecentImportFilters = useCallback(() => {
+    setRecentImportFilters(EMPTY_RECENT_IMPORT_FILTERS);
+    setRecentImportSort(null);
+    setRecentImportActiveFilter(null);
+  }, []);
+
+  const applyRecentImportSort = useCallback(
+    (column: RecentImportFilterColumn, direction: RecentImportSortDirection) => {
+      setRecentImportSort({ column, direction });
+    },
+    [],
+  );
+
+  const clearRecentImportColumnFilter = useCallback(
+    (column: RecentImportFilterColumn) => {
+      setRecentImportFilters((current) => {
+        if (column === 'status') {
+          return { ...current, status: EMPTY_RECENT_IMPORT_FILTERS.status };
+        }
+
+        if (column === 'invoice') {
+          return { ...current, invoice: EMPTY_RECENT_IMPORT_FILTERS.invoice };
+        }
+
+        if (column === 'supplier') {
+          return { ...current, supplier: EMPTY_RECENT_IMPORT_FILTERS.supplier };
+        }
+
+        if (column === 'issueDate') {
+          return {
+            ...current,
+            issueDateFrom: EMPTY_RECENT_IMPORT_FILTERS.issueDateFrom,
+            issueDateTo: EMPTY_RECENT_IMPORT_FILTERS.issueDateTo,
+          };
+        }
+
+        if (column === 'total') {
+          return { ...current, total: EMPTY_RECENT_IMPORT_FILTERS.total };
+        }
+
+        return {
+          ...current,
+          installments: EMPTY_RECENT_IMPORT_FILTERS.installments,
+        };
+      });
+      setRecentImportSort((current) =>
+        current?.column === column ? null : current,
+      );
+    },
+    [],
+  );
+
+  const filteredRecentImports = useMemo(() => {
+    const filtered = recentImports.filter((item) => {
       const issueDate = buildDateOnlyInputValue(item.issueDate);
 
-      if (recentImportsIssueDateFrom && issueDate < recentImportsIssueDateFrom) {
+      if (
+        recentImportFilters.status !== 'ALL' &&
+        item.status !== recentImportFilters.status
+      ) {
         return false;
       }
 
-      if (recentImportsIssueDateTo && issueDate > recentImportsIssueDateTo) {
+      if (
+        recentImportFilters.issueDateFrom &&
+        issueDate < recentImportFilters.issueDateFrom
+      ) {
         return false;
       }
 
-      if (!normalizedSearch) {
-        return true;
+      if (
+        recentImportFilters.issueDateTo &&
+        issueDate > recentImportFilters.issueDateTo
+      ) {
+        return false;
       }
 
-      const searchableValues = [
-        item.invoiceNumber,
-        item.series,
-        item.accessKey,
-        item.supplierName,
-        item.supplierDocument,
-      ]
-        .map((value) => String(value || '').toUpperCase())
-        .filter(Boolean);
-
-      return searchableValues.some((value) => {
-        if (value.includes(normalizedSearch)) {
-          return true;
-        }
-
-        if (normalizedSearchDigits) {
-          return value.replace(/\D/g, '').includes(normalizedSearchDigits);
-        }
-
+      if (
+        !matchesRecentImportTextFilter(
+          [item.invoiceNumber, item.series, item.accessKey],
+          recentImportFilters.invoice,
+        )
+      ) {
         return false;
-      });
+      }
+
+      if (
+        !matchesRecentImportTextFilter(
+          [item.supplierName, item.supplierDocument],
+          recentImportFilters.supplier,
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        !matchesRecentImportTextFilter(
+          [
+            item.totalInvoiceAmount,
+            formatCurrency(item.totalInvoiceAmount),
+          ],
+          recentImportFilters.total,
+        )
+      ) {
+        return false;
+      }
+
+      return matchesRecentImportTextFilter(
+        [item.installmentsCount],
+        recentImportFilters.installments,
+      );
     });
-  }, [recentImports, recentImportsIssueDateFrom, recentImportsIssueDateTo, recentImportsSearch]);
+
+    if (!recentImportSort) {
+      return filtered;
+    }
+
+    return [...filtered].sort((left, right) => {
+      const result = compareRecentImportSortValues(
+        getRecentImportSortValue(left, recentImportSort.column),
+        getRecentImportSortValue(right, recentImportSort.column),
+      );
+
+      return recentImportSort.direction === 'asc' ? result : result * -1;
+    });
+  }, [recentImportFilters, recentImportSort, recentImports]);
 
   const handleXmlFileSelected = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1733,6 +1971,243 @@ export default function FinanceiroImportacaoNotasPage() {
     }
   }, [editableInstallments, loadRecentImports, runtimeContext, selectedImportForInstallments]);
 
+  const recentImportFilterInputClass = `${FINANCE_GRID_PAGE_LAYOUT.input} h-9 rounded-xl px-3 py-2 text-xs`;
+
+  const buildRecentImportSortButtonClass = (
+    column: RecentImportFilterColumn,
+    direction: RecentImportSortDirection,
+  ) =>
+    `inline-flex h-8 w-full items-center justify-center rounded-xl border px-2 text-[10px] font-black uppercase tracking-[0.12em] transition ${
+      recentImportSort?.column === column &&
+      recentImportSort.direction === direction
+        ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    }`;
+
+  const buildRecentImportFilterPillClass = (
+    active: boolean,
+    tone: 'blue' | 'emerald' | 'amber',
+  ) => {
+    const toneClass =
+      tone === 'emerald'
+        ? active
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm'
+          : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'
+        : tone === 'amber'
+        ? active
+          ? 'border-amber-300 bg-amber-50 text-amber-700 shadow-sm'
+          : 'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'
+        : active
+        ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+        : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50';
+
+    return `inline-flex h-8 w-full items-center justify-center rounded-full border px-3 text-[10px] font-black uppercase tracking-[0.16em] transition ${toneClass}`;
+  };
+
+  const renderRecentImportSortControls = (
+    column: RecentImportFilterColumn,
+  ) => (
+    <div className="space-y-2">
+      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+        Ordenar
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => applyRecentImportSort(column, 'asc')}
+          className={buildRecentImportSortButtonClass(column, 'asc')}
+        >
+          Cresc.
+        </button>
+        <button
+          type="button"
+          onClick={() => applyRecentImportSort(column, 'desc')}
+          className={buildRecentImportSortButtonClass(column, 'desc')}
+        >
+          Decresc.
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderRecentImportClearColumnButton = (
+    column: RecentImportFilterColumn,
+  ) => (
+    <button
+      type="button"
+      onClick={() => clearRecentImportColumnFilter(column)}
+      className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-white"
+    >
+      Limpar
+    </button>
+  );
+
+  const renderRecentImportTextFilter = (
+    column: RecentImportFilterColumn,
+    value: string,
+    onChange: (value: string) => void,
+    placeholder: string,
+  ) => (
+    <div className="space-y-3">
+      {renderRecentImportSortControls(column)}
+      <div className="space-y-1.5">
+        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+          Filtrar
+        </div>
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={recentImportFilterInputClass}
+        />
+      </div>
+      {renderRecentImportClearColumnButton(column)}
+    </div>
+  );
+
+  const renderRecentImportDateFilter = () => (
+    <div className="space-y-3">
+      {renderRecentImportSortControls('issueDate')}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            De
+          </span>
+          <input
+            type="date"
+            value={recentImportFilters.issueDateFrom}
+            onChange={(event) =>
+              updateRecentImportFilters({ issueDateFrom: event.target.value })
+            }
+            className={recentImportFilterInputClass}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Até
+          </span>
+          <input
+            type="date"
+            value={recentImportFilters.issueDateTo}
+            onChange={(event) =>
+              updateRecentImportFilters({ issueDateTo: event.target.value })
+            }
+            className={recentImportFilterInputClass}
+          />
+        </label>
+      </div>
+      {renderRecentImportClearColumnButton('issueDate')}
+    </div>
+  );
+
+  const renderRecentImportStatusFilter = () => {
+    const statusOptions =
+      recentImportStatusOptions.length > 0
+        ? recentImportStatusOptions
+        : [{ value: 'PENDING_APPROVAL', label: 'PENDENTE' }];
+
+    return (
+      <div className="space-y-3">
+        {renderRecentImportSortControls('status')}
+        <div className="space-y-2">
+          <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Filtrar status
+          </div>
+          <div className="grid gap-2">
+            {statusOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() =>
+                  updateRecentImportFilters({ status: option.value })
+                }
+                className={buildRecentImportFilterPillClass(
+                  recentImportFilters.status === option.value,
+                  option.value === 'APPROVED' ? 'emerald' : 'amber',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => updateRecentImportFilters({ status: 'ALL' })}
+              className={buildRecentImportFilterPillClass(
+                recentImportFilters.status === 'ALL',
+                'blue',
+              )}
+            >
+              Todos
+            </button>
+          </div>
+        </div>
+        {renderRecentImportClearColumnButton('status')}
+      </div>
+    );
+  };
+
+  const renderRecentImportHeader = (
+    column: RecentImportFilterColumn,
+    label: string,
+    content: ReactNode,
+    align: 'left' | 'right' = 'left',
+  ) => {
+    const isActive = recentImportActiveFilter === column;
+
+    return (
+      <div
+        className={`relative flex items-center gap-1.5 ${
+          align === 'right' ? 'justify-end' : ''
+        }`}
+      >
+        <span>{label}</span>
+        <button
+          type="button"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setRecentImportActiveFilter((current) =>
+              current === column ? null : column,
+            );
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+          title={`FILTRAR ${label}`}
+          aria-label={`Filtrar ${label}`}
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+            isActive
+              ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+              : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <svg
+            className="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+        </button>
+        {isActive ? (
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={`absolute top-full z-40 mt-2 w-[246px] rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-xl ${
+              align === 'right' ? 'right-0' : 'left-0'
+            }`}
+          >
+            {content}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
@@ -1789,45 +2264,45 @@ export default function FinanceiroImportacaoNotasPage() {
 
         <div className="space-y-6 bg-slate-100 p-6">
           <div className="space-y-6">
-            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-              <div className="mb-4">
-                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-2">
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
                   Importação automática pela SEFAZ
                 </div>
-                <div className="mt-1 text-sm font-medium text-slate-500">
+                <div className="mt-0.5 text-xs font-medium text-slate-500">
                   Use o certificado fiscal A1 da empresa para buscar DF-e e importar NF-e completas.
                 </div>
               </div>
 
               {defaultCertificate ? (
-                <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+                <div className="mb-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
                   Certificado padrão atual: <span className="font-black">{defaultCertificate.aliasName}</span>
                 </div>
               ) : null}
 
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {loadingCertificates ? (
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-500">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-500">
                     Carregando certificados fiscais...
                   </div>
                 ) : certificates.length ? (
                   certificates.map((certificate, index) => (
                     <div
                       key={certificate.id}
-                      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm"
                     >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <div className="text-lg font-black text-slate-900">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-base font-black leading-tight text-slate-900">
                               {certificate.aliasName}
                             </div>
                             {certificate.isDefault ? (
-                              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">
+                              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">
                                 Padrão
                               </span>
                             ) : null}
-                            <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getCertificateStatusClass(certificate)}`}>
+                            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] ${getCertificateStatusClass(certificate)}`}>
                               {certificate.status === 'ACTIVE'
                                 ? certificate.expired
                                   ? 'VENCIDO'
@@ -1836,80 +2311,76 @@ export default function FinanceiroImportacaoNotasPage() {
                             </span>
                           </div>
 
-                          <div className="mt-2 text-sm font-semibold text-slate-600">
+                          <div className="mt-1 truncate text-xs font-semibold text-slate-600">
                             {certificate.holderName} • {certificate.holderDocument}
                           </div>
 
-                          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                             <span>{certificate.environment === 'PRODUCTION' ? 'PRODUÇÃO' : 'HOMOLOGAÇÃO'}</span>
                             <span>UF {certificate.authorStateCode}</span>
                             <span>{certificate.purpose}</span>
                             <span>Validade: {formatDateLabel(certificate.validTo || null)}</span>
                           </div>
 
-                          <div className="mt-3 text-xs font-semibold text-slate-500">
+                          <div className="mt-1.5 line-clamp-2 text-[11px] font-semibold leading-4 text-slate-500">
                             Última sincronização: {formatDateLabel(certificate.lastSyncAt || null)}{' '}
                             {certificate.lastSyncStatus ? `• status ${certificate.lastSyncStatus}` : ''}
                             {certificate.lastSyncMessage ? ` • ${certificate.lastSyncMessage}` : ''}
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-start justify-end gap-3">
+                        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                           {!certificate.isDefault ? (
                             <button
                               type="button"
                               onClick={() => void handleSetDefaultCertificate(certificate)}
-                              className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+                              className="rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-blue-700 transition hover:bg-blue-100"
                             >
                               Tornar padrão
                             </button>
                           ) : null}
 
-                          <div className="flex flex-col items-start gap-3">
-                            <div className="flex flex-wrap gap-3">
-                              <button
-                                type="button"
-                                onClick={() => void handleSyncCertificate(certificate)}
-                                disabled={
-                                  syncingCertificateId === certificate.id ||
-                                  certificate.status !== 'ACTIVE' ||
-                                  certificate.expired
-                                }
-                                className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
-                              >
-                                {syncingCertificateId === certificate.id
-                                  ? 'Consultando...'
-                                  : 'Importar SEFAZ'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleSyncCertificate(certificate, {
-                                    historical: true,
-                                  })
-                                }
-                                disabled={
-                                  syncingCertificateId === certificate.id ||
-                                  certificate.status !== 'ACTIVE' ||
-                                  certificate.expired
-                                }
-                                className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {syncingCertificateId === certificate.id
-                                  ? 'Buscando...'
-                                  : 'Buscar histórico'}
-                              </button>
-                            </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleSyncCertificate(certificate)}
+                            disabled={
+                              syncingCertificateId === certificate.id ||
+                              certificate.status !== 'ACTIVE' ||
+                              certificate.expired
+                            }
+                            className="rounded-2xl bg-blue-600 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {syncingCertificateId === certificate.id
+                              ? 'Consultando...'
+                              : 'Importar SEFAZ'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleSyncCertificate(certificate, {
+                                historical: true,
+                              })
+                            }
+                            disabled={
+                              syncingCertificateId === certificate.id ||
+                              certificate.status !== 'ACTIVE' ||
+                              certificate.expired
+                            }
+                            className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {syncingCertificateId === certificate.id
+                              ? 'Buscando...'
+                              : 'Buscar histórico'}
+                          </button>
 
-                            {(certificate.isDefault || (!defaultCertificate && index === 0)) ? (
-                              <Link
-                                href={`/contas-a-pagar/importacao-notas/manual${navigationQuery}`}
-                                className="rounded-2xl border border-rose-400 bg-white px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-rose-600 shadow-sm transition hover:bg-rose-50"
-                              >
-                                Importar Manualmente
-                              </Link>
-                            ) : null}
-                          </div>
+                          {(certificate.isDefault || (!defaultCertificate && index === 0)) ? (
+                            <Link
+                              href={`/contas-a-pagar/importacao-notas/manual${navigationQuery}`}
+                              className="rounded-2xl border border-rose-400 bg-white px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-rose-600 shadow-sm transition hover:bg-rose-50"
+                            >
+                              Importar Manualmente
+                            </Link>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1955,67 +2426,119 @@ export default function FinanceiroImportacaoNotasPage() {
               </Link>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_560px]">
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  Buscar fornecedor, número, série ou chave
-                </span>
-                <input
-                  value={recentImportsSearch}
-                  onChange={(event) => setRecentImportsSearch(event.target.value)}
-                  placeholder="FORNECEDOR, NÚMERO, SÉRIE, CHAVE..."
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                />
-              </label>
-
-              <div className="block">
-                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  Período emissão:
-                </span>
-                <div className="flex flex-wrap items-center gap-3">
-                  <input
-                    type="date"
-                    value={recentImportsIssueDateFrom}
-                    onChange={(event) => setRecentImportsIssueDateFrom(event.target.value)}
-                    className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-[190px]`}
-                  />
-                  <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                    Até
-                  </span>
-                  <input
-                    type="date"
-                    value={recentImportsIssueDateTo}
-                    onChange={(event) => setRecentImportsIssueDateTo(event.target.value)}
-                    className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-[190px]`}
-                  />
-                </div>
-              </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={clearRecentImportFilters}
+                disabled={!hasRecentImportFilters}
+                title="LIMPAR TODOS OS FILTROS DO GRID"
+                aria-label="Limpar todos os filtros do grid"
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M6 6l1 14h10l1-14" />
+                </svg>
+                Limpar filtros
+              </button>
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className={`overflow-x-auto ${recentImportActiveFilter ? 'pb-40' : ''}`}>
+                <table className="min-w-[980px] table-fixed divide-y divide-slate-200">
+                  <colgroup>
+                    <col className="w-[126px]" />
+                    <col className="w-[226px]" />
+                    <col className="w-[236px]" />
+                    <col className="w-[98px]" />
+                    <col className="w-[104px]" />
+                    <col className="w-[70px]" />
+                    <col className="w-[120px]" />
+                  </colgroup>
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Semáforo
+                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderRecentImportHeader(
+                          'status',
+                          'Semáforo',
+                          renderRecentImportStatusFilter(),
+                        )}
                       </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Nota fiscal
+                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderRecentImportHeader(
+                          'invoice',
+                          'Nota fiscal',
+                          renderRecentImportTextFilter(
+                            'invoice',
+                            recentImportFilters.invoice,
+                            (value) =>
+                              updateRecentImportFilters({ invoice: value }),
+                            'NF-E, SERIE OU CHAVE...',
+                          ),
+                        )}
                       </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Fornecedor
+                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderRecentImportHeader(
+                          'supplier',
+                          'Fornecedor',
+                          renderRecentImportTextFilter(
+                            'supplier',
+                            recentImportFilters.supplier,
+                            (value) =>
+                              updateRecentImportFilters({ supplier: value }),
+                            'FORNECEDOR OU CNPJ...',
+                          ),
+                        )}
                       </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Emissão
+                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderRecentImportHeader(
+                          'issueDate',
+                          'Emissão',
+                          renderRecentImportDateFilter(),
+                        )}
                       </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Valor total
+                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderRecentImportHeader(
+                          'total',
+                          'Valor total',
+                          renderRecentImportTextFilter(
+                            'total',
+                            recentImportFilters.total,
+                            (value) =>
+                              updateRecentImportFilters({ total: value }),
+                            'VALOR...',
+                          ),
+                          'right',
+                        )}
                       </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Duplicatas
+                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderRecentImportHeader(
+                          'installments',
+                          'Duplicatas',
+                          renderRecentImportTextFilter(
+                            'installments',
+                            recentImportFilters.installments,
+                            (value) =>
+                              updateRecentImportFilters({
+                                installments: value,
+                              }),
+                            'QTDE...',
+                          ),
+                          'right',
+                        )}
                       </th>
-                      <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      <th className="px-2.5 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                         Ações
                       </th>
                     </tr>
@@ -2030,49 +2553,48 @@ export default function FinanceiroImportacaoNotasPage() {
                     ) : filteredRecentImports.length ? (
                       filteredRecentImports.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50/80">
-                          <td className="px-4 py-4 align-top">
-                            <div className="flex items-center gap-3">
-                              <span className={`inline-flex h-3.5 w-3.5 rounded-full ${getSemaphoreClass(item.semaphore)}`} />
-                              <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getStatusClass(item.status)}`}>
+                          <td className="px-2.5 py-2 align-middle">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${getSemaphoreClass(item.semaphore)}`} />
+                              <span className={`truncate rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${getStatusClass(item.status)}`}>
                                 {item.statusLabel}
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                            <div className="font-black text-slate-900">
+                          <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
+                            <div className="truncate font-black text-slate-900">
                               NF-e {item.invoiceNumber}
                               {item.series ? ` / ${item.series}` : ''}
                             </div>
-                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              {item.accessKey}
-                            </div>
                           </td>
-                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                            <div>{item.supplierName || '---'}</div>
-                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
+                            <div className="truncate" title={item.supplierName || '---'}>
+                              {item.supplierName || '---'}
+                            </div>
+                            <div className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                               {item.supplierDocument || 'SEM DOCUMENTO'}
                             </div>
                           </td>
-                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
+                          <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
                             {formatDateLabel(item.issueDate)}
                           </td>
-                          <td className="px-4 py-4 align-top text-sm font-black text-slate-900">
+                          <td className="px-2.5 py-2 align-middle text-xs font-black text-slate-900">
                             {formatCurrency(item.totalInvoiceAmount)}
                           </td>
-                          <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
+                          <td className="px-2.5 py-2 align-middle text-center text-xs font-semibold text-slate-700">
                             {item.installmentsCount}
                           </td>
-                          <td className="px-4 py-4 align-top">
-                            <div className="flex justify-end gap-2">
+                          <td className="px-2.5 py-2 align-middle">
+                            <div className="flex justify-end gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => void handleOpenProductsModal(item)}
                                 title="VISUALIZAR OS PRODUTOS IMPORTADOS DESTA NOTA"
                                 aria-label="Visualizar os produtos importados desta nota"
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-300 bg-white text-emerald-700 transition hover:bg-emerald-50"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-300 bg-white text-emerald-700 transition hover:bg-emerald-50"
                               >
                                 <svg
-                                  className="h-5 w-5"
+                                  className="h-4 w-4"
                                   viewBox="0 0 24 24"
                                   fill="none"
                                   stroke="currentColor"
@@ -2090,10 +2612,10 @@ export default function FinanceiroImportacaoNotasPage() {
                                 onClick={() => void handleOpenInstallmentsModal(item)}
                                 title="VISUALIZAR E AJUSTAR AS PARCELAS DESTA NOTA"
                                 aria-label="Visualizar e ajustar as parcelas desta nota"
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
                               >
                                 <svg
-                                  className="h-5 w-5"
+                                  className="h-4 w-4"
                                   viewBox="0 0 24 24"
                                   fill="none"
                                   stroke="currentColor"
@@ -2111,10 +2633,10 @@ export default function FinanceiroImportacaoNotasPage() {
                                 href={`/contas-a-pagar/notas-importadas/${item.id}${navigationQuery}`}
                                 title="ABRIR A TELA COMPLETA DE DETALHES E APROVAÇÃO DESTA NOTA"
                                 aria-label="Abrir a tela completa de detalhes e aprovação desta nota"
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 transition hover:bg-blue-100"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700 transition hover:bg-blue-100"
                               >
                                 <svg
-                                  className="h-5 w-5"
+                                  className="h-4 w-4"
                                   viewBox="0 0 24 24"
                                   fill="none"
                                   stroke="currentColor"

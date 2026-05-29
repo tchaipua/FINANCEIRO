@@ -27,6 +27,12 @@ import {
   ParsedPayableInvoiceItem,
   parsePayableInvoiceXml,
 } from "./payables-xml-parser";
+import {
+  DEFAULT_BRANCH_CODE,
+  normalizeBranchCode,
+} from "../../../common/branch.constants";
+import { ensureDefaultCompanyBranch } from "../../../common/company-branches";
+import { getFinanceContext } from "../../../common/finance-context";
 
 type ResolvedCompany = {
   id: string;
@@ -41,6 +47,27 @@ type ImportXmlForCompanyOptions = {
   importType?: string | null;
   fiscalCertificateId?: string | null;
   distributionNsu?: string | null;
+};
+
+type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
+
+type BranchStockParameterConfig = {
+  branchCode: number;
+  stockControlMode: BranchStockParameterMode;
+  stockIntegerQuantityMode: BranchStockParameterMode;
+  stockLotControlMode: BranchStockParameterMode;
+  stockExpirationControlMode: BranchStockParameterMode;
+  stockGridControlMode: BranchStockParameterMode;
+  stockNegativeControlMode: BranchStockParameterMode;
+};
+
+type ResolvedProductStockOptions = {
+  tracksInventory: boolean;
+  allowFraction: boolean;
+  usesLotControl: boolean;
+  usesExpirationControl: boolean;
+  usesColorSize: boolean;
+  allowsNegativeStock: boolean;
 };
 
 @Injectable()
@@ -58,6 +85,67 @@ export class PayablesService {
     }
 
     return roundMoney(Math.max(0, normalized));
+  }
+
+  private currentBranchCode(sourceBranchCode?: number | null) {
+    const requestedBranchCode = normalizeBranchCode(
+      sourceBranchCode ?? getFinanceContext()?.branchCode,
+      DEFAULT_BRANCH_CODE,
+    );
+
+    return requestedBranchCode > 0 ? requestedBranchCode : DEFAULT_BRANCH_CODE;
+  }
+
+  private normalizeBranchStockParameterMode(
+    value?: string | null,
+    fallback: BranchStockParameterMode = "BY_PRODUCT",
+  ): BranchStockParameterMode {
+    const normalized = normalizeText(value);
+    return normalized === "NO" ||
+      normalized === "YES" ||
+      normalized === "BY_PRODUCT"
+      ? normalized
+      : fallback;
+  }
+
+  private getLegacyIntegerMode(
+    quantityPrecision?: string | null,
+  ): BranchStockParameterMode {
+    const normalized = normalizeText(quantityPrecision);
+    if (normalized === "DECIMAL_ALLOWED") return "NO";
+    if (normalized === "PRODUCT_DEFINED") return "BY_PRODUCT";
+    return "YES";
+  }
+
+  private getLegacyLotMode(
+    inventoryControlType?: string | null,
+  ): BranchStockParameterMode {
+    return normalizeText(inventoryControlType) === "LOT" ? "BY_PRODUCT" : "NO";
+  }
+
+  private getLegacyGridMode(
+    inventoryControlType?: string | null,
+  ): BranchStockParameterMode {
+    return normalizeText(inventoryControlType) === "COLOR_SIZE"
+      ? "BY_PRODUCT"
+      : "NO";
+  }
+
+  private getInventoryControlTypeFromStockModes(
+    stockLotControlMode: BranchStockParameterMode,
+    stockGridControlMode: BranchStockParameterMode,
+  ) {
+    if (stockGridControlMode !== "NO") return "COLOR_SIZE";
+    if (stockLotControlMode !== "NO") return "LOT";
+    return "TRADITIONAL";
+  }
+
+  private getQuantityPrecisionFromStockMode(
+    stockIntegerQuantityMode: BranchStockParameterMode,
+  ) {
+    if (stockIntegerQuantityMode === "NO") return "DECIMAL_ALLOWED";
+    if (stockIntegerQuantityMode === "BY_PRODUCT") return "PRODUCT_DEFINED";
+    return "INTEGER_ONLY";
   }
 
   private normalizePayableInstallmentStatus(value?: string | null) {
@@ -152,6 +240,187 @@ export class PayablesService {
         },
       },
     });
+  }
+
+  private async resolveBranchStockParameterConfig(
+    tx: any,
+    companyId: string,
+    payload: ApprovePayableInvoiceImportDto,
+  ): Promise<BranchStockParameterConfig> {
+    const branchCode = this.currentBranchCode(payload.sourceBranchCode);
+
+    await ensureDefaultCompanyBranch(tx, companyId, payload.requestedBy);
+
+    const existingBranch = await tx.companyBranch.findFirst({
+      where: {
+        companyId,
+        branchCode,
+        canceledAt: null,
+      },
+    });
+
+    const config: BranchStockParameterConfig = {
+      branchCode,
+      stockControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockControlMode || existingBranch?.stockControlMode,
+        "BY_PRODUCT",
+      ),
+      stockIntegerQuantityMode: this.normalizeBranchStockParameterMode(
+        payload.stockIntegerQuantityMode ||
+          existingBranch?.stockIntegerQuantityMode,
+        this.getLegacyIntegerMode(existingBranch?.quantityPrecision),
+      ),
+      stockLotControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockLotControlMode || existingBranch?.stockLotControlMode,
+        this.getLegacyLotMode(existingBranch?.inventoryControlType),
+      ),
+      stockExpirationControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockExpirationControlMode ||
+          existingBranch?.stockExpirationControlMode,
+        this.getLegacyLotMode(existingBranch?.inventoryControlType),
+      ),
+      stockGridControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockGridControlMode || existingBranch?.stockGridControlMode,
+        this.getLegacyGridMode(existingBranch?.inventoryControlType),
+      ),
+      stockNegativeControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockNegativeControlMode ||
+          existingBranch?.stockNegativeControlMode,
+        "NO",
+      ),
+    };
+    const stockConfigFields = {
+      stockControlMode: config.stockControlMode,
+      stockIntegerQuantityMode: config.stockIntegerQuantityMode,
+      stockLotControlMode: config.stockLotControlMode,
+      stockExpirationControlMode: config.stockExpirationControlMode,
+      stockGridControlMode: config.stockGridControlMode,
+      stockNegativeControlMode: config.stockNegativeControlMode,
+    };
+
+    await tx.companyBranch.upsert({
+      where: {
+        companyId_branchCode: {
+          companyId,
+          branchCode,
+        },
+      },
+      create: {
+        companyId,
+        branchCode,
+        name:
+          branchCode === DEFAULT_BRANCH_CODE
+            ? "FILIAL 1"
+            : `FILIAL ${branchCode}`,
+        isActive: true,
+        isDefault: branchCode === DEFAULT_BRANCH_CODE,
+        inventoryControlType: this.getInventoryControlTypeFromStockModes(
+          config.stockLotControlMode,
+          config.stockGridControlMode,
+        ),
+        quantityPrecision: this.getQuantityPrecisionFromStockMode(
+          config.stockIntegerQuantityMode,
+        ),
+        ...stockConfigFields,
+        createdBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+      update: {
+        isActive: true,
+        canceledAt: null,
+        canceledBy: null,
+        inventoryControlType: this.getInventoryControlTypeFromStockModes(
+          config.stockLotControlMode,
+          config.stockGridControlMode,
+        ),
+        quantityPrecision: this.getQuantityPrecisionFromStockMode(
+          config.stockIntegerQuantityMode,
+        ),
+        ...stockConfigFields,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return config;
+  }
+
+  private resolveBooleanByBranchMode(
+    mode: BranchStockParameterMode,
+    productValue: boolean | undefined,
+    defaultValue: boolean,
+    forcedYesValue = true,
+    forcedNoValue = false,
+  ) {
+    if (mode === "YES") return forcedYesValue;
+    if (mode === "NO") return forcedNoValue;
+    return typeof productValue === "boolean" ? productValue : defaultValue;
+  }
+
+  private resolveProductStockOptions(
+    item: any,
+    approvalItem: ApprovePayableInvoiceImportItemDto | undefined,
+    branchConfig: BranchStockParameterConfig,
+  ): ResolvedProductStockOptions {
+    const tracksInventory = this.resolveBooleanByBranchMode(
+      branchConfig.stockControlMode,
+      approvalItem?.tracksInventory,
+      Boolean(item.tracksInventory),
+    );
+
+    const allowFraction = this.resolveBooleanByBranchMode(
+      branchConfig.stockIntegerQuantityMode,
+      approvalItem?.allowFraction,
+      !Number.isInteger(roundMoney(item.quantity || 0)),
+      false,
+      true,
+    );
+
+    const stockOptions: ResolvedProductStockOptions = {
+      tracksInventory,
+      allowFraction,
+      usesLotControl: this.resolveBooleanByBranchMode(
+        branchConfig.stockLotControlMode,
+        approvalItem?.usesLotControl,
+        false,
+      ),
+      usesExpirationControl: this.resolveBooleanByBranchMode(
+        branchConfig.stockExpirationControlMode,
+        approvalItem?.usesExpirationControl,
+        false,
+      ),
+      usesColorSize: this.resolveBooleanByBranchMode(
+        branchConfig.stockGridControlMode,
+        approvalItem?.usesColorSize,
+        false,
+      ),
+      allowsNegativeStock: this.resolveBooleanByBranchMode(
+        branchConfig.stockNegativeControlMode,
+        approvalItem?.allowsNegativeStock,
+        false,
+      ),
+    };
+
+    if (!stockOptions.tracksInventory) {
+      return {
+        ...stockOptions,
+        allowFraction: false,
+        usesLotControl: false,
+        usesExpirationControl: false,
+        usesColorSize: false,
+        allowsNegativeStock: false,
+      };
+    }
+
+    if (
+      !stockOptions.allowFraction &&
+      !Number.isInteger(roundMoney(item.quantity || 0))
+    ) {
+      throw new BadRequestException(
+        `O item ${item.lineNumber} possui quantidade fracionada. Marque que o produto aceita fracionar ou ajuste o parâmetro da filial.`,
+      );
+    }
+
+    return stockOptions;
   }
 
   private async ensureSupplier(
@@ -682,6 +951,7 @@ export class PayablesService {
     invoiceImport: any,
     item: any,
     approvalItem: ApprovePayableInvoiceImportItemDto | undefined,
+    branchConfig: BranchStockParameterConfig,
     requestedBy?: string | null,
     createdProductsCache?: Map<string, any>,
   ) {
@@ -736,13 +1006,14 @@ export class PayablesService {
     const unitCode = normalizeText(approvalItem?.unitCode) || item.unitCode || "UN";
     const productType =
       normalizeText(approvalItem?.productType) || "GOODS";
-    const tracksInventory =
-      typeof approvalItem?.tracksInventory === "boolean"
-        ? approvalItem.tracksInventory
-        : Boolean(item.tracksInventory);
-    const allowFraction = Boolean(approvalItem?.allowFraction);
+    const stockOptions = this.resolveProductStockOptions(
+      item,
+      approvalItem,
+      branchConfig,
+    );
     const minimumStock = this.normalizeOptionalMoney(approvalItem?.minimumStock) || 0;
     const cacheKey = [
+      branchConfig.branchCode,
       barcode || "",
       internalCode || "",
       sku || "",
@@ -762,6 +1033,7 @@ export class PayablesService {
         ? await tx.product.findFirst({
             where: {
               companyId,
+              branchCode: branchConfig.branchCode,
               barcode,
               canceledAt: null,
             },
@@ -771,6 +1043,7 @@ export class PayablesService {
         ? await tx.product.findFirst({
             where: {
               companyId,
+              branchCode: branchConfig.branchCode,
               internalCode,
               canceledAt: null,
             },
@@ -791,6 +1064,7 @@ export class PayablesService {
     const createdProduct = await tx.product.create({
       data: {
         companyId,
+        branchCode: branchConfig.branchCode,
         status: "ACTIVE",
         name: productName,
         internalCode,
@@ -798,8 +1072,7 @@ export class PayablesService {
         barcode,
         unitCode,
         productType,
-        tracksInventory,
-        allowFraction,
+        ...stockOptions,
         currentStock: 0,
         minimumStock,
         purchasePrice:
@@ -1226,6 +1499,12 @@ export class PayablesService {
     );
 
     const approvalResult = await this.prisma.$transaction(async (tx: any) => {
+      const branchStockConfig = await this.resolveBranchStockParameterConfig(
+        tx,
+        invoiceImport.companyId,
+        payload,
+      );
+
       const titleTotalAmount = roundMoney(
         normalizedInstallments.reduce(
           (accumulator, installment) => accumulator + installment.finalAmount,
@@ -1242,6 +1521,7 @@ export class PayablesService {
       const payableTitle = await tx.payableTitle.create({
         data: {
           companyId: invoiceImport.companyId,
+          branchCode: branchStockConfig.branchCode,
           supplierId: invoiceImport.supplierId,
           sourceDocumentType: "PAYABLE_INVOICE_IMPORT",
           sourceDocumentId: invoiceImport.id,
@@ -1266,6 +1546,7 @@ export class PayablesService {
         await tx.payableInstallment.create({
           data: {
             companyId: invoiceImport.companyId,
+            branchCode: branchStockConfig.branchCode,
             titleId: payableTitle.id,
             installmentNumber: installment.installmentNumber,
             installmentCount: installmentsCount,
@@ -1301,6 +1582,7 @@ export class PayablesService {
           invoiceImport,
           item,
           approvalItem,
+          branchStockConfig,
           payload.requestedBy,
           createdProductsCache,
         );
@@ -1336,6 +1618,7 @@ export class PayablesService {
         await tx.stockMovement.create({
           data: {
             companyId: invoiceImport.companyId,
+            branchCode: branchStockConfig.branchCode,
             productId: resolution.product.id,
             sourceImportId: invoiceImport.id,
             sourceImportItemId: item.id,

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import GridExportModal from '@/app/components/grid-export-modal';
 import { API_BASE_URL, getJson } from '@/app/lib/api';
 import {
+  formatCurrency,
   formatDateLabel,
   getFriendlyRequestErrorMessage,
 } from '@/app/lib/formatters';
@@ -64,6 +65,9 @@ type BankItem = {
   billingNegativeDays?: number | null;
   hasBillingApiCredentials?: boolean;
   hasBillingCertificate?: boolean;
+  lastStatementBalance?: number | null;
+  lastStatementBalanceDate?: string | null;
+  lastStatementPulledAt?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -151,6 +155,7 @@ type BankGridColumnKey =
   | 'account'
   | 'wallet'
   | 'beneficiary'
+  | 'lastStatementBalance'
   | 'status'
   | 'updatedAt';
 
@@ -159,6 +164,8 @@ type BankExportColumnKey =
   | 'companyName'
   | 'beneficiaryDocument'
   | 'pixKey'
+  | 'lastStatementBalanceDate'
+  | 'lastStatementPulledAt'
   | 'createdAt'
   | 'notes';
 
@@ -215,6 +222,15 @@ const BANK_GRID_COLUMNS: BankGridColumnDefinition[] = [
     label: 'Beneficiário',
     visibleByDefault: true,
     getValue: (bank) => bank.beneficiaryName || bank.companyName || '---',
+  },
+  {
+    key: 'lastStatementBalance',
+    label: 'Saldo atual',
+    visibleByDefault: true,
+    getValue: (bank) =>
+      typeof bank.lastStatementBalance === 'number'
+        ? formatCurrency(bank.lastStatementBalance)
+        : '---',
   },
   {
     key: 'status',
@@ -280,6 +296,24 @@ const BANK_EXPORT_COLUMNS: GridColumnDefinition<BankItem, BankExportColumnKey>[]
     key: 'status',
     label: 'Situação',
     getValue: (bank) => (bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'),
+  },
+  {
+    key: 'lastStatementBalance',
+    label: 'Saldo atual',
+    getValue: (bank) =>
+      typeof bank.lastStatementBalance === 'number'
+        ? formatCurrency(bank.lastStatementBalance)
+        : '---',
+  },
+  {
+    key: 'lastStatementBalanceDate',
+    label: 'Saldo até',
+    getValue: (bank) => formatDateLabel(bank.lastStatementBalanceDate),
+  },
+  {
+    key: 'lastStatementPulledAt',
+    label: 'Consultado em',
+    getValue: (bank) => formatDateLabel(bank.lastStatementPulledAt),
   },
   {
     key: 'createdAt',
@@ -874,6 +908,21 @@ export default function FinanceiroBanksPage() {
         .map((columnKey) => BANK_GRID_COLUMNS.find((column) => column.key === columnKey))
         .filter((column): column is BankGridColumnDefinition => Boolean(column)),
     [columnOrder, hiddenColumns],
+  );
+  const isLastStatementBalanceVisible = activeBankColumns.some(
+    (column) => column.key === 'lastStatementBalance',
+  );
+  const lastStatementBalanceTotal = useMemo(
+    () =>
+      banks.reduce(
+        (total, bank) =>
+          total +
+          (typeof bank.lastStatementBalance === 'number'
+            ? bank.lastStatementBalance
+            : 0),
+        0,
+      ),
+    [banks],
   );
   const shouldReturnToSchoolMenu = Boolean(runtimeContext.embedded && schoolBaseUrl);
   const backToMenuHref = shouldReturnToSchoolMenu
@@ -2211,6 +2260,31 @@ export default function FinanceiroBanksPage() {
                         );
                       }
 
+                      if (column.key === 'lastStatementBalance') {
+                        const hasBalance = typeof bank.lastStatementBalance === 'number';
+
+                        return (
+                          <td
+                            key={column.key}
+                            className="px-4 py-4"
+                            title={
+                              bank.lastStatementPulledAt
+                                ? `CONSULTADO EM ${formatDateLabel(bank.lastStatementPulledAt)}`
+                                : undefined
+                            }
+                          >
+                            <div className="font-black text-slate-900">
+                              {hasBalance ? formatCurrency(bank.lastStatementBalance) : '---'}
+                            </div>
+                            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                              {bank.lastStatementBalanceDate
+                                ? `ATÉ ${formatDateLabel(bank.lastStatementBalanceDate)}`
+                                : 'SEM CONSULTA'}
+                            </div>
+                          </td>
+                        );
+                      }
+
                       return (
                         <td key={column.key} className="px-4 py-4">
                           {column.getValue(bank)}
@@ -2239,6 +2313,17 @@ export default function FinanceiroBanksPage() {
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                          </svg>
+                        </Link>
+                        <Link
+                          href={buildBankRelatedPath('/bancos/ddas-abertos', preservedQueryString, bank.id)}
+                          title="Abrir DDAs em aberto"
+                          aria-label="Abrir DDAs em aberto"
+                          className={`${gridActionButtonClass} ${gridActionToneClass.emerald}`}
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h10a2 2 0 012 2v16l-3-2-3 2-3-2-3 2V5a2 2 0 012-2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 8h6M9 12h6M9 16h3" />
                           </svg>
                         </Link>
                         <Link
@@ -2294,6 +2379,36 @@ export default function FinanceiroBanksPage() {
                   </tr>
                 ) : null}
               </tbody>
+              {!isLoading && banks.length && isLastStatementBalanceVisible ? (
+                <tfoot className="border-t border-slate-200 bg-slate-50">
+                  <tr>
+                    {activeBankColumns.map((column, columnIndex) => {
+                      if (column.key === 'lastStatementBalance') {
+                        return (
+                          <td key={column.key} className="px-4 py-4">
+                            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                              Total
+                            </div>
+                            <div className="mt-1 font-black text-slate-900">
+                              {formatCurrency(lastStatementBalanceTotal)}
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      return (
+                        <td
+                          key={column.key}
+                          className="px-4 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500"
+                        >
+                          {columnIndex === 0 ? 'Total geral' : ''}
+                        </td>
+                      );
+                    })}
+                    <td className="px-4 py-4" />
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
           </div>
         </section>

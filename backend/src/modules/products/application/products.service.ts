@@ -27,6 +27,8 @@ type NormalizedProductPayload = {
   allowFraction: boolean;
   usesColorSize: boolean;
   usesLotControl: boolean;
+  usesExpirationControl: boolean;
+  allowsNegativeStock: boolean;
   currentStock: number;
   minimumStock: number;
   purchasePrice: number | null;
@@ -221,6 +223,7 @@ export class ProductsService {
         : branchConfig.quantityPrecision === "PRODUCT_DEFINED"
           ? this.normalizeBoolean(payload.allowFraction, false)
           : false;
+    const tracksInventory = this.normalizeBoolean(payload.tracksInventory, true);
 
     return {
       name: normalizedName,
@@ -229,10 +232,16 @@ export class ProductsService {
       barcode: normalizeDigits(payload.barcode) || normalizeText(payload.barcode),
       unitCode: normalizeText(payload.unitCode) || "UN",
       productType: normalizeText(payload.productType) || "GOODS",
-      tracksInventory: this.normalizeBoolean(payload.tracksInventory, true),
+      tracksInventory,
       allowFraction,
-      usesColorSize,
-      usesLotControl,
+      usesColorSize: tracksInventory ? usesColorSize : false,
+      usesLotControl: tracksInventory ? usesLotControl : false,
+      usesExpirationControl: tracksInventory
+        ? this.normalizeBoolean(payload.usesExpirationControl, false)
+        : false,
+      allowsNegativeStock: tracksInventory
+        ? this.normalizeBoolean(payload.allowsNegativeStock, false)
+        : false,
       currentStock: this.normalizeStockQuantity(
         payload.currentStock,
         allowFraction,
@@ -290,6 +299,8 @@ export class ProductsService {
       allowFraction: Boolean(product.allowFraction),
       usesColorSize: Boolean(product.usesColorSize),
       usesLotControl: Boolean(product.usesLotControl),
+      usesExpirationControl: Boolean(product.usesExpirationControl),
+      allowsNegativeStock: Boolean(product.allowsNegativeStock),
       currentStock: roundMoney(product.currentStock || 0),
       minimumStock: roundMoney(product.minimumStock || 0),
       purchasePrice:

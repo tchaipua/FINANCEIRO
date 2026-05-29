@@ -143,4 +143,34 @@ export class SaveCompanyBranchDto {
   @IsString()
   @IsIn(["INTEGER_ONLY", "DECIMAL_ALLOWED", "PRODUCT_DEFINED"])
   quantityPrecision?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockIntegerQuantityMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockLotControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockExpirationControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockGridControlMode?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["NO", "YES", "BY_PRODUCT"])
+  stockNegativeControlMode?: string;
 }

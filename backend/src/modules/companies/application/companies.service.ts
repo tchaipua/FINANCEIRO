@@ -122,6 +122,79 @@ export class CompaniesService {
       : "INTEGER_ONLY";
   }
 
+  private normalizeBranchStockParameterMode(value?: string | null) {
+    const normalized = normalizeText(value) || "BY_PRODUCT";
+    return ["NO", "YES", "BY_PRODUCT"].includes(normalized)
+      ? normalized
+      : "BY_PRODUCT";
+  }
+
+  private getStockModesFromBranchPayload(
+    payload: SaveCompanyBranchDto,
+    fallback?: {
+      stockControlMode?: string | null;
+      stockIntegerQuantityMode?: string | null;
+      stockLotControlMode?: string | null;
+      stockExpirationControlMode?: string | null;
+      stockGridControlMode?: string | null;
+      stockNegativeControlMode?: string | null;
+      inventoryControlType?: string | null;
+      quantityPrecision?: string | null;
+    },
+  ) {
+    const inventoryControlType = this.normalizeInventoryControlType(
+      payload.inventoryControlType || fallback?.inventoryControlType,
+    );
+    const quantityPrecision = this.normalizeQuantityPrecision(
+      payload.quantityPrecision || fallback?.quantityPrecision,
+    );
+    const derivedIntegerMode =
+      quantityPrecision === "DECIMAL_ALLOWED"
+        ? "NO"
+        : quantityPrecision === "PRODUCT_DEFINED"
+          ? "BY_PRODUCT"
+          : "YES";
+    const derivedLotMode =
+      inventoryControlType === "LOT" ? "BY_PRODUCT" : "NO";
+    const derivedGridMode =
+      inventoryControlType === "COLOR_SIZE" ? "BY_PRODUCT" : "NO";
+
+    return {
+      stockControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockControlMode || fallback?.stockControlMode || "BY_PRODUCT",
+      ),
+      stockIntegerQuantityMode: this.normalizeBranchStockParameterMode(
+        payload.stockIntegerQuantityMode ||
+          (payload.quantityPrecision
+            ? derivedIntegerMode
+            : fallback?.stockIntegerQuantityMode || derivedIntegerMode),
+      ),
+      stockLotControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockLotControlMode ||
+          (payload.inventoryControlType
+            ? derivedLotMode
+            : fallback?.stockLotControlMode || derivedLotMode),
+      ),
+      stockExpirationControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockExpirationControlMode ||
+          (payload.inventoryControlType
+            ? derivedLotMode
+            : fallback?.stockExpirationControlMode || derivedLotMode),
+      ),
+      stockGridControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockGridControlMode ||
+          (payload.inventoryControlType
+            ? derivedGridMode
+            : fallback?.stockGridControlMode || derivedGridMode),
+      ),
+      stockNegativeControlMode: this.normalizeBranchStockParameterMode(
+        payload.stockNegativeControlMode ||
+          fallback?.stockNegativeControlMode ||
+          "NO",
+      ),
+    };
+  }
+
   async list(query: ListCompaniesDto) {
     const normalizedSearch = normalizeText(query.search);
     const normalizedSourceSystem = normalizeText(query.sourceSystem);
@@ -320,6 +393,17 @@ export class CompaniesService {
       throw new BadRequestException("Já existe uma filial com este código.");
     }
 
+    const inventoryControlType = this.normalizeInventoryControlType(
+      payload.inventoryControlType,
+    );
+    const quantityPrecision = this.normalizeQuantityPrecision(
+      payload.quantityPrecision,
+    );
+    const stockModes = this.getStockModesFromBranchPayload(payload, {
+      inventoryControlType,
+      quantityPrecision,
+    });
+
     const createdBranch = await this.prisma.companyBranch.create({
       data: {
         companyId: company.id,
@@ -329,12 +413,9 @@ export class CompaniesService {
           .toUpperCase(),
         isActive: true,
         isDefault: false,
-        inventoryControlType: this.normalizeInventoryControlType(
-          payload.inventoryControlType,
-        ),
-        quantityPrecision: this.normalizeQuantityPrecision(
-          payload.quantityPrecision,
-        ),
+        inventoryControlType,
+        quantityPrecision,
+        ...stockModes,
         createdBy: payload.requestedBy || null,
         updatedBy: payload.requestedBy || null,
       },
@@ -366,18 +447,27 @@ export class CompaniesService {
       throw new BadRequestException("Filial não encontrada para esta empresa.");
     }
 
+    const inventoryControlType = this.normalizeInventoryControlType(
+      payload.inventoryControlType || branch.inventoryControlType,
+    );
+    const quantityPrecision = this.normalizeQuantityPrecision(
+      payload.quantityPrecision || branch.quantityPrecision,
+    );
+    const stockModes = this.getStockModesFromBranchPayload(payload, {
+      ...branch,
+      inventoryControlType,
+      quantityPrecision,
+    });
+
     const updatedBranch = await this.prisma.companyBranch.update({
       where: { id: branch.id },
       data: {
         ...(payload.name
           ? { name: String(payload.name).trim().toUpperCase() }
           : {}),
-        inventoryControlType: this.normalizeInventoryControlType(
-          payload.inventoryControlType || branch.inventoryControlType,
-        ),
-        quantityPrecision: this.normalizeQuantityPrecision(
-          payload.quantityPrecision || branch.quantityPrecision,
-        ),
+        inventoryControlType,
+        quantityPrecision,
+        ...stockModes,
         updatedBy: payload.requestedBy || null,
       },
     });

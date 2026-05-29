@@ -45,6 +45,7 @@ type BankReturnImportItem = {
 };
 
 const SCREEN_ID = 'FINANCEIRO_RETORNOS_BANCARIOS_LISTAGEM';
+const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_RETORNOS';
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const inputClass =
   'w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white';
@@ -87,6 +88,16 @@ export default function FinanceiroBankReturnsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.parent?.postMessage(
+      {
+        type: 'MSINFOR_SCREEN_CONTEXT',
+        screenId: EMBEDDED_SCREEN_ID,
+      },
+      '*',
+    );
+  }, []);
 
   const loadPageData = useCallback(async () => {
     try {
@@ -240,15 +251,6 @@ export default function FinanceiroBankReturnsPage() {
       ) : null}
 
       <section className={`${cardClass} p-6`}>
-        <div className="mb-4">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Nova importacao
-          </div>
-          <h2 className="mt-1 text-xl font-black text-slate-900">
-            Buscar retorno no banco
-          </h2>
-        </div>
-
         <form onSubmit={handleImport} className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
           <label className="space-y-2">
             <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
@@ -301,11 +303,6 @@ export default function FinanceiroBankReturnsPage() {
           </button>
         </form>
 
-        {selectedBank ? (
-          <p className="mt-4 text-sm font-semibold text-slate-500">
-            Banco selecionado: {buildBankLabel(selectedBank)}.
-          </p>
-        ) : null}
       </section>
 
       <section className={`${cardClass} overflow-hidden`}>

@@ -9,6 +9,16 @@ import {
 
 type CompanyBranchClient = PrismaService | Prisma.TransactionClient;
 
+function normalizeStockParameterMode(value?: string | null) {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+
+  return ["NO", "YES", "BY_PRODUCT"].includes(normalized)
+    ? normalized
+    : "BY_PRODUCT";
+}
+
 export async function ensureDefaultCompanyBranch(
   prisma: CompanyBranchClient,
   companyId: string,
@@ -30,14 +40,20 @@ export async function ensureDefaultCompanyBranch(
     data: {
       companyId,
       branchCode: DEFAULT_BRANCH_CODE,
-        name: "FILIAL 1",
-        isActive: true,
-        isDefault: true,
-        inventoryControlType: "TRADITIONAL",
-        quantityPrecision: "INTEGER_ONLY",
-        createdBy: userId || undefined,
-        updatedBy: userId || undefined,
-      },
+      name: "FILIAL 1",
+      isActive: true,
+      isDefault: true,
+      inventoryControlType: "TRADITIONAL",
+      quantityPrecision: "INTEGER_ONLY",
+      stockControlMode: "BY_PRODUCT",
+      stockIntegerQuantityMode: "YES",
+      stockLotControlMode: "NO",
+      stockExpirationControlMode: "NO",
+      stockGridControlMode: "NO",
+      stockNegativeControlMode: "NO",
+      createdBy: userId || undefined,
+      updatedBy: userId || undefined,
+    },
     select: { id: true },
   });
 }
@@ -105,6 +121,12 @@ export function mapCompanyBranchSummary(branch: {
   isDefault: boolean;
   inventoryControlType?: string;
   quantityPrecision?: string;
+  stockControlMode?: string;
+  stockIntegerQuantityMode?: string;
+  stockLotControlMode?: string;
+  stockExpirationControlMode?: string;
+  stockGridControlMode?: string;
+  stockNegativeControlMode?: string;
 }) {
   return {
     id: branch.id,
@@ -115,5 +137,17 @@ export function mapCompanyBranchSummary(branch: {
     isShared: branch.branchCode === SHARED_BRANCH_CODE,
     inventoryControlType: branch.inventoryControlType || "TRADITIONAL",
     quantityPrecision: branch.quantityPrecision || "INTEGER_ONLY",
+    stockControlMode: normalizeStockParameterMode(branch.stockControlMode),
+    stockIntegerQuantityMode: normalizeStockParameterMode(
+      branch.stockIntegerQuantityMode,
+    ),
+    stockLotControlMode: normalizeStockParameterMode(branch.stockLotControlMode),
+    stockExpirationControlMode: normalizeStockParameterMode(
+      branch.stockExpirationControlMode,
+    ),
+    stockGridControlMode: normalizeStockParameterMode(branch.stockGridControlMode),
+    stockNegativeControlMode: normalizeStockParameterMode(
+      branch.stockNegativeControlMode,
+    ),
   };
 }

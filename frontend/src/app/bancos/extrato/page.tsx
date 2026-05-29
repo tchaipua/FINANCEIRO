@@ -3,12 +3,19 @@
 import Link from 'next/link';
 import { FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
+import GridExportModal from '@/app/components/grid-export-modal';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
   formatCurrency,
   formatDateLabel,
   getFriendlyRequestErrorMessage,
 } from '@/app/lib/formatters';
+import {
+  buildDefaultExportColumns,
+  exportGridRows,
+  type GridColumnDefinition,
+  type GridExportFormat,
+} from '@/app/lib/grid-export-utils';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
@@ -64,6 +71,21 @@ type BankStatementReviewBulkResponse = {
   movements: BankStatementMovement[];
 };
 
+type StatementGridColumnKey =
+  | 'date'
+  | 'review'
+  | 'description'
+  | 'document'
+  | 'type'
+  | 'value'
+  | 'balance'
+  | 'status';
+
+type StatementExportColumnKey =
+  | StatementGridColumnKey
+  | 'bank'
+  | 'details';
+
 type StatementGridFilterKey =
   | 'date'
   | 'review'
@@ -72,6 +94,13 @@ type StatementGridFilterKey =
   | 'type'
   | 'value'
   | 'status';
+
+type StatementGridSortDirection = 'ASC' | 'DESC';
+
+type StatementGridSort = {
+  key: StatementGridFilterKey | null;
+  direction: StatementGridSortDirection;
+};
 
 type StatementGridFilters = {
   dateFrom: string;
@@ -83,6 +112,16 @@ type StatementGridFilters = {
   valueMin: string;
   valueMax: string;
   status: string;
+};
+
+type StatementGridColumnDefinition = {
+  key: StatementGridColumnKey;
+  label: string;
+  visibleByDefault?: boolean;
+};
+
+type StatementGridConfig = {
+  hidden: StatementGridColumnKey[];
 };
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO';
@@ -102,6 +141,39 @@ const DEFAULT_STATEMENT_GRID_FILTERS: StatementGridFilters = {
   valueMax: '',
   status: '',
 };
+const DEFAULT_STATEMENT_GRID_SORT: StatementGridSort = {
+  key: null,
+  direction: 'ASC',
+};
+const STATEMENT_GRID_COLUMNS: StatementGridColumnDefinition[] = [
+  { key: 'date', label: 'Data', visibleByDefault: true },
+  { key: 'review', label: 'Conf.', visibleByDefault: true },
+  { key: 'description', label: 'Histórico', visibleByDefault: true },
+  { key: 'document', label: 'Documento', visibleByDefault: true },
+  { key: 'type', label: 'Tipo', visibleByDefault: true },
+  { key: 'value', label: 'Valor', visibleByDefault: true },
+  { key: 'balance', label: 'Saldo', visibleByDefault: true },
+  { key: 'status', label: 'Situação', visibleByDefault: true },
+];
+const DEFAULT_STATEMENT_GRID_CONFIG: StatementGridConfig = {
+  hidden: STATEMENT_GRID_COLUMNS.filter((column) => column.visibleByDefault === false).map(
+    (column) => column.key,
+  ),
+};
+const STATEMENT_EXPORT_COLUMN_OPTIONS: Array<{ key: StatementExportColumnKey; label: string }> = [
+  { key: 'bank', label: 'Banco' },
+  { key: 'date', label: 'Data' },
+  { key: 'review', label: 'Conferência' },
+  { key: 'description', label: 'Histórico' },
+  { key: 'details', label: 'Detalhes' },
+  { key: 'document', label: 'Documento' },
+  { key: 'type', label: 'Tipo' },
+  { key: 'value', label: 'Valor' },
+  { key: 'balance', label: 'Saldo' },
+  { key: 'status', label: 'Situação' },
+];
+const STATEMENT_GRID_STORAGE_PREFIX = 'financeiro:bancos-extrato:grid-columns:';
+const STATEMENT_EXPORT_STORAGE_PREFIX = 'financeiro:bancos-extrato:export-config:';
 const STATEMENT_GRID_FILTER_KEYS: StatementGridFilterKey[] = [
   'date',
   'review',
@@ -132,6 +204,54 @@ function buildBankLabel(bank: BankItem) {
   const agency = `${bank.branchNumber}${bank.branchDigit ? `-${bank.branchDigit}` : ''}`;
   const account = `${bank.accountNumber}${bank.accountDigit ? `-${bank.accountDigit}` : ''}`;
   return `${bank.bankName} - AG ${agency} - CC ${account}`;
+}
+
+function getStatementGridStorageKey(tenantId: string | null) {
+  return `${STATEMENT_GRID_STORAGE_PREFIX}${tenantId || 'default'}`;
+}
+
+function getStatementExportStorageKey(tenantId: string | null) {
+  return `${STATEMENT_EXPORT_STORAGE_PREFIX}${tenantId || 'default'}`;
+}
+
+function isStatementGridColumnKey(value: string): value is StatementGridColumnKey {
+  return STATEMENT_GRID_COLUMNS.some((column) => column.key === value);
+}
+
+function normalizeStatementGridConfig(
+  config: Partial<StatementGridConfig> | null | undefined,
+): StatementGridConfig {
+  const hidden = Array.from(
+    new Set(
+      (config?.hidden || []).filter((item): item is StatementGridColumnKey =>
+        isStatementGridColumnKey(item),
+      ),
+    ),
+  );
+
+  if (hidden.length >= STATEMENT_GRID_COLUMNS.length) {
+    return DEFAULT_STATEMENT_GRID_CONFIG;
+  }
+
+  return { hidden };
+}
+
+function readStoredStatementGridConfig(tenantId: string | null) {
+  if (typeof window === 'undefined') {
+    return DEFAULT_STATEMENT_GRID_CONFIG;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(getStatementGridStorageKey(tenantId));
+    if (!rawValue) {
+      return DEFAULT_STATEMENT_GRID_CONFIG;
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<StatementGridConfig>;
+    return normalizeStatementGridConfig(parsed);
+  } catch {
+    return DEFAULT_STATEMENT_GRID_CONFIG;
+  }
 }
 
 function readBankIdFromUrl() {
@@ -289,12 +409,54 @@ function isMovementReviewed(item: BankStatementMovement) {
   return Boolean(item.isReviewed) || normalizedStatus === 'REVIEWED' || normalizedStatus === 'CONFERIDO';
 }
 
+function getStatementReviewLabel(item: BankStatementMovement) {
+  return isMovementReviewed(item) ? 'CONFERIDO' : 'NÃO CONFERIDO';
+}
+
+function getStatementDetailText(item: BankStatementMovement) {
+  return item.detailLines?.length ? item.detailLines.join(' | ') : '---';
+}
+
+function getStatementSortValue(item: BankStatementMovement, key: StatementGridFilterKey) {
+  switch (key) {
+    case 'date':
+      return getStatementDateInput(item.occurredAt);
+    case 'review':
+      return isMovementReviewed(item) ? 'CONFERIDO' : 'NAO_CONFERIDO';
+    case 'description':
+      return normalizeFilterText([item.description, ...(item.detailLines || [])].join(' '));
+    case 'document':
+      return normalizeFilterText(item.documentNumber);
+    case 'type':
+      return normalizeMovementType(item.movementType);
+    case 'value':
+      return Math.abs(Number(item.amount || 0));
+    case 'status':
+      return normalizeFilterText(item.status || 'PENDENTE');
+    default:
+      return '';
+  }
+}
+
+function compareStatementSortValues(leftValue: string | number, rightValue: string | number) {
+  if (typeof leftValue === 'number' || typeof rightValue === 'number') {
+    return Number(leftValue || 0) - Number(rightValue || 0);
+  }
+
+  return String(leftValue || '').localeCompare(String(rightValue || ''), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
 type StatementFilterHeaderProps = {
   label: string;
   filterKey: StatementGridFilterKey;
   active: boolean;
   openFilter: StatementGridFilterKey | null;
   setOpenFilter: (key: StatementGridFilterKey | null) => void;
+  sortDirection?: StatementGridSortDirection | null;
+  onSort?: (direction: StatementGridSortDirection) => void;
   align?: 'left' | 'right';
   children: ReactNode;
 };
@@ -305,6 +467,8 @@ function StatementFilterHeader({
   active,
   openFilter,
   setOpenFilter,
+  sortDirection = null,
+  onSort,
   align = 'left',
   children,
 }: StatementFilterHeaderProps) {
@@ -321,17 +485,208 @@ function StatementFilterHeader({
             ? 'border-blue-300 bg-blue-100 text-blue-700'
             : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:text-blue-700'
         }`}
-        title={`Filtrar ${label}`}
-        aria-label={`Filtrar ${label}`}
+        title={`Filtrar e ordenar ${label}`}
+        aria-label={`Filtrar e ordenar ${label}`}
       >
         <SearchFilterIcon />
       </button>
 
       {isOpen ? (
         <div className={`absolute top-8 z-40 w-64 rounded-2xl border border-slate-200 bg-white p-3 text-left normal-case tracking-normal text-slate-700 shadow-xl ${align === 'right' ? 'right-0' : 'left-0'}`}>
+          {onSort ? (
+            <div className="mb-3 space-y-2 border-b border-slate-100 pb-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Ordenar coluna
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSort('ASC');
+                    setOpenFilter(null);
+                  }}
+                  className={`rounded-lg border px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+                    sortDirection === 'ASC'
+                      ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Crescente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSort('DESC');
+                    setOpenFilter(null);
+                  }}
+                  className={`rounded-lg border px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+                    sortDirection === 'DESC'
+                      ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Decrescente
+                </button>
+              </div>
+            </div>
+          ) : null}
           {children}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+type StatementGridConfigModalProps = {
+  isOpen: boolean;
+  hidden: StatementGridColumnKey[];
+  onSave: (hidden: StatementGridColumnKey[]) => void;
+  onClose: () => void;
+};
+
+function StatementGridConfigModal({
+  isOpen,
+  hidden,
+  onSave,
+  onClose,
+}: StatementGridConfigModalProps) {
+  const [draftHidden, setDraftHidden] = useState<StatementGridColumnKey[]>(hidden);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDraftHidden(hidden);
+    }
+  }, [hidden, isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const visibleCount = STATEMENT_GRID_COLUMNS.filter(
+    (column) => !draftHidden.includes(column.key),
+  ).length;
+
+  function toggleColumn(columnKey: StatementGridColumnKey) {
+    setDraftHidden((current) => {
+      const isHidden = current.includes(columnKey);
+      if (!isHidden && visibleCount <= 1) {
+        return current;
+      }
+
+      return isHidden
+        ? current.filter((item) => item !== columnKey)
+        : [...current, columnKey];
+    });
+  }
+
+  function handleReset() {
+    setDraftHidden(DEFAULT_STATEMENT_GRID_CONFIG.hidden);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-5">
+          <div className="min-w-0">
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              Configuração da tela
+            </div>
+            <h2 className="mt-1 truncate text-2xl font-black text-slate-900">
+              Configurar colunas do extrato
+            </h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Escolha quais colunas ficam visíveis no grid desta tela.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            X
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-sm font-black text-slate-700">
+                  Colunas visíveis: {visibleCount}
+                </div>
+                <div className="text-xs font-medium text-slate-500">
+                  As colunas desmarcadas ficam ocultas somente neste grid.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  Restaurar padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSave(draftHidden);
+                    onClose();
+                  }}
+                  className="rounded-2xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                >
+                  Salvar / Fechar Configuração
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {STATEMENT_GRID_COLUMNS.map((column) => {
+              const isHidden = draftHidden.includes(column.key);
+              const cannotHide = !isHidden && visibleCount <= 1;
+
+              return (
+                <button
+                  key={column.key}
+                  type="button"
+                  onClick={() => toggleColumn(column.key)}
+                  disabled={cannotHide}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  <div className="flex items-center gap-4">
+                    <span
+                      className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 text-white shadow-sm ${
+                        isHidden
+                          ? 'border-rose-200 bg-rose-500 shadow-rose-200/80'
+                          : 'border-emerald-200 bg-emerald-500 shadow-emerald-200/80'
+                      }`}
+                    >
+                      {isHidden ? (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.6} d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      ) : (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.8} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <div>
+                      <div className="text-sm font-black text-slate-800">{column.label}</div>
+                      <div className="text-xs font-medium text-slate-500">
+                        {isHidden ? 'Oculta no grid' : 'Visível no grid'}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                    {isHidden ? 'Oculta' : 'Visível'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -358,6 +713,18 @@ export default function FinanceiroBankStatementPage() {
   const [openGridFilter, setOpenGridFilter] = useState<StatementGridFilterKey | null>(null);
   const [gridFilters, setGridFilters] = useState<StatementGridFilters>(
     DEFAULT_STATEMENT_GRID_FILTERS,
+  );
+  const [gridSort, setGridSort] = useState<StatementGridSort>(
+    DEFAULT_STATEMENT_GRID_SORT,
+  );
+  const [hiddenStatementColumns, setHiddenStatementColumns] = useState<StatementGridColumnKey[]>(
+    DEFAULT_STATEMENT_GRID_CONFIG.hidden,
+  );
+  const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
+  const [exportColumns, setExportColumns] = useState<Record<StatementExportColumnKey, boolean>>(
+    buildDefaultExportColumns(STATEMENT_EXPORT_COLUMN_OPTIONS),
   );
 
   useEffect(() => {
@@ -391,9 +758,92 @@ export default function FinanceiroBankStatementPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const storedConfig = readStoredStatementGridConfig(runtimeContext.sourceTenantId);
+    setHiddenStatementColumns(storedConfig.hidden);
+  }, [runtimeContext.sourceTenantId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    window.localStorage.setItem(
+      getStatementGridStorageKey(runtimeContext.sourceTenantId),
+      JSON.stringify({ hidden: hiddenStatementColumns } satisfies StatementGridConfig),
+    );
+  }, [hiddenStatementColumns, runtimeContext.sourceTenantId]);
+
   const selectedBank = useMemo(
     () => banks.find((item) => item.id === selectedBankId) || null,
     [banks, selectedBankId],
+  );
+  const visibleStatementColumnSet = useMemo(() => {
+    const hiddenSet = new Set(hiddenStatementColumns);
+    return new Set(
+      STATEMENT_GRID_COLUMNS.filter((column) => !hiddenSet.has(column.key)).map(
+        (column) => column.key,
+      ),
+    );
+  }, [hiddenStatementColumns]);
+  const visibleStatementColumnCount = visibleStatementColumnSet.size || 1;
+  const statementExportColumns = useMemo<GridColumnDefinition<BankStatementMovement, StatementExportColumnKey>[]>(
+    () => [
+      {
+        key: 'bank',
+        label: 'Banco',
+        getValue: () => (selectedBank ? buildBankLabel(selectedBank) : '---'),
+      },
+      {
+        key: 'date',
+        label: 'Data',
+        getValue: (item) => formatDateLabel(item.occurredAt),
+      },
+      {
+        key: 'review',
+        label: 'Conferência',
+        getValue: (item) => getStatementReviewLabel(item),
+      },
+      {
+        key: 'description',
+        label: 'Histórico',
+        getValue: (item) => item.description || '---',
+      },
+      {
+        key: 'details',
+        label: 'Detalhes',
+        getValue: (item) => getStatementDetailText(item),
+      },
+      {
+        key: 'document',
+        label: 'Documento',
+        getValue: (item) => item.documentNumber || '---',
+      },
+      {
+        key: 'type',
+        label: 'Tipo',
+        getValue: (item) => getMovementTypeLabel(item.movementType),
+      },
+      {
+        key: 'value',
+        label: 'Valor',
+        align: 'right',
+        getValue: (item) => formatCurrency(Math.abs(Number(item.amount || 0))),
+      },
+      {
+        key: 'balance',
+        label: 'Saldo',
+        align: 'right',
+        getValue: (item) =>
+          typeof item.balanceAfter === 'number'
+            ? formatCurrency(item.balanceAfter)
+            : '---',
+      },
+      {
+        key: 'status',
+        label: 'Situação',
+        getValue: (item) => item.status || 'PENDENTE',
+      },
+    ],
+    [selectedBank],
   );
   const scopeReady = Boolean(
     runtimeContext.sourceSystem && runtimeContext.sourceTenantId,
@@ -406,8 +856,10 @@ export default function FinanceiroBankStatementPage() {
     };
   }, [statementBalance, statementCreditAmount, statementDebitAmount]);
   const hasGridFilterActive = useMemo(
-    () => STATEMENT_GRID_FILTER_KEYS.some((key) => isStatementFilterActive(gridFilters, key)),
-    [gridFilters],
+    () =>
+      STATEMENT_GRID_FILTER_KEYS.some((key) => isStatementFilterActive(gridFilters, key)) ||
+      Boolean(gridSort.key),
+    [gridFilters, gridSort.key],
   );
   const statementStatusOptions = useMemo(() => {
     return Array.from(
@@ -434,7 +886,7 @@ export default function FinanceiroBankStatementPage() {
     const document = normalizeFilterText(gridFilters.document);
     const status = normalizeFilterText(gridFilters.status);
 
-    return statementMovements.filter((item) => {
+    const filteredMovements = statementMovements.filter((item) => {
       const movementDate = getStatementDateInput(item.occurredAt);
       const movementType = normalizeMovementType(item.movementType);
       const movementAmount = Math.abs(Number(item.amount || 0));
@@ -487,7 +939,23 @@ export default function FinanceiroBankStatementPage() {
 
       return true;
     });
-  }, [gridFilters, selectedBank?.bankName, statementMovements]);
+
+    if (!gridSort.key) {
+      return filteredMovements;
+    }
+
+    return filteredMovements
+      .map((movement, index) => ({ movement, index }))
+      .sort((left, right) => {
+        const leftValue = getStatementSortValue(left.movement, gridSort.key!);
+        const rightValue = getStatementSortValue(right.movement, gridSort.key!);
+        const compared = compareStatementSortValues(leftValue, rightValue);
+        const directionalCompared = gridSort.direction === 'ASC' ? compared : -compared;
+
+        return directionalCompared || left.index - right.index;
+      })
+      .map((item) => item.movement);
+  }, [gridFilters, gridSort, selectedBank?.bankName, statementMovements]);
 
   const clearStatement = useCallback(() => {
     setStatementMovements([]);
@@ -900,7 +1368,20 @@ export default function FinanceiroBankStatementPage() {
 
   function clearAllGridFilters() {
     setGridFilters({ ...DEFAULT_STATEMENT_GRID_FILTERS });
+    setGridSort({ ...DEFAULT_STATEMENT_GRID_SORT });
     setOpenGridFilter(null);
+  }
+
+  function getGridSortDirection(filterKey: StatementGridFilterKey) {
+    return gridSort.key === filterKey ? gridSort.direction : null;
+  }
+
+  function isStatementColumnVisible(columnKey: StatementGridColumnKey) {
+    return visibleStatementColumnSet.has(columnKey);
+  }
+
+  function handleGridSort(filterKey: StatementGridFilterKey, direction: StatementGridSortDirection) {
+    setGridSort({ key: filterKey, direction });
   }
 
   return (
@@ -1041,7 +1522,8 @@ export default function FinanceiroBankStatementPage() {
           <table className="min-w-full text-left text-sm text-slate-600">
             <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
               <tr>
-                <th className="px-4 py-3">
+                {isStatementColumnVisible('date') ? (
+                  <th className="px-4 py-3">
                   <div className="inline-flex items-center gap-1.5">
                     <button
                       type="button"
@@ -1059,9 +1541,11 @@ export default function FinanceiroBankStatementPage() {
                     <StatementFilterHeader
                       label="Data"
                       filterKey="date"
-                      active={isStatementFilterActive(gridFilters, 'date')}
+                      active={isStatementFilterActive(gridFilters, 'date') || gridSort.key === 'date'}
                       openFilter={openGridFilter}
                       setOpenFilter={setOpenGridFilter}
+                      sortDirection={getGridSortDirection('date')}
+                      onSort={(direction) => handleGridSort('date', direction)}
                     >
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -1109,20 +1593,24 @@ export default function FinanceiroBankStatementPage() {
                     </div>
                     </StatementFilterHeader>
                   </div>
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('review') ? (
+                  <th className="px-4 py-3">
                   <StatementFilterHeader
                     label="Conf."
                     filterKey="review"
-                    active={isStatementFilterActive(gridFilters, 'review')}
+                    active={isStatementFilterActive(gridFilters, 'review') || gridSort.key === 'review'}
                     openFilter={openGridFilter}
                     setOpenFilter={setOpenGridFilter}
+                    sortDirection={getGridSortDirection('review')}
+                    onSort={(direction) => handleGridSort('review', direction)}
                   >
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                         Filtrar conferência
                       </div>
-                      <div className="flex flex-col items-start gap-2">
+                      <div className="flex flex-col items-center gap-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -1132,7 +1620,7 @@ export default function FinanceiroBankStatementPage() {
                             }));
                             setOpenGridFilter(null);
                           }}
-                          className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
+                          className={`inline-flex w-40 justify-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
                             gridFilters.review === 'NOT_REVIEWED'
                               ? 'border-amber-300 bg-amber-100 text-amber-800 shadow-sm'
                               : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
@@ -1149,7 +1637,7 @@ export default function FinanceiroBankStatementPage() {
                             }));
                             setOpenGridFilter(null);
                           }}
-                          className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
+                          className={`inline-flex w-40 justify-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
                             gridFilters.review === 'REVIEWED'
                               ? 'border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm'
                               : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
@@ -1166,7 +1654,7 @@ export default function FinanceiroBankStatementPage() {
                             }));
                             setOpenGridFilter(null);
                           }}
-                          className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
+                          className={`inline-flex w-40 justify-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
                             gridFilters.review === 'ALL'
                               ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
                               : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
@@ -1208,14 +1696,18 @@ export default function FinanceiroBankStatementPage() {
                       </button>
                     </div>
                   </StatementFilterHeader>
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('description') ? (
+                  <th className="px-4 py-3">
                   <StatementFilterHeader
                     label="Histórico"
                     filterKey="description"
-                    active={isStatementFilterActive(gridFilters, 'description')}
+                    active={isStatementFilterActive(gridFilters, 'description') || gridSort.key === 'description'}
                     openFilter={openGridFilter}
                     setOpenFilter={setOpenGridFilter}
+                    sortDirection={getGridSortDirection('description')}
+                    onSort={(direction) => handleGridSort('description', direction)}
                   >
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -1241,14 +1733,18 @@ export default function FinanceiroBankStatementPage() {
                       </button>
                     </div>
                   </StatementFilterHeader>
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('document') ? (
+                  <th className="px-4 py-3">
                   <StatementFilterHeader
                     label="Documento"
                     filterKey="document"
-                    active={isStatementFilterActive(gridFilters, 'document')}
+                    active={isStatementFilterActive(gridFilters, 'document') || gridSort.key === 'document'}
                     openFilter={openGridFilter}
                     setOpenFilter={setOpenGridFilter}
+                    sortDirection={getGridSortDirection('document')}
+                    onSort={(direction) => handleGridSort('document', direction)}
                   >
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -1274,14 +1770,18 @@ export default function FinanceiroBankStatementPage() {
                       </button>
                     </div>
                   </StatementFilterHeader>
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('type') ? (
+                  <th className="px-4 py-3">
                   <StatementFilterHeader
                     label="Tipo"
                     filterKey="type"
-                    active={isStatementFilterActive(gridFilters, 'type')}
+                    active={isStatementFilterActive(gridFilters, 'type') || gridSort.key === 'type'}
                     openFilter={openGridFilter}
                     setOpenFilter={setOpenGridFilter}
+                    sortDirection={getGridSortDirection('type')}
+                    onSort={(direction) => handleGridSort('type', direction)}
                   >
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -1354,14 +1854,18 @@ export default function FinanceiroBankStatementPage() {
                       </button>
                     </div>
                   </StatementFilterHeader>
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('value') ? (
+                  <th className="px-4 py-3">
                   <StatementFilterHeader
                     label="Valor"
                     filterKey="value"
-                    active={isStatementFilterActive(gridFilters, 'value')}
+                    active={isStatementFilterActive(gridFilters, 'value') || gridSort.key === 'value'}
                     openFilter={openGridFilter}
                     setOpenFilter={setOpenGridFilter}
+                    sortDirection={getGridSortDirection('value')}
+                    onSort={(direction) => handleGridSort('value', direction)}
                     align="right"
                   >
                     <div className="space-y-2">
@@ -1399,24 +1903,30 @@ export default function FinanceiroBankStatementPage() {
                       </button>
                     </div>
                   </StatementFilterHeader>
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('balance') ? (
+                  <th className="px-4 py-3">
                   Saldo
-                </th>
-                <th className="px-4 py-3">
+                  </th>
+                ) : null}
+                {isStatementColumnVisible('status') ? (
+                  <th className="px-4 py-3">
                   <StatementFilterHeader
                     label="Situação"
                     filterKey="status"
-                    active={isStatementFilterActive(gridFilters, 'status')}
+                    active={isStatementFilterActive(gridFilters, 'status') || gridSort.key === 'status'}
                     openFilter={openGridFilter}
                     setOpenFilter={setOpenGridFilter}
+                    sortDirection={getGridSortDirection('status')}
+                    onSort={(direction) => handleGridSort('status', direction)}
                     align="right"
                   >
                     <div className="space-y-2">
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                         Filtrar situação
                       </div>
-                      <div className="flex flex-col items-start gap-2">
+                      <div className="flex flex-col items-center gap-2">
                         {statementStatusOptions.map((statusOption) => (
                           <button
                             key={statusOption}
@@ -1428,7 +1938,7 @@ export default function FinanceiroBankStatementPage() {
                               }));
                               setOpenGridFilter(null);
                             }}
-                            className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${getMovementStatusTone(statusOption)} ${
+                            className={`inline-flex w-40 justify-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${getMovementStatusTone(statusOption)} ${
                               gridFilters.status === statusOption
                                 ? 'shadow-sm ring-1 ring-slate-300'
                                 : 'hover:opacity-80'
@@ -1446,7 +1956,7 @@ export default function FinanceiroBankStatementPage() {
                             }));
                             setOpenGridFilter(null);
                           }}
-                          className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
+                          className={`inline-flex w-40 justify-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] transition ${
                             !gridFilters.status
                               ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
                               : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
@@ -1464,7 +1974,8 @@ export default function FinanceiroBankStatementPage() {
                       </button>
                     </div>
                   </StatementFilterHeader>
-                </th>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -1483,18 +1994,21 @@ export default function FinanceiroBankStatementPage() {
 
                 return (
                   <tr key={item.id} className="border-t border-slate-100">
-                    <td className="px-4 py-4 font-semibold text-slate-700">
+                    {isStatementColumnVisible('date') ? (
+                      <td className="px-4 py-4 font-semibold text-slate-700">
                       {formatDateLabel(item.occurredAt)}
-                    </td>
-                    <td className="px-4 py-4">
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('review') ? (
+                      <td className="px-4 py-4">
                       <button
                         type="button"
                         onClick={() => void handleToggleStatementReview(item)}
                         disabled={isReviewing}
                         className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-60 ${
                           isReviewed
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                            ? 'border-emerald-700 bg-emerald-600 text-white shadow-md shadow-emerald-600/30 hover:bg-emerald-700'
+                            : 'border-red-700 bg-red-600 text-white shadow-md shadow-red-600/30 hover:bg-red-700'
                         }`}
                         title={isReviewed ? 'CONFERIDO' : 'NÃO CONFERIDO'}
                         aria-label={
@@ -1505,8 +2019,10 @@ export default function FinanceiroBankStatementPage() {
                       >
                         {isReviewed ? <ReviewedIcon /> : <NotReviewedIcon />}
                       </button>
-                    </td>
-                    <td className="px-4 py-4">
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('description') ? (
+                      <td className="px-4 py-4">
                       <div className="font-black text-slate-900">{item.description}</div>
                       {item.detailLines?.length ? (
                         <div className="mt-1 space-y-0.5 text-xs font-semibold text-slate-500">
@@ -1518,26 +2034,36 @@ export default function FinanceiroBankStatementPage() {
                       <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                         {selectedBank?.bankName || 'BANCO'}
                       </div>
-                    </td>
-                    <td className="px-4 py-4 font-semibold text-slate-700">
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('document') ? (
+                      <td className="px-4 py-4 font-semibold text-slate-700">
                       {item.documentNumber || '---'}
-                    </td>
-                    <td className="px-4 py-4">
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('type') ? (
+                      <td className="px-4 py-4">
                       <span
                         className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${getMovementTypeTone(item.movementType)}`}
                       >
                         {getMovementTypeLabel(item.movementType)}
                       </span>
-                    </td>
-                    <td className={`px-4 py-4 font-black ${isDebit ? 'text-rose-700' : 'text-emerald-700'}`}>
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('value') ? (
+                      <td className={`px-4 py-4 font-black ${isDebit ? 'text-rose-700' : 'text-emerald-700'}`}>
                       {formatCurrency(Math.abs(item.amount))}
-                    </td>
-                    <td className="px-4 py-4 font-black text-slate-900">
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('balance') ? (
+                      <td className="px-4 py-4 font-black text-slate-900">
                       {typeof item.balanceAfter === 'number'
                         ? formatCurrency(item.balanceAfter)
                         : '---'}
-                    </td>
-                    <td className="px-4 py-4">
+                      </td>
+                    ) : null}
+                    {isStatementColumnVisible('status') ? (
+                      <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
                         <span
                           className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${getMovementStatusTone(item.status)}`}
@@ -1570,14 +2096,15 @@ export default function FinanceiroBankStatementPage() {
                           </button>
                         ) : null}
                       </div>
-                    </td>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
 
               {!isLoading && !filteredStatementMovements.length ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                  <td colSpan={visibleStatementColumnCount} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
                     Nenhum lançamento de extrato bancário foi localizado para o banco selecionado.
                   </td>
                 </tr>
@@ -1589,17 +2116,108 @@ export default function FinanceiroBankStatementPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 px-4 py-3 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <Link
-            href={`/bancos${preservedQueryString}`}
-            className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            Retornar
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={`/bancos${preservedQueryString}`}
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              Retornar
+            </Link>
+            <button
+              type="button"
+              onClick={() => setIsColumnConfigOpen(true)}
+              className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              ☰ Colunas
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExportModalOpen(true)}
+              aria-label="Imprimir"
+              title="Imprimir"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 9V4h12v5" />
+                <path d="M6 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1" />
+                <path d="M6 14h12v6H6z" />
+                <path d="M17 12h.01" />
+              </svg>
+            </button>
+          </div>
           <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
             Registros exibidos ({filteredStatementMovements.length})
           </div>
         </div>
       </section>
+
+      <StatementGridConfigModal
+        isOpen={isColumnConfigOpen}
+        hidden={hiddenStatementColumns}
+        onSave={setHiddenStatementColumns}
+        onClose={() => setIsColumnConfigOpen(false)}
+      />
+      <GridExportModal
+        isOpen={isExportModalOpen}
+        title="Exportar extrato bancário"
+        description={`A exportação respeita os filtros atuais e inclui ${filteredStatementMovements.length} registro(s).`}
+        format={exportFormat}
+        onFormatChange={setExportFormat}
+        columns={STATEMENT_EXPORT_COLUMN_OPTIONS}
+        selectedColumns={exportColumns}
+        storageKey={getStatementExportStorageKey(runtimeContext.sourceTenantId)}
+        brandingName={runtimeContext.companyName || selectedBank?.bankName || 'Financeiro'}
+        brandingLogoUrl={runtimeContext.logoUrl}
+        onClose={() => setIsExportModalOpen(false)}
+        onExport={async (config) => {
+          try {
+            await exportGridRows({
+              rows: filteredStatementMovements,
+              columns: (config.orderedColumns || []).length
+                ? config.orderedColumns
+                    .map((key) =>
+                      statementExportColumns.find((column) => column.key === key),
+                    )
+                    .filter(
+                      (
+                        column,
+                      ): column is GridColumnDefinition<BankStatementMovement, StatementExportColumnKey> =>
+                        Boolean(column),
+                    )
+                : statementExportColumns,
+              selectedColumns: config.selectedColumns,
+              format: exportFormat,
+              pdfOptions: config.pdfOptions,
+              fileBaseName: 'extrato-bancario',
+              branding: {
+                title: 'Extrato bancário',
+                subtitle: selectedBank
+                  ? `Exportação do extrato de ${buildBankLabel(selectedBank)}.`
+                  : 'Exportação com os filtros atualmente aplicados.',
+                schoolName: runtimeContext.companyName || 'Financeiro',
+                logoUrl: runtimeContext.logoUrl,
+              },
+            });
+            setExportColumns(config.selectedColumns);
+            setError(null);
+            setIsExportModalOpen(false);
+          } catch (currentError) {
+            setError(
+              currentError instanceof Error
+                ? currentError.message
+                : 'Não foi possível exportar o extrato bancário.',
+            );
+          }
+        }}
+      />
     </div>
   );
 }

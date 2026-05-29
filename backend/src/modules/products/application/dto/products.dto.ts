@@ -173,6 +173,16 @@ export class SaveProductDto {
   usesLotControl?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesExpirationControl?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  allowsNegativeStock?: boolean;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)

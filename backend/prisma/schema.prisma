@@ -53,20 +53,26 @@ model Company {
 }
 
 model CompanyBranch {
-  id                   String    @id @default(uuid())
-  companyId            String
-  branchCode           Int
-  name                 String
-  isActive             Boolean   @default(true)
-  isDefault            Boolean   @default(false)
-  inventoryControlType String    @default("TRADITIONAL")
-  quantityPrecision    String    @default("INTEGER_ONLY")
-  createdAt            DateTime  @default(now())
-  createdBy            String?
-  updatedAt            DateTime  @updatedAt
-  updatedBy            String?
-  canceledAt           DateTime?
-  canceledBy           String?
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  name                       String
+  isActive                   Boolean   @default(true)
+  isDefault                  Boolean   @default(false)
+  inventoryControlType       String    @default("TRADITIONAL")
+  quantityPrecision          String    @default("INTEGER_ONLY")
+  stockControlMode           String    @default("BY_PRODUCT")
+  stockIntegerQuantityMode   String    @default("BY_PRODUCT")
+  stockLotControlMode        String    @default("BY_PRODUCT")
+  stockExpirationControlMode String    @default("BY_PRODUCT")
+  stockGridControlMode       String    @default("BY_PRODUCT")
+  stockNegativeControlMode   String    @default("BY_PRODUCT")
+  createdAt                  DateTime  @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
@@ -76,33 +82,35 @@ model CompanyBranch {
 }
 
 model Product {
-  id              String    @id @default(uuid())
-  companyId       String
-  branchCode      Int       @default(1)
-  status          String    @default("ACTIVE")
-  name            String
-  internalCode    String?
-  sku             String?
-  barcode         String?
-  unitCode        String    @default("UN")
-  productType     String    @default("GOODS")
-  tracksInventory Boolean   @default(true)
-  allowFraction   Boolean   @default(false)
-  usesColorSize   Boolean   @default(false)
-  usesLotControl  Boolean   @default(false)
-  currentStock    Float     @default(0)
-  minimumStock    Float     @default(0)
-  purchasePrice   Float?
-  salePrice       Float?
-  ncmCode         String?
-  cestCode        String?
-  notes           String?
-  createdAt       DateTime  @default(now())
-  createdBy       String?
-  updatedAt       DateTime  @updatedAt
-  updatedBy       String?
-  canceledAt      DateTime?
-  canceledBy      String?
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  status                String    @default("ACTIVE")
+  name                  String
+  internalCode          String?
+  sku                   String?
+  barcode               String?
+  unitCode              String    @default("UN")
+  productType           String    @default("GOODS")
+  tracksInventory       Boolean   @default(true)
+  allowFraction         Boolean   @default(false)
+  usesColorSize         Boolean   @default(false)
+  usesLotControl        Boolean   @default(false)
+  usesExpirationControl Boolean   @default(false)
+  allowsNegativeStock   Boolean   @default(false)
+  currentStock          Float     @default(0)
+  minimumStock          Float     @default(0)
+  purchasePrice         Float?
+  salePrice             Float?
+  ncmCode               String?
+  cestCode              String?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
 
   company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImportItems PayableInvoiceImportItem[]

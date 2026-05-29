@@ -58,6 +58,26 @@ export class GetBankDto {
   sourceTenantId!: string;
 }
 
+export class GetBankDdaDto extends GetBankDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
 export class GetBankStatementDto {
   @IsString()
   sourceSystem!: string;

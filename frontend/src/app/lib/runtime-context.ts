@@ -3,11 +3,19 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
+export type BranchStockParameterMode = 'NO' | 'YES' | 'BY_PRODUCT';
+
 export type FinanceRuntimeContext = {
   embedded: boolean;
   sourceSystem: string | null;
   sourceTenantId: string | null;
   sourceBranchCode: number;
+  stockControlMode: BranchStockParameterMode;
+  stockIntegerQuantityMode: BranchStockParameterMode;
+  stockLotControlMode: BranchStockParameterMode;
+  stockExpirationControlMode: BranchStockParameterMode;
+  stockGridControlMode: BranchStockParameterMode;
+  stockNegativeControlMode: BranchStockParameterMode;
   companyName: string | null;
   logoUrl: string | null;
   cashierUserId: string | null;
@@ -38,6 +46,12 @@ const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
   sourceSystem: null,
   sourceTenantId: null,
   sourceBranchCode: 1,
+  stockControlMode: 'BY_PRODUCT',
+  stockIntegerQuantityMode: 'BY_PRODUCT',
+  stockLotControlMode: 'BY_PRODUCT',
+  stockExpirationControlMode: 'BY_PRODUCT',
+  stockGridControlMode: 'BY_PRODUCT',
+  stockNegativeControlMode: 'BY_PRODUCT',
   companyName: null,
   logoUrl: null,
   cashierUserId: null,
@@ -58,6 +72,13 @@ function normalizeBranchCode(value: string | null) {
   return Number.isInteger(normalized) && normalized >= 0 ? normalized : 1;
 }
 
+function normalizeStockParameterMode(value: string | null): BranchStockParameterMode {
+  const normalized = normalizeQueryValue(value);
+  return normalized === 'NO' || normalized === 'YES' || normalized === 'BY_PRODUCT'
+    ? normalized
+    : 'BY_PRODUCT';
+}
+
 function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
   const searchParams = new URLSearchParams(search);
 
@@ -66,6 +87,18 @@ function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
     sourceSystem: normalizeQueryValue(searchParams.get('sourceSystem')),
     sourceTenantId: normalizeQueryValue(searchParams.get('sourceTenantId')),
     sourceBranchCode: normalizeBranchCode(searchParams.get('sourceBranchCode')),
+    stockControlMode: normalizeStockParameterMode(searchParams.get('stockControlMode')),
+    stockIntegerQuantityMode: normalizeStockParameterMode(
+      searchParams.get('stockIntegerQuantityMode'),
+    ),
+    stockLotControlMode: normalizeStockParameterMode(searchParams.get('stockLotControlMode')),
+    stockExpirationControlMode: normalizeStockParameterMode(
+      searchParams.get('stockExpirationControlMode'),
+    ),
+    stockGridControlMode: normalizeStockParameterMode(searchParams.get('stockGridControlMode')),
+    stockNegativeControlMode: normalizeStockParameterMode(
+      searchParams.get('stockNegativeControlMode'),
+    ),
     companyName: normalizeQueryValue(searchParams.get('companyName')),
     logoUrl: normalizeQueryValue(searchParams.get('logoUrl'), false),
     cashierUserId: normalizeQueryValue(searchParams.get('cashierUserId')),
@@ -130,6 +163,13 @@ export function buildFinanceNavigationQueryString(
   if (Number.isInteger(runtimeContext.sourceBranchCode) && runtimeContext.sourceBranchCode >= 0) {
     params.set('sourceBranchCode', String(runtimeContext.sourceBranchCode));
   }
+
+  params.set('stockControlMode', runtimeContext.stockControlMode);
+  params.set('stockIntegerQuantityMode', runtimeContext.stockIntegerQuantityMode);
+  params.set('stockLotControlMode', runtimeContext.stockLotControlMode);
+  params.set('stockExpirationControlMode', runtimeContext.stockExpirationControlMode);
+  params.set('stockGridControlMode', runtimeContext.stockGridControlMode);
+  params.set('stockNegativeControlMode', runtimeContext.stockNegativeControlMode);
 
   if (runtimeContext.companyName) {
     params.set('companyName', runtimeContext.companyName);

@@ -4,6 +4,7 @@ import { BanksService } from "../application/banks.service";
 import {
   ChangeBankStatusDto,
   GetBankDto,
+  GetBankDdaDto,
   GetBankStatementDto,
   ListBanksDto,
   ReconcileBankStatementMovementDto,
@@ -31,6 +32,17 @@ export class BanksController {
   })
   get(@Param("bankId") bankId: string, @Query() query: GetBankDto) {
     return this.banksService.get(bankId, query);
+  }
+
+  @Get(":bankId/dda/open")
+  @ApiOperation({
+    summary: "Consulta os boletos DDA em aberto da conta informada",
+  })
+  getOpenDda(
+    @Param("bankId") bankId: string,
+    @Query() query: GetBankDdaDto,
+  ) {
+    return this.banksService.getOpenDda(bankId, query);
   }
 
   @Get(":bankId/statement/saved")

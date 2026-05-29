@@ -169,6 +169,10 @@ export type ApprovalItemState = {
   productType: string;
   tracksInventory: boolean;
   allowFraction: boolean;
+  usesLotControl: boolean;
+  usesExpirationControl: boolean;
+  usesColorSize: boolean;
+  allowsNegativeStock: boolean;
   minimumStock: string;
   notes: string;
 };
