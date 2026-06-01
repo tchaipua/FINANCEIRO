@@ -3,9 +3,11 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PayablesService } from "../application/payables.service";
 import {
   ApprovePayableInvoiceImportDto,
+  CancelPayableInvoiceImportDto,
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
   ListPayableInvoiceImportsDto,
+  UpdatePayableInvoiceImportItemApprovalDraftDto,
   UpdatePayableInvoiceImportInstallmentsDto,
 } from "../application/dto/payables.dto";
 
@@ -52,6 +54,23 @@ export class PayablesController {
     return this.payablesService.updateInvoiceImportInstallments(importId, payload);
   }
 
+  @Patch("invoice-imports/:importId/items/:itemId/approval-draft")
+  @ApiOperation({
+    summary:
+      "Salva a conferência do produto do item importado sem criar estoque",
+  })
+  updateInvoiceImportItemApprovalDraft(
+    @Param("importId") importId: string,
+    @Param("itemId") itemId: string,
+    @Body() payload: UpdatePayableInvoiceImportItemApprovalDraftDto,
+  ) {
+    return this.payablesService.updateInvoiceImportItemApprovalDraft(
+      importId,
+      itemId,
+      payload,
+    );
+  }
+
   @Post("invoice-imports/:importId/approve")
   @ApiOperation({
     summary:
@@ -62,5 +81,16 @@ export class PayablesController {
     @Body() payload: ApprovePayableInvoiceImportDto,
   ) {
     return this.payablesService.approveInvoiceImport(importId, payload);
+  }
+
+  @Post("invoice-imports/:importId/cancel")
+  @ApiOperation({
+    summary: "Cancela logicamente uma nota importada pendente de aprovação",
+  })
+  cancelInvoiceImport(
+    @Param("importId") importId: string,
+    @Body() payload: CancelPayableInvoiceImportDto,
+  ) {
+    return this.payablesService.cancelInvoiceImport(importId, payload);
   }
 }

@@ -28,6 +28,7 @@ export type PayableInvoiceImportSummary = {
   stockMovementCount: number;
   approvedAt?: string | null;
   approvedBy?: string | null;
+  cancellationReason?: string | null;
   createdAt: string;
   createdBy?: string | null;
   updatedAt: string;
@@ -43,6 +44,21 @@ export type PayableInvoiceImportItem = {
   productId?: string | null;
   productName?: string | null;
   productTracksInventory?: boolean | null;
+  draftInternalCode?: string | null;
+  draftSku?: string | null;
+  draftBarcode?: string | null;
+  draftUnitCode?: string | null;
+  draftProductType?: string | null;
+  draftTracksInventory?: boolean | null;
+  draftAllowFraction?: boolean | null;
+  draftUsesLotControl?: boolean | null;
+  draftUsesExpirationControl?: boolean | null;
+  draftUsesColorSize?: boolean | null;
+  draftAllowsNegativeStock?: boolean | null;
+  draftMinimumStock?: number | null;
+  draftNotes?: string | null;
+  productCheckedAt?: string | null;
+  productCheckedBy?: string | null;
   recommendedAction: 'LINK_EXISTING' | 'CREATE_PRODUCT';
   supplierItemCode?: string | null;
   barcode?: string | null;
@@ -159,7 +175,7 @@ export type FiscalCertificateItem = {
 };
 
 export type ApprovalItemState = {
-  action: 'LINK_EXISTING' | 'CREATE_PRODUCT' | 'IGNORE_STOCK';
+  action: '' | 'LINK_EXISTING' | 'CREATE_PRODUCT' | 'IGNORE_STOCK';
   productId: string;
   productName: string;
   internalCode: string;

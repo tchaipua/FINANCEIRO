@@ -242,6 +242,7 @@ model PayableInvoiceImport {
   distributionNsu     String?
   parsedSnapshotJson  String?
   approvalNotes       String?
+  cancellationReason  String?
   approvedAt          DateTime?
   approvedBy          String?
   createdAt           DateTime  @default(now())
@@ -268,27 +269,43 @@ model PayableInvoiceImport {
 }
 
 model PayableInvoiceImportItem {
-  id               String    @id @default(uuid())
-  invoiceImportId  String
-  productId        String?
-  lineNumber       Int
-  approvalAction   String?
-  supplierItemCode String?
-  barcode          String?
-  description      String
-  ncmCode          String?
-  cfopCode         String?
-  unitCode         String?
-  quantity         Float     @default(0)
-  unitPrice        Float     @default(0)
-  totalPrice       Float     @default(0)
-  tracksInventory  Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  createdBy        String?
-  updatedAt        DateTime  @updatedAt
-  updatedBy        String?
-  canceledAt       DateTime?
-  canceledBy       String?
+  id                           String    @id @default(uuid())
+  invoiceImportId              String
+  productId                    String?
+  lineNumber                   Int
+  approvalAction               String?
+  supplierItemCode             String?
+  barcode                      String?
+  description                  String
+  ncmCode                      String?
+  cfopCode                     String?
+  unitCode                     String?
+  quantity                     Float     @default(0)
+  unitPrice                    Float     @default(0)
+  totalPrice                   Float     @default(0)
+  tracksInventory              Boolean   @default(true)
+  draftProductName             String?
+  draftInternalCode            String?
+  draftSku                     String?
+  draftBarcode                 String?
+  draftUnitCode                String?
+  draftProductType             String?
+  draftTracksInventory         Boolean?
+  draftAllowFraction           Boolean?
+  draftUsesLotControl          Boolean?
+  draftUsesExpirationControl   Boolean?
+  draftUsesColorSize           Boolean?
+  draftAllowsNegativeStock     Boolean?
+  draftMinimumStock            Float?
+  draftNotes                   String?
+  productCheckedAt             DateTime?
+  productCheckedBy             String?
+  createdAt                    DateTime  @default(now())
+  createdBy                    String?
+  updatedAt                    DateTime  @updatedAt
+  updatedBy                    String?
+  canceledAt                   DateTime?
+  canceledBy                   String?
 
   invoiceImport  PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
   product        Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)

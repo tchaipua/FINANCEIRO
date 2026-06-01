@@ -49,6 +49,14 @@ export class ListProductsDto {
 
   @IsOptional()
   @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  internalCode?: string;
+
+  @IsOptional()
+  @IsString()
   cashierUserId?: string;
 
   @IsOptional()

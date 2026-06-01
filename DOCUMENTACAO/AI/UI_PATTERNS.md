@@ -84,11 +84,15 @@ Arquivos de referencia tecnica no Financeiro:
 - quando o usuario pedir "filtros direto nas colunas do grid", aplicar este padrao apenas nas colunas informadas no pedido
 - o filtro deve aparecer no proprio cabecalho da coluna, ao lado do nome da coluna, preferencialmente como icone de lupa com tooltip `Filtrar <coluna>`
 - ao clicar na lupa, abrir um painel compacto proximo ao cabecalho da coluna, sem criar faixa adicional acima do grid
+- o painel nao deve sobrepor incoerentemente a primeira linha do grid nem a toolbar/rodape; quando necessario, reservar espaco interno temporario no grid enquanto o painel estiver aberto
 - tipos de filtro aprovados:
   - data/periodo: campos `De` e `Ate`
   - texto, historico, documento ou nome: campo de busca textual
   - status, tipo ou categoria fechada: seletor com `TODOS` e opcoes da coluna
   - valor numerico/monetario: campos de valor minimo e valor maximo
+- filtros textuais em coluna devem usar rascunho local: digitar no campo nao aplica automaticamente
+- filtros textuais em coluna devem ter botao `Filtrar`; ao clicar, aplicar o valor, atualizar o grid e fechar o painel
+- pressionar `Enter` dentro do campo textual equivale a clicar em `Filtrar`
 - para filtros fechados com poucas opcoes, preferir botoes/pills em vez de select quando o usuario aprovar esse modelo visual
 - os botoes/pills do mesmo painel devem ter exatamente a mesma largura, texto centralizado e alinhamento central no popup
 - o botao/pill equivalente a `TODOS` deve usar o texto `AMBOS` quando o usuario pedir essa linguagem para o contexto da tela
@@ -99,11 +103,11 @@ Arquivos de referencia tecnica no Financeiro:
   - conciliado/conferido: verde/emerald
   - ambos/todos: azul/blue
 - quando houver acoes em lote dentro do painel de filtro, como `Marcar todos como conferidos` ou `Marcar todos como nao conferidos`, elas devem respeitar somente os registros exibidos no grid naquele momento, incluindo filtros ativos
-- cada painel deve ter acao local `Limpar` para zerar somente o filtro daquela coluna
+- cada painel deve ter acao local `Limpar` para zerar somente o filtro daquela coluna e fechar o painel
 - sempre que houver filtro direto em coluna, deve existir tambem um botao iconico para limpar todos os filtros de uma vez
-- a posicao aprovada para `Limpar todos os filtros` e no lado esquerdo do cabecalho do grid, antes da primeira coluna filtravel, normalmente antes de `Data`
+- a posicao aprovada para `Limpar todos os filtros` e no lado esquerdo do cabecalho do grid, obrigatoriamente como a primeira informacao visual do cabecalho, antes da primeira coluna filtravel
 - o botao de limpar todos deve ser iconico, ter tooltip/aria-label `Limpar todos os filtros`, zerar todos os filtros do grid e fechar qualquer painel aberto
-- o botao de limpar todos deve ter estado visual discreto quando nenhum filtro estiver ativo e ganhar destaque quando existir filtro ativo
+- o botao de limpar todos deve ter estado visual discreto quando nenhum filtro estiver ativo e ganhar destaque vermelho/rose quando existir um ou mais filtros/ordenacoes ativos
 - os filtros devem responder na hora quando forem filtros locais; se a tela exigir consulta no backend, preservar tenant/RBAC e atualizar tambem a auditoria SQL da tela
 - nao adicionar filtros em colunas nao solicitadas pelo usuario no prompt atual
 - nao alterar layout aprovado da tela alem do menor ajuste necessario no cabecalho do grid
@@ -112,6 +116,8 @@ Referencia aprovada:
 
 - `PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO`
 - filtros `Conf.`, `Tipo` e `Situacao` da tela `PRINCIPAL_FINANCEIRO_BANCOS_EXTRATO`
+- `PRINCIPAL_FINANCEIRO_ESTOQUE`
+- filtros `Produto` e `Código interno` da tela `PRINCIPAL_FINANCEIRO_ESTOQUE`
 
 ### PAT-016 - Tela do Financeiro embutida na vertical consumidora
 

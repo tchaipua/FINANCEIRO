@@ -1168,10 +1168,14 @@ export default function FinanceiroImportacaoNotasPage() {
   const [recentImports, setRecentImports] = useState<PayableInvoiceImportSummary[]>([]);
   const [recentImportFilters, setRecentImportFilters] =
     useState<RecentImportFilters>(EMPTY_RECENT_IMPORT_FILTERS);
+  const [recentImportFilterDrafts, setRecentImportFilterDrafts] =
+    useState<RecentImportFilters>(EMPTY_RECENT_IMPORT_FILTERS);
   const [recentImportActiveFilter, setRecentImportActiveFilter] =
     useState<RecentImportFilterColumn | null>(null);
   const [recentImportSort, setRecentImportSort] =
     useState<RecentImportSortState>(null);
+  const [recentImportPageSize, setRecentImportPageSize] = useState(10);
+  const [recentImportPage, setRecentImportPage] = useState(1);
   const [certificates, setCertificates] = useState<FiscalCertificateItem[]>([]);
   const [importResult, setImportResult] = useState<PayableInvoiceImportDetail | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -1189,6 +1193,12 @@ export default function FinanceiroImportacaoNotasPage() {
   const [installmentsModalError, setInstallmentsModalError] = useState<string | null>(null);
   const [selectedImportForInstallments, setSelectedImportForInstallments] = useState<PayableInvoiceImportSummary | null>(null);
   const [editableInstallments, setEditableInstallments] = useState<InstallmentEditorItem[]>([]);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [selectedImportForCancel, setSelectedImportForCancel] =
+    useState<PayableInvoiceImportSummary | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelModalError, setCancelModalError] = useState<string | null>(null);
+  const [cancelingImportId, setCancelingImportId] = useState<string | null>(null);
   const [isProductsModalOpen, setIsProductsModalOpen] = useState(false);
   const [loadingProductsModal, setLoadingProductsModal] = useState(false);
   const [productsModalError, setProductsModalError] = useState<string | null>(null);
@@ -1223,7 +1233,7 @@ export default function FinanceiroImportacaoNotasPage() {
       const response = await getJson<PayableInvoiceImportSummary[]>(
         `/payables/invoice-imports${queryString}`,
       );
-      setRecentImports(response.slice(0, 6));
+      setRecentImports(response);
     } finally {
       setLoadingRecent(false);
     }
@@ -1322,8 +1332,19 @@ export default function FinanceiroImportacaoNotasPage() {
     [],
   );
 
+  const updateRecentImportFilterDrafts = useCallback(
+    (patch: Partial<RecentImportFilters>) => {
+      setRecentImportFilterDrafts((current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [],
+  );
+
   const clearRecentImportFilters = useCallback(() => {
     setRecentImportFilters(EMPTY_RECENT_IMPORT_FILTERS);
+    setRecentImportFilterDrafts(EMPTY_RECENT_IMPORT_FILTERS);
     setRecentImportSort(null);
     setRecentImportActiveFilter(null);
   }, []);
@@ -1331,8 +1352,52 @@ export default function FinanceiroImportacaoNotasPage() {
   const applyRecentImportSort = useCallback(
     (column: RecentImportFilterColumn, direction: RecentImportSortDirection) => {
       setRecentImportSort({ column, direction });
+      setRecentImportActiveFilter(null);
     },
     [],
+  );
+
+  const openRecentImportFilter = useCallback(
+    (column: RecentImportFilterColumn | null) => {
+      if (column) {
+        setRecentImportFilterDrafts(recentImportFilters);
+      }
+
+      setRecentImportActiveFilter(column);
+    },
+    [recentImportFilters],
+  );
+
+  const applyRecentImportColumnFilter = useCallback(
+    (column: RecentImportFilterColumn) => {
+      if (column === 'status') {
+        updateRecentImportFilters({ status: recentImportFilterDrafts.status });
+      } else if (column === 'invoice') {
+        updateRecentImportFilters({
+          invoice: recentImportFilterDrafts.invoice.trim(),
+        });
+      } else if (column === 'supplier') {
+        updateRecentImportFilters({
+          supplier: recentImportFilterDrafts.supplier.trim(),
+        });
+      } else if (column === 'issueDate') {
+        updateRecentImportFilters({
+          issueDateFrom: recentImportFilterDrafts.issueDateFrom,
+          issueDateTo: recentImportFilterDrafts.issueDateTo,
+        });
+      } else if (column === 'total') {
+        updateRecentImportFilters({
+          total: recentImportFilterDrafts.total.trim(),
+        });
+      } else {
+        updateRecentImportFilters({
+          installments: recentImportFilterDrafts.installments.trim(),
+        });
+      }
+
+      setRecentImportActiveFilter(null);
+    },
+    [recentImportFilterDrafts, updateRecentImportFilters],
   );
 
   const clearRecentImportColumnFilter = useCallback(
@@ -1367,9 +1432,40 @@ export default function FinanceiroImportacaoNotasPage() {
           installments: EMPTY_RECENT_IMPORT_FILTERS.installments,
         };
       });
+      setRecentImportFilterDrafts((current) => {
+        if (column === 'status') {
+          return { ...current, status: EMPTY_RECENT_IMPORT_FILTERS.status };
+        }
+
+        if (column === 'invoice') {
+          return { ...current, invoice: EMPTY_RECENT_IMPORT_FILTERS.invoice };
+        }
+
+        if (column === 'supplier') {
+          return { ...current, supplier: EMPTY_RECENT_IMPORT_FILTERS.supplier };
+        }
+
+        if (column === 'issueDate') {
+          return {
+            ...current,
+            issueDateFrom: EMPTY_RECENT_IMPORT_FILTERS.issueDateFrom,
+            issueDateTo: EMPTY_RECENT_IMPORT_FILTERS.issueDateTo,
+          };
+        }
+
+        if (column === 'total') {
+          return { ...current, total: EMPTY_RECENT_IMPORT_FILTERS.total };
+        }
+
+        return {
+          ...current,
+          installments: EMPTY_RECENT_IMPORT_FILTERS.installments,
+        };
+      });
       setRecentImportSort((current) =>
         current?.column === column ? null : current,
       );
+      setRecentImportActiveFilter(null);
     },
     [],
   );
@@ -1448,6 +1544,38 @@ export default function FinanceiroImportacaoNotasPage() {
       return recentImportSort.direction === 'asc' ? result : result * -1;
     });
   }, [recentImportFilters, recentImportSort, recentImports]);
+
+  const recentImportTotalPages = Math.max(
+    1,
+    Math.ceil(filteredRecentImports.length / recentImportPageSize),
+  );
+  const currentRecentImportPage = Math.min(
+    recentImportPage,
+    recentImportTotalPages,
+  );
+  const paginatedRecentImports = useMemo(() => {
+    const startIndex = (currentRecentImportPage - 1) * recentImportPageSize;
+    return filteredRecentImports.slice(
+      startIndex,
+      startIndex + recentImportPageSize,
+    );
+  }, [currentRecentImportPage, filteredRecentImports, recentImportPageSize]);
+  const recentImportFirstVisibleIndex = filteredRecentImports.length
+    ? (currentRecentImportPage - 1) * recentImportPageSize + 1
+    : 0;
+  const recentImportLastVisibleIndex = filteredRecentImports.length
+    ? recentImportFirstVisibleIndex + paginatedRecentImports.length - 1
+    : 0;
+
+  useEffect(() => {
+    setRecentImportPage(1);
+  }, [recentImportFilters, recentImportPageSize, recentImportSort]);
+
+  useEffect(() => {
+    setRecentImportPage((current) =>
+      Math.min(Math.max(current, 1), recentImportTotalPages),
+    );
+  }, [recentImportTotalPages]);
 
   const handleXmlFileSelected = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1840,6 +1968,82 @@ export default function FinanceiroImportacaoNotasPage() {
     [runtimeContext],
   );
 
+  const handleOpenCancelModal = useCallback((item: PayableInvoiceImportSummary) => {
+    setSelectedImportForCancel(item);
+    setCancelReason('');
+    setCancelModalError(null);
+    setIsCancelModalOpen(true);
+  }, []);
+
+  const handleCloseCancelModal = useCallback(() => {
+    if (cancelingImportId) {
+      return;
+    }
+
+    setIsCancelModalOpen(false);
+    setSelectedImportForCancel(null);
+    setCancelReason('');
+    setCancelModalError(null);
+  }, [cancelingImportId]);
+
+  const handleCancelInvoiceImport = useCallback(async () => {
+    if (!selectedImportForCancel) {
+      return;
+    }
+
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setCancelModalError(
+        'Abra esta tela a partir do sistema de origem para informar o tenant do Financeiro.',
+      );
+      return;
+    }
+
+    const normalizedReason = cancelReason.trim();
+    if (!normalizedReason) {
+      setCancelModalError('Informe o motivo do cancelamento da nota.');
+      return;
+    }
+
+    setCancelingImportId(selectedImportForCancel.id);
+    setCancelModalError(null);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      await requestJson(
+        `/payables/invoice-imports/${selectedImportForCancel.id}/cancel`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            requestedBy:
+              runtimeContext.cashierDisplayName ||
+              runtimeContext.userRole ||
+              'OPERADOR',
+            cancellationReason: normalizedReason,
+          }),
+          fallbackMessage: 'Não foi possível cancelar a nota importada.',
+        },
+      );
+
+      setSuccessMessage('Nota cancelada com sucesso.');
+      setIsCancelModalOpen(false);
+      setSelectedImportForCancel(null);
+      setCancelReason('');
+      await loadRecentImports();
+    } catch (error) {
+      setCancelModalError(
+        getFriendlyRequestErrorMessage(
+          error,
+          'Não foi possível cancelar a nota importada.',
+        ),
+      );
+    } finally {
+      setCancelingImportId(null);
+    }
+  }, [cancelReason, loadRecentImports, runtimeContext, selectedImportForCancel]);
+
   const handleInstallmentDueDateChange = useCallback((installmentIndex: number, dueDate: string) => {
     setEditableInstallments((current) =>
       current.map((installment, index) =>
@@ -1973,6 +2177,35 @@ export default function FinanceiroImportacaoNotasPage() {
 
   const recentImportFilterInputClass = `${FINANCE_GRID_PAGE_LAYOUT.input} h-9 rounded-xl px-3 py-2 text-xs`;
 
+  const isRecentImportColumnFilterActive = (
+    column: RecentImportFilterColumn,
+  ) => {
+    if (column === 'status') {
+      return recentImportFilters.status !== EMPTY_RECENT_IMPORT_FILTERS.status;
+    }
+
+    if (column === 'invoice') {
+      return recentImportFilters.invoice !== EMPTY_RECENT_IMPORT_FILTERS.invoice;
+    }
+
+    if (column === 'supplier') {
+      return recentImportFilters.supplier !== EMPTY_RECENT_IMPORT_FILTERS.supplier;
+    }
+
+    if (column === 'issueDate') {
+      return (
+        recentImportFilters.issueDateFrom !== EMPTY_RECENT_IMPORT_FILTERS.issueDateFrom ||
+        recentImportFilters.issueDateTo !== EMPTY_RECENT_IMPORT_FILTERS.issueDateTo
+      );
+    }
+
+    if (column === 'total') {
+      return recentImportFilters.total !== EMPTY_RECENT_IMPORT_FILTERS.total;
+    }
+
+    return recentImportFilters.installments !== EMPTY_RECENT_IMPORT_FILTERS.installments;
+  };
+
   const buildRecentImportSortButtonClass = (
     column: RecentImportFilterColumn,
     direction: RecentImportSortDirection,
@@ -2017,14 +2250,14 @@ export default function FinanceiroImportacaoNotasPage() {
           onClick={() => applyRecentImportSort(column, 'asc')}
           className={buildRecentImportSortButtonClass(column, 'asc')}
         >
-          Cresc.
+          Crescente
         </button>
         <button
           type="button"
           onClick={() => applyRecentImportSort(column, 'desc')}
           className={buildRecentImportSortButtonClass(column, 'desc')}
         >
-          Decresc.
+          Decrescente
         </button>
       </div>
     </div>
@@ -2042,10 +2275,38 @@ export default function FinanceiroImportacaoNotasPage() {
     </button>
   );
 
+  const renderRecentImportClearAllButton = () => (
+    <button
+      type="button"
+      onClick={clearRecentImportFilters}
+      title="Limpar todos os filtros"
+      aria-label="Limpar todos os filtros do grid"
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
+        hasRecentImportFilters
+          ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+          : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+      }`}
+    >
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 6h18" />
+        <path d="M8 6V4h8v2" />
+        <path d="M10 11v6" />
+        <path d="M14 11v6" />
+        <path d="M6 6l1 14h10l1-14" />
+      </svg>
+    </button>
+  );
+
   const renderRecentImportTextFilter = (
     column: RecentImportFilterColumn,
-    value: string,
-    onChange: (value: string) => void,
     placeholder: string,
   ) => (
     <div className="space-y-3">
@@ -2055,12 +2316,49 @@ export default function FinanceiroImportacaoNotasPage() {
           Filtrar
         </div>
         <input
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
+          value={
+            column === 'invoice'
+              ? recentImportFilterDrafts.invoice
+              : column === 'supplier'
+              ? recentImportFilterDrafts.supplier
+              : column === 'total'
+              ? recentImportFilterDrafts.total
+              : recentImportFilterDrafts.installments
+          }
+          onChange={(event) => {
+            if (column === 'invoice') {
+              updateRecentImportFilterDrafts({ invoice: event.target.value });
+              return;
+            }
+
+            if (column === 'supplier') {
+              updateRecentImportFilterDrafts({ supplier: event.target.value });
+              return;
+            }
+
+            if (column === 'total') {
+              updateRecentImportFilterDrafts({ total: event.target.value });
+              return;
+            }
+
+            updateRecentImportFilterDrafts({ installments: event.target.value });
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              applyRecentImportColumnFilter(column);
+            }
+          }}
           placeholder={placeholder}
           className={recentImportFilterInputClass}
         />
       </div>
+      <button
+        type="button"
+        onClick={() => applyRecentImportColumnFilter(column)}
+        className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+      >
+        Filtrar
+      </button>
       {renderRecentImportClearColumnButton(column)}
     </div>
   );
@@ -2075,9 +2373,9 @@ export default function FinanceiroImportacaoNotasPage() {
           </span>
           <input
             type="date"
-            value={recentImportFilters.issueDateFrom}
+            value={recentImportFilterDrafts.issueDateFrom}
             onChange={(event) =>
-              updateRecentImportFilters({ issueDateFrom: event.target.value })
+              updateRecentImportFilterDrafts({ issueDateFrom: event.target.value })
             }
             className={recentImportFilterInputClass}
           />
@@ -2088,14 +2386,21 @@ export default function FinanceiroImportacaoNotasPage() {
           </span>
           <input
             type="date"
-            value={recentImportFilters.issueDateTo}
+            value={recentImportFilterDrafts.issueDateTo}
             onChange={(event) =>
-              updateRecentImportFilters({ issueDateTo: event.target.value })
+              updateRecentImportFilterDrafts({ issueDateTo: event.target.value })
             }
             className={recentImportFilterInputClass}
           />
         </label>
       </div>
+      <button
+        type="button"
+        onClick={() => applyRecentImportColumnFilter('issueDate')}
+        className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+      >
+        Filtrar
+      </button>
       {renderRecentImportClearColumnButton('issueDate')}
     </div>
   );
@@ -2118,9 +2423,17 @@ export default function FinanceiroImportacaoNotasPage() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() =>
-                  updateRecentImportFilters({ status: option.value })
-                }
+                onClick={() => {
+                  setRecentImportFilters((current) => ({
+                    ...current,
+                    status: option.value,
+                  }));
+                  setRecentImportFilterDrafts((current) => ({
+                    ...current,
+                    status: option.value,
+                  }));
+                  setRecentImportActiveFilter(null);
+                }}
                 className={buildRecentImportFilterPillClass(
                   recentImportFilters.status === option.value,
                   option.value === 'APPROVED' ? 'emerald' : 'amber',
@@ -2131,7 +2444,17 @@ export default function FinanceiroImportacaoNotasPage() {
             ))}
             <button
               type="button"
-              onClick={() => updateRecentImportFilters({ status: 'ALL' })}
+              onClick={() => {
+                setRecentImportFilters((current) => ({
+                  ...current,
+                  status: 'ALL',
+                }));
+                setRecentImportFilterDrafts((current) => ({
+                  ...current,
+                  status: 'ALL',
+                }));
+                setRecentImportActiveFilter(null);
+              }}
               className={buildRecentImportFilterPillClass(
                 recentImportFilters.status === 'ALL',
                 'blue',
@@ -2152,7 +2475,10 @@ export default function FinanceiroImportacaoNotasPage() {
     content: ReactNode,
     align: 'left' | 'right' = 'left',
   ) => {
-    const isActive = recentImportActiveFilter === column;
+    const isPanelOpen = recentImportActiveFilter === column;
+    const isColumnActive =
+      isRecentImportColumnFilterActive(column) ||
+      recentImportSort?.column === column;
 
     return (
       <div
@@ -2166,9 +2492,7 @@ export default function FinanceiroImportacaoNotasPage() {
           onMouseDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            setRecentImportActiveFilter((current) =>
-              current === column ? null : column,
-            );
+            openRecentImportFilter(isPanelOpen ? null : column);
           }}
           onClick={(event) => {
             event.stopPropagation();
@@ -2176,7 +2500,7 @@ export default function FinanceiroImportacaoNotasPage() {
           title={`FILTRAR ${label}`}
           aria-label={`Filtrar ${label}`}
           className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
-            isActive
+            isColumnActive || isPanelOpen
               ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
               : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
           }`}
@@ -2194,7 +2518,7 @@ export default function FinanceiroImportacaoNotasPage() {
             <path d="M20 20l-3.5-3.5" />
           </svg>
         </button>
-        {isActive ? (
+        {isPanelOpen ? (
           <div
             onClick={(event) => event.stopPropagation()}
             className={`absolute top-full z-40 mt-2 w-[246px] rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-xl ${
@@ -2209,8 +2533,8 @@ export default function FinanceiroImportacaoNotasPage() {
   };
 
   return (
-    <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+    <div className={`${FINANCE_GRID_PAGE_LAYOUT.shell} h-screen overflow-hidden`}>
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex h-full min-h-0 flex-col overflow-hidden`}>
         <SefazSyncProgressModal
           state={sefazSyncModal}
           logoUrl={runtimeContext.logoUrl}
@@ -2261,25 +2585,68 @@ export default function FinanceiroImportacaoNotasPage() {
             setSelectedImportItems([]);
           }}
         />
-
-        <div className="space-y-6 bg-slate-100 p-6">
-          <div className="space-y-6">
-            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
-              <div className="mb-2">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">
-                  Importação automática pela SEFAZ
+        {isCancelModalOpen && selectedImportForCancel ? (
+          <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
+            <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
+              <div className="border-b border-slate-100 bg-rose-50 px-6 py-5">
+                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-rose-600">
+                  Cancelamento obrigatório
                 </div>
-                <div className="mt-0.5 text-xs font-medium text-slate-500">
-                  Use o certificado fiscal A1 da empresa para buscar DF-e e importar NF-e completas.
+                <div className="mt-2 text-xl font-black text-slate-900">
+                  Cancelar NF-e {selectedImportForCancel.invoiceNumber}
+                  {selectedImportForCancel.series ? ` / ${selectedImportForCancel.series}` : ''}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-slate-600">
+                  {selectedImportForCancel.supplierName || 'FORNECEDOR NÃO INFORMADO'}
                 </div>
               </div>
 
-              {defaultCertificate ? (
-                <div className="mb-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
-                  Certificado padrão atual: <span className="font-black">{defaultCertificate.aliasName}</span>
-                </div>
-              ) : null}
+              <div className="space-y-4 p-6">
+                <label className="block">
+                  <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    Motivo do cancelamento
+                  </span>
+                  <textarea
+                    value={cancelReason}
+                    onChange={(event) => setCancelReason(event.target.value)}
+                    className="min-h-32 w-full resize-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+                    placeholder="INFORME O MOTIVO..."
+                    disabled={Boolean(cancelingImportId)}
+                  />
+                </label>
 
+                {cancelModalError ? (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                    {cancelModalError}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseCancelModal}
+                    disabled={Boolean(cancelingImportId)}
+                    className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCancelInvoiceImport()}
+                    disabled={Boolean(cancelingImportId)}
+                    className="rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold uppercase tracking-[0.16em] text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {cancelingImportId ? 'Cancelando...' : 'Confirmar cancelamento'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden bg-slate-100 p-4">
+          <div className="shrink-0 space-y-3">
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
               <div className="space-y-2">
                 {loadingCertificates ? (
                   <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-500">
@@ -2407,8 +2774,8 @@ export default function FinanceiroImportacaoNotasPage() {
 
           </div>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                   Pendentes de aprovação
@@ -2422,41 +2789,13 @@ export default function FinanceiroImportacaoNotasPage() {
                 href={`/contas-a-pagar/notas-importadas${navigationQuery}`}
                 className="text-sm font-bold uppercase tracking-[0.14em] text-blue-600"
               >
-                Consultar tudo
+                Consultar Notas Aprovadas
               </Link>
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={clearRecentImportFilters}
-                disabled={!hasRecentImportFilters}
-                title="LIMPAR TODOS OS FILTROS DO GRID"
-                aria-label="Limpar todos os filtros do grid"
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4h8v2" />
-                  <path d="M10 11v6" />
-                  <path d="M14 11v6" />
-                  <path d="M6 6l1 14h10l1-14" />
-                </svg>
-                Limpar filtros
-              </button>
-            </div>
-
-            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className={`overflow-x-auto ${recentImportActiveFilter ? 'pb-40' : ''}`}>
-                <table className="min-w-[980px] table-fixed divide-y divide-slate-200">
+            <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+                <table className="w-full min-w-[1020px] table-fixed divide-y divide-slate-200">
                   <colgroup>
                     <col className="w-[126px]" />
                     <col className="w-[226px]" />
@@ -2464,16 +2803,19 @@ export default function FinanceiroImportacaoNotasPage() {
                     <col className="w-[98px]" />
                     <col className="w-[104px]" />
                     <col className="w-[70px]" />
-                    <col className="w-[120px]" />
+                    <col className="w-[158px]" />
                   </colgroup>
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        {renderRecentImportHeader(
-                          'status',
-                          'Semáforo',
-                          renderRecentImportStatusFilter(),
-                        )}
+                        <div className="flex items-center gap-2">
+                          {renderRecentImportClearAllButton()}
+                          {renderRecentImportHeader(
+                            'status',
+                            'Semáforo',
+                            renderRecentImportStatusFilter(),
+                          )}
+                        </div>
                       </th>
                       <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                         {renderRecentImportHeader(
@@ -2481,9 +2823,6 @@ export default function FinanceiroImportacaoNotasPage() {
                           'Nota fiscal',
                           renderRecentImportTextFilter(
                             'invoice',
-                            recentImportFilters.invoice,
-                            (value) =>
-                              updateRecentImportFilters({ invoice: value }),
                             'NF-E, SERIE OU CHAVE...',
                           ),
                         )}
@@ -2494,9 +2833,6 @@ export default function FinanceiroImportacaoNotasPage() {
                           'Fornecedor',
                           renderRecentImportTextFilter(
                             'supplier',
-                            recentImportFilters.supplier,
-                            (value) =>
-                              updateRecentImportFilters({ supplier: value }),
                             'FORNECEDOR OU CNPJ...',
                           ),
                         )}
@@ -2514,9 +2850,6 @@ export default function FinanceiroImportacaoNotasPage() {
                           'Valor total',
                           renderRecentImportTextFilter(
                             'total',
-                            recentImportFilters.total,
-                            (value) =>
-                              updateRecentImportFilters({ total: value }),
                             'VALOR...',
                           ),
                           'right',
@@ -2528,11 +2861,6 @@ export default function FinanceiroImportacaoNotasPage() {
                           'Duplicatas',
                           renderRecentImportTextFilter(
                             'installments',
-                            recentImportFilters.installments,
-                            (value) =>
-                              updateRecentImportFilters({
-                                installments: value,
-                              }),
                             'QTDE...',
                           ),
                           'right',
@@ -2542,6 +2870,11 @@ export default function FinanceiroImportacaoNotasPage() {
                         Ações
                       </th>
                     </tr>
+                    {recentImportActiveFilter ? (
+                      <tr aria-hidden="true">
+                        <th colSpan={7} className="h-56 bg-white p-0" />
+                      </tr>
+                    ) : null}
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {loadingRecent ? (
@@ -2550,8 +2883,8 @@ export default function FinanceiroImportacaoNotasPage() {
                           Carregando notas pendentes...
                         </td>
                       </tr>
-                    ) : filteredRecentImports.length ? (
-                      filteredRecentImports.map((item) => (
+                    ) : paginatedRecentImports.length ? (
+                      paginatedRecentImports.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50/80">
                           <td className="px-2.5 py-2 align-middle">
                             <div className="flex items-center gap-1.5">
@@ -2605,6 +2938,26 @@ export default function FinanceiroImportacaoNotasPage() {
                                   <path d="M12 3l7 4-7 4-7-4 7-4z" />
                                   <path d="M5 7v10l7 4 7-4V7" />
                                   <path d="M12 11v10" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCancelModal(item)}
+                                title="CANCELAR ESTA NOTA IMPORTADA"
+                                aria-label="Cancelar esta nota importada"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-300 bg-white text-rose-700 transition hover:bg-rose-50"
+                              >
+                                <svg
+                                  className="h-4 w-4"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M18 6 6 18" />
+                                  <path d="m6 6 12 12" />
                                 </svg>
                               </button>
                               <button
@@ -2664,9 +3017,56 @@ export default function FinanceiroImportacaoNotasPage() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {filteredRecentImports.length} registro(s) no resultado
+                  {filteredRecentImports.length
+                    ? `${recentImportFirstVisibleIndex}-${recentImportLastVisibleIndex} de ${filteredRecentImports.length} registro(s)`
+                    : '0 registro(s) no resultado'}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+                    {[10, 20, 50, 100].map((pageSize) => (
+                      <button
+                        key={pageSize}
+                        type="button"
+                        onClick={() => setRecentImportPageSize(pageSize)}
+                        className={`h-7 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.12em] transition ${
+                          recentImportPageSize === pageSize
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-500 hover:bg-white hover:text-blue-700'
+                        }`}
+                      >
+                        {pageSize}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRecentImportPage((current) => Math.max(1, current - 1))
+                    }
+                    disabled={currentRecentImportPage <= 1}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Anterior
+                  </button>
+                  <div className="min-w-20 text-center text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    {currentRecentImportPage}/{recentImportTotalPages}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRecentImportPage((current) =>
+                        Math.min(recentImportTotalPages, current + 1),
+                      )
+                    }
+                    disabled={currentRecentImportPage >= recentImportTotalPages}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Próxima
+                  </button>
                 </div>
               </div>
             </div>

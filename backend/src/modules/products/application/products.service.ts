@@ -548,6 +548,8 @@ export class ProductsService {
 
     const normalizedSearch = normalizeText(query.search);
     const normalizedDigits = normalizeDigits(query.search);
+    const normalizedName = normalizeText(query.name);
+    const normalizedInternalCode = normalizeText(query.internalCode);
     const normalizedStatus = normalizeText(query.status);
 
     const products = await this.prisma.product.findMany({
@@ -555,6 +557,20 @@ export class ProductsService {
         companyId: company.id,
         ...(normalizedStatus && normalizedStatus !== "ALL"
           ? { status: normalizedStatus }
+          : {}),
+        ...(normalizedName
+          ? {
+              name: {
+                contains: normalizedName,
+              },
+            }
+          : {}),
+        ...(normalizedInternalCode
+          ? {
+              internalCode: {
+                contains: normalizedInternalCode,
+              },
+            }
           : {}),
         ...(normalizedSearch
           ? {

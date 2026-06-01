@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
@@ -110,9 +110,28 @@ type ProductGridConfig = {
   hidden: ProductGridColumnKey[];
 };
 
+type ProductGridFilterKey = 'name' | 'internalCode';
+type ProductGridSortDirection = 'ASC' | 'DESC';
+type ProductGridSort = {
+  key: ProductGridFilterKey | null;
+  direction: ProductGridSortDirection;
+};
+type ProductColumnFilters = Record<ProductGridFilterKey, string>;
+
 const PRODUCT_SCREEN_ID = 'FINANCEIRO_PRODUTOS_LISTAGEM_GERAL';
 const PRODUCT_GRID_STORAGE_PREFIX = 'financeiro:produtos:grid-columns:';
 const PRODUCT_EXPORT_STORAGE_PREFIX = 'financeiro:produtos:export-config:';
+const PRODUCT_GRID_FILTER_KEYS: ProductGridFilterKey[] = ['name', 'internalCode'];
+const DEFAULT_PRODUCT_COLUMN_FILTERS: ProductColumnFilters = {
+  name: '',
+  internalCode: '',
+};
+const DEFAULT_PRODUCT_GRID_SORT: ProductGridSort = {
+  key: null,
+  direction: 'ASC',
+};
+const productFilterInputClass =
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500';
 
 const PRODUCT_GRID_COLUMNS: GridColumnDefinition<ProductItem, ProductGridColumnKey>[] = [
   { key: 'name', label: 'Produto', getValue: (item) => item.name },
@@ -240,7 +259,8 @@ METRICAS / CAMPOS EXIBIDOS:
 FILTROS APLICADOS AGORA:
 - companyId obrigatório pelo tenant informado
 - status opcional: ACTIVE | INACTIVE | ALL
-- busca opcional por name, internalCode, sku, barcode e ncmCode
+- nome do produto opcional por coluna
+- código interno opcional por coluna
 
 ORDENACAO:
 - order by products.name asc
@@ -267,34 +287,37 @@ FROM products PR
 INNER JOIN companies CO ON CO.id = PR.companyId
 WHERE PR.companyId = :companyId
   AND (:status = 'ALL' OR PR.status = :status)
-  AND (
-    :search IS NULL
-    OR PR.name LIKE :search
-    OR PR.internalCode LIKE :search
-    OR PR.sku LIKE :search
-    OR PR.barcode LIKE :searchDigits
-    OR PR.ncmCode LIKE :searchDigits
-  )
+  AND (:nameFilter IS NULL OR PR.name LIKE :nameFilter)
+  AND (:internalCodeFilter IS NULL OR PR.internalCode LIKE :internalCodeFilter)
 ORDER BY PR.name ASC;`;
 
 type ProductAuditParams = {
   sourceSystem?: string | null;
   sourceTenantId?: string | null;
   companyName?: string | null;
-  search: string;
+  nameFilter: string;
+  internalCodeFilter: string;
+  sortKey: ProductGridFilterKey | null;
+  sortDirection: ProductGridSortDirection;
   status: 'ACTIVE' | 'ALL' | 'INACTIVE';
   displayedRowsCount: number;
 };
 
 function buildProductAuditSql(params: ProductAuditParams) {
-  const search = params.search.trim().toUpperCase();
+  const nameFilter = params.nameFilter.trim().toUpperCase();
+  const internalCodeFilter = params.internalCodeFilter.trim().toUpperCase();
   const status = String(params.status || 'ACTIVE').toUpperCase();
+  const sortColumn = params.sortKey === 'internalCode' ? 'PR.internalCode' : 'PR.name';
+  const sortDirection = params.sortDirection === 'DESC' ? 'DESC' : 'ASC';
 
   return `-- PARAMETROS ATUAIS DO GRID
 -- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
 -- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
 -- :status = ${toSqlLiteral(status)}
--- :search = ${toSqlLiteral(search)}
+-- :nameFilter = ${toSqlLiteral(nameFilter)}
+-- :internalCodeFilter = ${toSqlLiteral(internalCodeFilter)}
+-- :sortColumn = ${toSqlLiteral(sortColumn)}
+-- :sortDirection = ${toSqlLiteral(sortDirection)}
 
 SELECT
   PR.id,
@@ -322,19 +345,24 @@ WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
     OR PR.status = ${toSqlLiteral(status)}
   )
   AND (
-    ${toSqlLiteral(search)} = ''
-    OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
-    OR UPPER(COALESCE(PR.internalCode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
-    OR UPPER(COALESCE(PR.sku, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
-    OR UPPER(COALESCE(PR.barcode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
-    OR UPPER(COALESCE(PR.ncmCode, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
+    ${toSqlLiteral(nameFilter)} = ''
+    OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(nameFilter)}) || '%'
   )
-ORDER BY PR.name ASC;`;
+  AND (
+    ${toSqlLiteral(internalCodeFilter)} = ''
+    OR UPPER(COALESCE(PR.internalCode, '')) LIKE '%' || UPPER(${toSqlLiteral(
+      internalCodeFilter,
+    )}) || '%'
+  )
+ORDER BY ${sortColumn} ${sortDirection}, PR.name ASC;`;
 }
 
 function buildProductAuditText(params: ProductAuditParams) {
-  const search = params.search.trim().toUpperCase();
+  const nameFilter = params.nameFilter.trim().toUpperCase();
+  const internalCodeFilter = params.internalCodeFilter.trim().toUpperCase();
   const status = String(params.status || 'ACTIVE').toUpperCase();
+  const sortColumn = params.sortKey === 'internalCode' ? 'products.internalCode' : 'products.name';
+  const sortDirection = params.sortDirection === 'DESC' ? 'DESC' : 'ASC';
 
   return `--- LOGICA DA TELA ---
 Esta tela lista e mantem o cadastro base de produtos do Financeiro.
@@ -350,9 +378,10 @@ FILTROS APLICADOS AGORA:
 - empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId, params.companyName)}
 - sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
 - status selecionado (:status): ${status}
-- busca digitada (:search): ${formatAuditValue(search)}
+- filtro por nome do produto (:nameFilter): ${formatAuditValue(nameFilter)}
+- filtro por código interno (:internalCodeFilter): ${formatAuditValue(internalCodeFilter)}
 - registros exibidos apos os filtros: ${params.displayedRowsCount}
-- ordenacao atual: products.name ASC
+- ordenacao atual: ${sortColumn} ${sortDirection}
 
 OBSERVACAO SOBRE O FILTRO DA EMPRESA:
 - CO.sourceSystem e CO.sourceTenantId resolvem a empresa financeira vinculada ao sistema de origem
@@ -521,6 +550,132 @@ function getVisibleProductColumns(config: ProductGridConfig) {
     .filter((column) => !config.hidden.includes(column.key));
 }
 
+function isProductGridFilterKey(value: ProductGridColumnKey): value is ProductGridFilterKey {
+  return PRODUCT_GRID_FILTER_KEYS.includes(value as ProductGridFilterKey);
+}
+
+function isProductFilterActive(filters: ProductColumnFilters, key: ProductGridFilterKey) {
+  return Boolean(filters[key].trim());
+}
+
+function getProductSortValue(item: ProductItem, key: ProductGridFilterKey) {
+  if (key === 'internalCode') {
+    return String(item.internalCode || '').trim().toUpperCase();
+  }
+
+  return String(item.name || '').trim().toUpperCase();
+}
+
+function compareProductSortValues(leftValue: string, rightValue: string) {
+  return String(leftValue || '').localeCompare(String(rightValue || ''), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+function SearchFilterIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z" />
+    </svg>
+  );
+}
+
+function ClearAllFiltersIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 12h10M10 18h4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 15l3 3m0-3-3 3" />
+    </svg>
+  );
+}
+
+type ProductFilterHeaderProps = {
+  label: string;
+  filterKey: ProductGridFilterKey;
+  active: boolean;
+  openFilter: ProductGridFilterKey | null;
+  setOpenFilter: (key: ProductGridFilterKey | null) => void;
+  sortDirection?: ProductGridSortDirection | null;
+  onSort: (direction: ProductGridSortDirection) => void;
+  align?: 'left' | 'right';
+  children: ReactNode;
+};
+
+function ProductFilterHeader({
+  label,
+  filterKey,
+  active,
+  openFilter,
+  setOpenFilter,
+  sortDirection = null,
+  onSort,
+  align = 'left',
+  children,
+}: ProductFilterHeaderProps) {
+  const isOpen = openFilter === filterKey;
+
+  return (
+    <div className="relative inline-flex items-center gap-1.5">
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpenFilter(isOpen ? null : filterKey)}
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+          active
+            ? 'border-blue-300 bg-blue-100 text-blue-700'
+            : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:text-blue-700'
+        }`}
+        title={`Filtrar e ordenar ${label}`}
+        aria-label={`Filtrar e ordenar ${label}`}
+      >
+        <SearchFilterIcon />
+      </button>
+
+      {isOpen ? (
+        <div className={`absolute top-8 z-40 w-64 rounded-2xl border border-slate-200 bg-white p-3 text-left normal-case tracking-normal text-slate-700 shadow-xl ${align === 'right' ? 'right-0' : 'left-0'}`}>
+          <div className="mb-3 space-y-2 border-b border-slate-100 pb-3">
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+              Ordenar coluna
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onSort('ASC');
+                  setOpenFilter(null);
+                }}
+                className={`rounded-lg border px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+                  sortDirection === 'ASC'
+                    ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Crescente
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onSort('DESC');
+                  setOpenFilter(null);
+                }}
+                className={`rounded-lg border px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+                  sortDirection === 'DESC'
+                    ? 'border-blue-300 bg-blue-100 text-blue-800 shadow-sm'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Decrescente
+              </button>
+            </div>
+          </div>
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ProductGridConfigModal({
   isOpen,
   order,
@@ -680,8 +835,18 @@ export default function FinanceiroProdutosPage() {
   const runtimeContext = useFinanceRuntimeContext();
 
   const [products, setProducts] = useState<ProductItem[]>([]);
-  const [searchInput, setSearchInput] = useState('');
-  const [appliedSearch, setAppliedSearch] = useState('');
+  const [productColumnFilters, setProductColumnFilters] = useState<ProductColumnFilters>({
+    ...DEFAULT_PRODUCT_COLUMN_FILTERS,
+  });
+  const [productColumnFilterDrafts, setProductColumnFilterDrafts] = useState<ProductColumnFilters>({
+    ...DEFAULT_PRODUCT_COLUMN_FILTERS,
+  });
+  const [openProductGridFilter, setOpenProductGridFilter] = useState<ProductGridFilterKey | null>(
+    null,
+  );
+  const [productGridSort, setProductGridSort] = useState<ProductGridSort>({
+    ...DEFAULT_PRODUCT_GRID_SORT,
+  });
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ALL' | 'INACTIVE'>('ACTIVE');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -704,14 +869,33 @@ export default function FinanceiroProdutosPage() {
   const [branchInventoryConfig, setBranchInventoryConfig] = useState<BranchInventoryConfig>(
     DEFAULT_BRANCH_INVENTORY_CONFIG,
   );
+  const displayedProducts = useMemo(() => {
+    if (!productGridSort.key) {
+      return products;
+    }
+
+    const directionMultiplier = productGridSort.direction === 'DESC' ? -1 : 1;
+    return [...products].sort((left, right) => {
+      const compared = compareProductSortValues(
+        getProductSortValue(left, productGridSort.key as ProductGridFilterKey),
+        getProductSortValue(right, productGridSort.key as ProductGridFilterKey),
+      );
+
+      return compared * directionMultiplier;
+    });
+  }, [productGridSort.direction, productGridSort.key, products]);
+
   const productAuditContext = useMemo(() => {
     const auditParams: ProductAuditParams = {
       sourceSystem: runtimeContext.sourceSystem,
       sourceTenantId: runtimeContext.sourceTenantId,
-      companyName: products[0]?.companyName,
-      search: appliedSearch,
+      companyName: displayedProducts[0]?.companyName || products[0]?.companyName,
+      nameFilter: productColumnFilters.name,
+      internalCodeFilter: productColumnFilters.internalCode,
+      sortKey: productGridSort.key,
+      sortDirection: productGridSort.direction,
       status: statusFilter,
-      displayedRowsCount: products.length,
+      displayedRowsCount: displayedProducts.length,
     };
 
     return {
@@ -719,7 +903,11 @@ export default function FinanceiroProdutosPage() {
       sqlText: buildProductAuditSql(auditParams),
     };
   }, [
-    appliedSearch,
+    displayedProducts,
+    productColumnFilters.internalCode,
+    productColumnFilters.name,
+    productGridSort.direction,
+    productGridSort.key,
     products,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
@@ -737,7 +925,8 @@ export default function FinanceiroProdutosPage() {
 
     try {
       const queryString = buildFinanceApiQueryString(runtimeContext, {
-        search: appliedSearch || null,
+        name: productColumnFilters.name.trim() || null,
+        internalCode: productColumnFilters.internalCode.trim() || null,
         status: statusFilter,
       });
 
@@ -748,7 +937,7 @@ export default function FinanceiroProdutosPage() {
     } finally {
       setLoading(false);
     }
-  }, [appliedSearch, runtimeContext, statusFilter]);
+  }, [productColumnFilters.internalCode, productColumnFilters.name, runtimeContext, statusFilter]);
 
   const loadBranchInventoryConfig = useCallback(async () => {
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
@@ -811,7 +1000,143 @@ export default function FinanceiroProdutosPage() {
     [columnOrder, hiddenColumns],
   );
 
-  const showClearSearchButton = Boolean(searchInput.trim() || appliedSearch.trim());
+  const firstVisibleProductFilterColumn = useMemo(
+    () => visibleColumns.find((column) => isProductGridFilterKey(column.key))?.key || null,
+    [visibleColumns],
+  );
+
+  const hasProductGridFilters = useMemo(
+    () =>
+      PRODUCT_GRID_FILTER_KEYS.some((key) => isProductFilterActive(productColumnFilters, key)) ||
+      Boolean(productGridSort.key),
+    [productColumnFilters, productGridSort.key],
+  );
+
+  const clearProductColumnFilter = useCallback((column: ProductGridFilterKey) => {
+    setProductColumnFilters((current) => ({
+      ...current,
+      [column]: '',
+    }));
+    setProductColumnFilterDrafts((current) => ({
+      ...current,
+      [column]: '',
+    }));
+  }, []);
+
+  const clearProductGridFilters = useCallback(() => {
+    setProductColumnFilters({ ...DEFAULT_PRODUCT_COLUMN_FILTERS });
+    setProductColumnFilterDrafts({ ...DEFAULT_PRODUCT_COLUMN_FILTERS });
+    setProductGridSort({ ...DEFAULT_PRODUCT_GRID_SORT });
+    setOpenProductGridFilter(null);
+  }, []);
+
+  function handleSetOpenProductGridFilter(filterKey: ProductGridFilterKey | null) {
+    if (filterKey) {
+      setProductColumnFilterDrafts((current) => ({
+        ...current,
+        [filterKey]: productColumnFilters[filterKey],
+      }));
+    }
+
+    setOpenProductGridFilter(filterKey);
+  }
+
+  function applyProductColumnFilter(filterKey: ProductGridFilterKey) {
+    setProductColumnFilters((current) => ({
+      ...current,
+      [filterKey]: productColumnFilterDrafts[filterKey].trim(),
+    }));
+    setOpenProductGridFilter(null);
+  }
+
+  function getProductGridSortDirection(filterKey: ProductGridFilterKey) {
+    return productGridSort.key === filterKey ? productGridSort.direction : null;
+  }
+
+  function handleProductGridSort(filterKey: ProductGridFilterKey, direction: ProductGridSortDirection) {
+    setProductGridSort({ key: filterKey, direction });
+  }
+
+  function renderProductGridHeader(column: GridColumnDefinition<ProductItem, ProductGridColumnKey>) {
+    if (isProductGridFilterKey(column.key)) {
+      const filterKey = column.key;
+      const filterLabel = filterKey === 'name' ? 'produto' : 'código interno';
+
+      return (
+        <div className="flex items-center gap-1.5">
+          {firstVisibleProductFilterColumn === filterKey ? (
+            <button
+              type="button"
+              onClick={clearProductGridFilters}
+              className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+                hasProductGridFilters
+                  ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                  : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+              }`}
+              title="Limpar todos os filtros"
+              aria-label="Limpar todos os filtros"
+            >
+              <ClearAllFiltersIcon />
+            </button>
+          ) : null}
+          <ProductFilterHeader
+            label={column.label}
+            filterKey={filterKey}
+            active={
+              isProductFilterActive(productColumnFilters, filterKey) ||
+              productGridSort.key === filterKey
+            }
+            openFilter={openProductGridFilter}
+            setOpenFilter={handleSetOpenProductGridFilter}
+            sortDirection={getProductGridSortDirection(filterKey)}
+            onSort={(direction) => handleProductGridSort(filterKey, direction)}
+            align={filterKey === 'internalCode' ? 'right' : 'left'}
+          >
+            <div className="space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Filtrar {filterLabel}
+              </div>
+              <input
+                value={productColumnFilterDrafts[filterKey]}
+                onChange={(event) =>
+                  setProductColumnFilterDrafts((current) => ({
+                    ...current,
+                    [filterKey]: event.target.value,
+                  }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    applyProductColumnFilter(filterKey);
+                  }
+                }}
+                className={productFilterInputClass}
+                placeholder={filterKey === 'name' ? 'DIGITE O PRODUTO' : 'DIGITE O CÓDIGO'}
+              />
+              <button
+                type="button"
+                onClick={() => applyProductColumnFilter(filterKey)}
+                className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 transition hover:bg-blue-100"
+              >
+                Filtrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearProductColumnFilter(filterKey);
+                  setOpenProductGridFilter(null);
+                }}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-100"
+              >
+                Limpar
+              </button>
+            </div>
+          </ProductFilterHeader>
+        </div>
+      );
+    }
+
+    return column.label;
+  }
 
   function openCreateModal() {
     setFormState({
@@ -961,7 +1286,7 @@ export default function FinanceiroProdutosPage() {
       ) : null}
 
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
-        <div className="grid gap-4 xl:grid-cols-[auto_1fr_auto_auto]">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
             onClick={openCreateModal}
@@ -969,36 +1294,6 @@ export default function FinanceiroProdutosPage() {
           >
             Incluir
           </button>
-
-          <input
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Pesquisar por produto, código, SKU, barras ou NCM"
-            className={FINANCE_GRID_PAGE_LAYOUT.input}
-          />
-
-          <button
-            type="button"
-            onClick={() => setAppliedSearch(searchInput.trim())}
-            className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
-          >
-            Pesquisar
-          </button>
-
-          {showClearSearchButton ? (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchInput('');
-                setAppliedSearch('');
-              }}
-              className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
-            >
-              Limpar consulta
-            </button>
-          ) : (
-            <div />
-          )}
         </div>
 
         {errorMessage ? (
@@ -1022,7 +1317,7 @@ export default function FinanceiroProdutosPage() {
                 Produtos encontrados
               </div>
               <div className="mt-1 text-xl font-black text-slate-900">
-                {loading ? 'Carregando...' : `${products.length} registro(s)`}
+                {loading ? 'Carregando...' : `${displayedProducts.length} registro(s)`}
               </div>
             </div>
             <div className="text-sm font-medium text-slate-500">
@@ -1040,16 +1335,21 @@ export default function FinanceiroProdutosPage() {
                     key={column.key}
                     className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500"
                   >
-                    {column.label}
+                    {renderProductGridHeader(column)}
                   </th>
                 ))}
                 <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                   Ações
                 </th>
               </tr>
+              {openProductGridFilter ? (
+                <tr aria-hidden="true">
+                  <th colSpan={visibleColumns.length + 1} className="h-44 bg-white p-0" />
+                </tr>
+              ) : null}
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {!loading && !products.length ? (
+              {!loading && !displayedProducts.length ? (
                 <tr>
                   <td
                     colSpan={visibleColumns.length + 1}
@@ -1060,7 +1360,7 @@ export default function FinanceiroProdutosPage() {
                 </tr>
               ) : null}
 
-              {products.map((product) => (
+              {displayedProducts.map((product) => (
                 <tr key={product.id} className="hover:bg-slate-50/70">
                   {visibleColumns.map((column) => {
                     if (column.key === 'name') {
@@ -1631,7 +1931,7 @@ export default function FinanceiroProdutosPage() {
       <GridExportModal
         isOpen={isExportModalOpen}
         title="Exportar produtos"
-        description={`A exportação respeita a busca atual e inclui ${products.length} registro(s).`}
+        description={`A exportação respeita os filtros atuais e inclui ${displayedProducts.length} registro(s).`}
         format={exportFormat}
         onFormatChange={setExportFormat}
         columns={PRODUCT_EXPORT_COLUMNS.map((column) => ({
@@ -1643,7 +1943,7 @@ export default function FinanceiroProdutosPage() {
         onClose={() => setIsExportModalOpen(false)}
         onExport={async (config) => {
           await exportGridRows({
-            rows: products,
+            rows: displayedProducts,
             columns: (config.orderedColumns || []).length
               ? config.orderedColumns
                   .map((key) =>
@@ -1660,7 +1960,11 @@ export default function FinanceiroProdutosPage() {
             branding: {
               title: 'Produtos',
               subtitle: 'Exportação com os filtros atualmente aplicados.',
-              schoolName: runtimeContext.companyName || products[0]?.companyName || 'FINANCEIRO',
+              schoolName:
+                runtimeContext.companyName ||
+                displayedProducts[0]?.companyName ||
+                products[0]?.companyName ||
+                'FINANCEIRO',
             },
             pdfOptions: config.pdfOptions,
           });

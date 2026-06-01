@@ -1,0 +1,16 @@
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftProductName" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftInternalCode" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftSku" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftBarcode" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftUnitCode" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftProductType" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftTracksInventory" BOOLEAN;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftAllowFraction" BOOLEAN;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftUsesLotControl" BOOLEAN;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftUsesExpirationControl" BOOLEAN;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftUsesColorSize" BOOLEAN;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftAllowsNegativeStock" BOOLEAN;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftMinimumStock" REAL;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "draftNotes" TEXT;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "productCheckedAt" DATETIME;
+ALTER TABLE "payable_invoice_import_items" ADD COLUMN "productCheckedBy" TEXT;

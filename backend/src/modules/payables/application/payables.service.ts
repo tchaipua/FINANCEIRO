@@ -16,10 +16,12 @@ import {
 import {
   ApprovePayableInvoiceImportDto,
   ApprovePayableInvoiceImportItemDto,
+  CancelPayableInvoiceImportDto,
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
   ListPayableInvoiceImportsDto,
   PAYABLE_INSTALLMENT_PAYMENT_METHODS,
+  UpdatePayableInvoiceImportItemApprovalDraftDto,
   UpdatePayableInvoiceImportInstallmentDto,
   UpdatePayableInvoiceImportInstallmentsDto,
 } from "./dto/payables.dto";
@@ -356,6 +358,21 @@ export class PayablesService {
     return typeof productValue === "boolean" ? productValue : defaultValue;
   }
 
+  private getDraftBoolean(
+    value: boolean | undefined,
+    draftValue: boolean | null | undefined,
+  ) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof draftValue === "boolean") {
+      return draftValue;
+    }
+
+    return undefined;
+  }
+
   private resolveProductStockOptions(
     item: any,
     approvalItem: ApprovePayableInvoiceImportItemDto | undefined,
@@ -363,13 +380,16 @@ export class PayablesService {
   ): ResolvedProductStockOptions {
     const tracksInventory = this.resolveBooleanByBranchMode(
       branchConfig.stockControlMode,
-      approvalItem?.tracksInventory,
+      this.getDraftBoolean(
+        approvalItem?.tracksInventory,
+        item.draftTracksInventory,
+      ),
       Boolean(item.tracksInventory),
     );
 
     const allowFraction = this.resolveBooleanByBranchMode(
       branchConfig.stockIntegerQuantityMode,
-      approvalItem?.allowFraction,
+      this.getDraftBoolean(approvalItem?.allowFraction, item.draftAllowFraction),
       !Number.isInteger(roundMoney(item.quantity || 0)),
       false,
       true,
@@ -380,22 +400,34 @@ export class PayablesService {
       allowFraction,
       usesLotControl: this.resolveBooleanByBranchMode(
         branchConfig.stockLotControlMode,
-        approvalItem?.usesLotControl,
+        this.getDraftBoolean(
+          approvalItem?.usesLotControl,
+          item.draftUsesLotControl,
+        ),
         false,
       ),
       usesExpirationControl: this.resolveBooleanByBranchMode(
         branchConfig.stockExpirationControlMode,
-        approvalItem?.usesExpirationControl,
+        this.getDraftBoolean(
+          approvalItem?.usesExpirationControl,
+          item.draftUsesExpirationControl,
+        ),
         false,
       ),
       usesColorSize: this.resolveBooleanByBranchMode(
         branchConfig.stockGridControlMode,
-        approvalItem?.usesColorSize,
+        this.getDraftBoolean(
+          approvalItem?.usesColorSize,
+          item.draftUsesColorSize,
+        ),
         false,
       ),
       allowsNegativeStock: this.resolveBooleanByBranchMode(
         branchConfig.stockNegativeControlMode,
-        approvalItem?.allowsNegativeStock,
+        this.getDraftBoolean(
+          approvalItem?.allowsNegativeStock,
+          item.draftAllowsNegativeStock,
+        ),
         false,
       ),
     };
@@ -530,6 +562,14 @@ export class PayablesService {
       };
     }
 
+    if (normalizedStatus === "CANCELED") {
+      return {
+        status: "CANCELED",
+        statusLabel: "CANCELADA",
+        semaphore: "YELLOW",
+      };
+    }
+
     return {
       status: "PENDING_APPROVAL",
       statusLabel: "AGUARDANDO APROVAÇÃO",
@@ -577,6 +617,7 @@ export class PayablesService {
       createdBy: invoiceImport.createdBy || null,
       updatedAt: invoiceImport.updatedAt.toISOString(),
       updatedBy: invoiceImport.updatedBy || null,
+      cancellationReason: invoiceImport.cancellationReason || null,
     };
   }
 
@@ -586,15 +627,56 @@ export class PayablesService {
     return {
       ...summary,
       approvalNotes: invoiceImport.approvalNotes || null,
+      cancellationReason: invoiceImport.cancellationReason || null,
       items: (invoiceImport.items || []).map((item: any) => ({
         id: item.id,
         lineNumber: item.lineNumber,
         approvalAction: item.approvalAction || null,
         productId: item.productId || null,
-        productName: item.product?.name || null,
+        productName: item.product?.name || item.draftProductName || null,
         productTracksInventory: item.product
           ? Boolean(item.product.tracksInventory)
+          : typeof item.draftTracksInventory === "boolean"
+            ? item.draftTracksInventory
+            : null,
+        draftInternalCode: item.draftInternalCode || null,
+        draftSku: item.draftSku || null,
+        draftBarcode: item.draftBarcode || null,
+        draftUnitCode: item.draftUnitCode || null,
+        draftProductType: item.draftProductType || null,
+        draftTracksInventory:
+          typeof item.draftTracksInventory === "boolean"
+            ? item.draftTracksInventory
+            : null,
+        draftAllowFraction:
+          typeof item.draftAllowFraction === "boolean"
+            ? item.draftAllowFraction
+            : null,
+        draftUsesLotControl:
+          typeof item.draftUsesLotControl === "boolean"
+            ? item.draftUsesLotControl
+            : null,
+        draftUsesExpirationControl:
+          typeof item.draftUsesExpirationControl === "boolean"
+            ? item.draftUsesExpirationControl
+            : null,
+        draftUsesColorSize:
+          typeof item.draftUsesColorSize === "boolean"
+            ? item.draftUsesColorSize
+            : null,
+        draftAllowsNegativeStock:
+          typeof item.draftAllowsNegativeStock === "boolean"
+            ? item.draftAllowsNegativeStock
+            : null,
+        draftMinimumStock:
+          typeof item.draftMinimumStock === "number"
+            ? roundMoney(item.draftMinimumStock)
+            : null,
+        draftNotes: item.draftNotes || null,
+        productCheckedAt: item.productCheckedAt
+          ? item.productCheckedAt.toISOString()
           : null,
+        productCheckedBy: item.productCheckedBy || null,
         recommendedAction: item.productId ? "LINK_EXISTING" : "CREATE_PRODUCT",
         supplierItemCode: item.supplierItemCode || null,
         barcode: item.barcode || null,
@@ -945,6 +1027,27 @@ export class PayablesService {
     return null;
   }
 
+  private getClearedProductDraftData() {
+    return {
+      draftProductName: null,
+      draftInternalCode: null,
+      draftSku: null,
+      draftBarcode: null,
+      draftUnitCode: null,
+      draftProductType: null,
+      draftTracksInventory: null,
+      draftAllowFraction: null,
+      draftUsesLotControl: null,
+      draftUsesExpirationControl: null,
+      draftUsesColorSize: null,
+      draftAllowsNegativeStock: null,
+      draftMinimumStock: null,
+      draftNotes: null,
+      productCheckedAt: null,
+      productCheckedBy: null,
+    };
+  }
+
   private async resolveApprovalProduct(
     tx: any,
     companyId: string,
@@ -957,6 +1060,7 @@ export class PayablesService {
   ) {
     const action =
       this.normalizeApprovalAction(approvalItem?.action) ||
+      this.normalizeApprovalAction(item.approvalAction) ||
       (item.productId ? "LINK_EXISTING" : "CREATE_PRODUCT");
 
     if (action === "IGNORE_STOCK") {
@@ -998,20 +1102,39 @@ export class PayablesService {
     }
 
     const productName =
-      normalizeText(approvalItem?.productName) || item.description;
+      normalizeText(approvalItem?.productName) ||
+      normalizeText(item.draftProductName) ||
+      item.description;
     const internalCode =
-      normalizeText(approvalItem?.internalCode) || item.supplierItemCode || null;
-    const barcode = normalizeDigits(approvalItem?.barcode) || item.barcode || null;
-    const sku = normalizeText(approvalItem?.sku) || null;
-    const unitCode = normalizeText(approvalItem?.unitCode) || item.unitCode || "UN";
+      normalizeText(approvalItem?.internalCode) ||
+      normalizeText(item.draftInternalCode) ||
+      item.supplierItemCode ||
+      null;
+    const barcode =
+      normalizeDigits(approvalItem?.barcode) ||
+      normalizeDigits(item.draftBarcode) ||
+      item.barcode ||
+      null;
+    const sku =
+      normalizeText(approvalItem?.sku) || normalizeText(item.draftSku) || null;
+    const unitCode =
+      normalizeText(approvalItem?.unitCode) ||
+      normalizeText(item.draftUnitCode) ||
+      item.unitCode ||
+      "UN";
     const productType =
-      normalizeText(approvalItem?.productType) || "GOODS";
+      normalizeText(approvalItem?.productType) ||
+      normalizeText(item.draftProductType) ||
+      "GOODS";
     const stockOptions = this.resolveProductStockOptions(
       item,
       approvalItem,
       branchConfig,
     );
-    const minimumStock = this.normalizeOptionalMoney(approvalItem?.minimumStock) || 0;
+    const minimumStock =
+      this.normalizeOptionalMoney(
+        approvalItem?.minimumStock ?? item.draftMinimumStock,
+      ) ?? 0;
     const cacheKey = [
       branchConfig.branchCode,
       barcode || "",
@@ -1080,6 +1203,7 @@ export class PayablesService {
         ncmCode: item.ncmCode || null,
         notes:
           normalizeText(approvalItem?.notes) ||
+          normalizeText(item.draftNotes) ||
           normalizeText(
             `CRIADO NA APROVAÇÃO DA NF-E ${invoiceImport.invoiceNumber}${invoiceImport.series ? ` SÉRIE ${invoiceImport.series}` : ""}`,
           ),
@@ -1200,6 +1324,164 @@ export class PayablesService {
     );
 
     return this.mapImportDetail(invoiceImport);
+  }
+
+  async updateInvoiceImportItemApprovalDraft(
+    importId: string,
+    itemId: string,
+    payload: UpdatePayableInvoiceImportItemApprovalDraftDto,
+  ) {
+    const invoiceImport = await this.loadScopedImport(
+      importId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+
+    if (normalizeText(invoiceImport.status) === "APPROVED") {
+      throw new BadRequestException(
+        "Não é possível alterar produtos de uma nota já aprovada.",
+      );
+    }
+
+    const item = invoiceImport.items.find(
+      (currentItem: any) => currentItem.id === String(itemId || "").trim(),
+    );
+
+    if (!item) {
+      throw new NotFoundException("ITEM DA NOTA IMPORTADA NÃO ENCONTRADO.");
+    }
+
+    const rawAction = String(payload.action ?? "").trim();
+    const action = this.normalizeApprovalAction(rawAction);
+    const clearProductDraftData = this.getClearedProductDraftData();
+    let data: Record<string, any> = {
+      updatedBy: payload.requestedBy || null,
+    };
+    let message = "Conferência do item atualizada.";
+
+    if (!rawAction) {
+      data = {
+        ...data,
+        approvalAction: null,
+        productId: null,
+        ...clearProductDraftData,
+      };
+    } else if (action === "IGNORE_STOCK") {
+      data = {
+        ...data,
+        approvalAction: "IGNORE_STOCK",
+        productId: null,
+        ...clearProductDraftData,
+      };
+      message = "Item marcado como sem estoque.";
+    } else if (action === "LINK_EXISTING") {
+      const targetProductId = String(payload.productId || item.productId || "").trim();
+
+      if (!targetProductId) {
+        throw new BadRequestException(
+          `Selecione um produto existente para o item ${item.lineNumber}.`,
+        );
+      }
+
+      const product = await this.prisma.product.findFirst({
+        where: {
+          id: targetProductId,
+          companyId: invoiceImport.companyId,
+          canceledAt: null,
+        },
+      });
+
+      if (!product) {
+        throw new BadRequestException(
+          `O produto informado para o item ${item.lineNumber} não pertence a este tenant.`,
+        );
+      }
+
+      data = {
+        ...data,
+        approvalAction: "LINK_EXISTING",
+        productId: product.id,
+        ...clearProductDraftData,
+      };
+      message = "Vínculo do produto conferido.";
+    } else if (action === "CREATE_PRODUCT") {
+      const productName =
+        normalizeText(payload.productName) ||
+        normalizeText(item.draftProductName) ||
+        item.description;
+
+      if (!productName) {
+        throw new BadRequestException(
+          `Informe o nome do produto para o item ${item.lineNumber}.`,
+        );
+      }
+
+      data = {
+        ...data,
+        approvalAction: "CREATE_PRODUCT",
+        productId: null,
+        draftProductName: productName,
+        draftInternalCode:
+          normalizeText(payload.internalCode) ||
+          normalizeText(item.supplierItemCode),
+        draftSku: normalizeText(payload.sku),
+        draftBarcode:
+          normalizeDigits(payload.barcode) || normalizeDigits(item.barcode),
+        draftUnitCode:
+          normalizeText(payload.unitCode) || normalizeText(item.unitCode) || "UN",
+        draftProductType: normalizeText(payload.productType) || "GOODS",
+        draftTracksInventory:
+          typeof payload.tracksInventory === "boolean"
+            ? payload.tracksInventory
+            : Boolean(item.tracksInventory),
+        draftAllowFraction:
+          typeof payload.allowFraction === "boolean"
+            ? payload.allowFraction
+            : !Number.isInteger(roundMoney(item.quantity || 0)),
+        draftUsesLotControl:
+          typeof payload.usesLotControl === "boolean"
+            ? payload.usesLotControl
+            : false,
+        draftUsesExpirationControl:
+          typeof payload.usesExpirationControl === "boolean"
+            ? payload.usesExpirationControl
+            : false,
+        draftUsesColorSize:
+          typeof payload.usesColorSize === "boolean"
+            ? payload.usesColorSize
+            : false,
+        draftAllowsNegativeStock:
+          typeof payload.allowsNegativeStock === "boolean"
+            ? payload.allowsNegativeStock
+            : false,
+        draftMinimumStock:
+          this.normalizeOptionalMoney(payload.minimumStock) ?? 0,
+        draftNotes: normalizeText(payload.notes),
+        productCheckedAt: new Date(),
+        productCheckedBy: payload.requestedBy || null,
+      };
+      message = "Produto conferido e reservado para criação na aprovação da nota.";
+    } else {
+      throw new BadRequestException(
+        `Ação inválida para o item ${item.lineNumber}.`,
+      );
+    }
+
+    await this.prisma.payableInvoiceImportItem.update({
+      where: { id: item.id },
+      data,
+    });
+
+    const updatedImport = await this.loadScopedImport(
+      importId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+
+    return {
+      ...this.mapImportDetail(updatedImport),
+      message,
+    };
   }
 
   async updateInvoiceImportInstallments(
@@ -1437,6 +1719,49 @@ export class PayablesService {
     };
   }
 
+  async cancelInvoiceImport(
+    importId: string,
+    payload: CancelPayableInvoiceImportDto,
+  ) {
+    const invoiceImport = await this.loadScopedImport(
+      importId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const cancellationReason = normalizeText(payload.cancellationReason);
+
+    if (!cancellationReason) {
+      throw new BadRequestException(
+        "Informe o motivo do cancelamento da nota.",
+      );
+    }
+
+    if (normalizeText(invoiceImport.status) === "APPROVED") {
+      throw new BadRequestException(
+        "Não é possível cancelar uma nota já aprovada.",
+      );
+    }
+
+    await this.prisma.payableInvoiceImport.update({
+      where: { id: invoiceImport.id },
+      data: {
+        status: "CANCELED",
+        cancellationReason,
+        canceledAt: new Date(),
+        canceledBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return {
+      id: invoiceImport.id,
+      status: "CANCELED",
+      statusLabel: "CANCELADA",
+      cancellationReason,
+      message: "Nota cancelada com sucesso.",
+    };
+  }
+
   async approveInvoiceImport(
     importId: string,
     payload: ApprovePayableInvoiceImportDto,
@@ -1592,6 +1917,7 @@ export class PayablesService {
           data: {
             productId: resolution.product?.id || null,
             approvalAction: resolution.action,
+            ...this.getClearedProductDraftData(),
             updatedBy: payload.requestedBy || null,
           },
         });

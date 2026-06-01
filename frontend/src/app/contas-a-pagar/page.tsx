@@ -37,7 +37,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - atalhos de certificados digitais
 - atalhos de fornecedores
 - atalhos de consulta de parcelas
-- atalhos de consulta de notas importadas
+- atalhos de consulta de notas aprovadas
 - atalho de lancamento manual de contas a pagar
 
 FILTROS APLICADOS AGORA:
@@ -100,7 +100,7 @@ const MENU_ITEMS = [
   },
   {
     id: 'notas-importadas',
-    label: 'Consultar Notas Importadas',
+    label: 'Consultar Notas Aprovadas',
     href: '/contas-a-pagar/notas-importadas',
     accent: 'from-emerald-500 to-emerald-600',
     icon: (

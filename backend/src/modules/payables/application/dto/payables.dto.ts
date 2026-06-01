@@ -165,6 +165,89 @@ export class ApprovePayableInvoiceImportItemDto {
   notes?: string;
 }
 
+export class UpdatePayableInvoiceImportItemApprovalDraftDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  action!: string;
+
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsOptional()
+  @IsString()
+  productName?: string;
+
+  @IsOptional()
+  @IsString()
+  internalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
+  @IsOptional()
+  @IsString()
+  unitCode?: string;
+
+  @IsOptional()
+  @IsString()
+  productType?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  tracksInventory?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  allowFraction?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesLotControl?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesExpirationControl?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  usesColorSize?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => transformBooleanInput(value))
+  @IsBoolean()
+  allowsNegativeStock?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minimumStock?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 export class ApprovePayableInvoiceImportDto {
   @IsOptional()
   @IsString()
@@ -221,6 +304,21 @@ export class ApprovePayableInvoiceImportDto {
   @ValidateNested({ each: true })
   @Type(() => ApprovePayableInvoiceImportItemDto)
   items?: ApprovePayableInvoiceImportItemDto[];
+}
+
+export class CancelPayableInvoiceImportDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  cancellationReason!: string;
 }
 
 export class UpdatePayableInvoiceImportInstallmentDto {
