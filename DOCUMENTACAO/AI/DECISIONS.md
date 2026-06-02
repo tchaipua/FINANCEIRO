@@ -136,3 +136,42 @@ Motivo:
 - manter Escola e Financeiro com o mesmo padrao de suporte tecnico;
 - evitar divergencia visual entre sistemas integrados;
 - garantir que SQL copiado seja utilizavel diretamente para validacao e diagnostico.
+
+## D012 - Modelo compartilhado de tela com grid paginado
+
+O `Financeiro` adota como referencia aprovada a tela `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS` para telas com grid paginado.
+
+Decisao:
+
+- a rolagem vertical dos registros deve ficar dentro do grid;
+- o cabecalho das colunas deve ficar fixo enquanto os registros rolam;
+- as linhas do corpo do grid devem ser zebradas com contraste perceptivel;
+- a linha clicada deve ficar destacada ate outra linha ser selecionada;
+- filtros por coluna ficam no proprio cabecalho, com `Limpar todos os filtros` como primeiro botao a esquerda;
+- quando a tela possuir acao de incluir/cadastrar, esse botao fica no canto esquerdo da area da listagem, como primeira informacao visual acima do grid;
+- o rodape do grid deve manter, na mesma linha, `Colunas`, impressao/exportacao, semaforo/status, total de registros ao lado do semaforo, combobox de quantidade por pagina iniciado em `10` e navegacao `<< < pagina/total > >>`;
+- o rodape nao deve exibir texto de intervalo como `1-10 de 100 registro(s)`;
+- o detalhamento completo fica em `DOCUMENTACAO/AI/UI_PATTERNS.md`, `PAT-015.2`.
+
+Motivo:
+
+- aumentar a area util do grid;
+- reduzir rolagem duplicada;
+- manter Escola e Financeiro com o mesmo padrao operacional para telas de listagem.
+
+## D013 - Logotipo obrigatorio em popup/modal
+
+O `Financeiro` adota o mesmo reforco aprovado na Escola para identidade visual de popups.
+
+Decisao:
+
+- todo popup/modal do `Financeiro` deve manter logotipo institucional no cabecalho quando houver contexto de escola/empresa;
+- foto, avatar ou icone do registro nao substitui o logotipo institucional;
+- quando houver avatar do registro, ele deve aparecer como elemento adicional ao logotipo;
+- a regra vale tambem para popups internos de telas financeiras embutidas na Escola.
+
+Motivo:
+
+- manter consistencia visual entre Escola e Financeiro;
+- garantir que o usuario sempre reconheca a origem institucional do popup;
+- evitar regressao em novos popups criados a partir de detalhes de registros.

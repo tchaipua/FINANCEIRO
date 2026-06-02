@@ -171,3 +171,110 @@ Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Fina
   - `DOCUMENTACAO/AI/UI_PATTERNS.md`
   - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
 - Status: aprovado
+
+### UIP-0014
+
+- Data: 2026-06-02
+- Padrao: grid com rolagem interna, cabecalho fixo e rodape paginado
+- Contexto: na validacao da tela `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS`, foi aprovado um modelo completo para telas com grid paginado, mantendo a rolagem apenas nos registros e preservando cabecalho/rodape do grid sempre visiveis
+- Alteracao: criado o `PAT-015.2` com barra de rolagem dentro do grid, cabecalho de colunas fixo, filtros por coluna com `Limpar todos os filtros` como primeiro botao do cabecalho, rodape em linha unica com `Colunas`, impressao/exportacao, semaforo/status, combobox `10/20/50/100` e navegacao `<< < pagina/total > >>`
+- Componentes/Telas:
+  - `frontend/src/app/contas-a-pagar/importacao-notas/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0015
+
+- Data: 2026-06-02
+- Padrao: botoes iconicos de acao em linhas de grid
+- Contexto: na tela `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_CERTIFICADOS_DIGITAIS`, foi aprovado que botoes de acao de linha nao devem usar texto visivel quando houver icone claro para a acao
+- Alteracao: o `PAT-015.2` passa a registrar que acoes de linha em grid devem usar botoes iconicos, sem texto dentro do botao, sempre com `title`/tooltip e `aria-label` explicando a acao, como alterar, excluir, ativar, definir padrao, visualizar ou abrir detalhes
+- Componentes/Telas:
+  - `frontend/src/app/contas-a-pagar/certificados-digitais/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0016
+
+- Data: 2026-06-02
+- Padrao: status ativo/inativo por bolinha na linha do grid
+- Contexto: na tela `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_CERTIFICADOS_DIGITAIS`, foi aprovado que a situacao do registro nao deve aparecer como coluna `Semaforo` nem como pill textual `ATIVO`/`INATIVO`
+- Alteracao: o `PAT-015.2` passa a registrar que status ativo/inativo em linhas de grid deve usar somente uma bolinha antes da descricao principal; verde representa `ATIVO`, vermelho representa `INATIVO`, sempre com `title`/tooltip e `aria-label`
+- Componentes/Telas:
+  - `frontend/src/app/contas-a-pagar/certificados-digitais/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0017
+
+- Data: 2026-06-02
+- Padrao: botao de incluir como primeira informacao em telas com grid
+- Contexto: na tela `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_CERTIFICADOS_DIGITAIS`, foi aprovado que a acao de incluir deve ficar sempre no canto esquerdo da area de grid
+- Alteracao: o `PAT-015.2` passa a registrar que, quando houver acao de incluir/cadastrar em tela com grid, o botao deve ficar na faixa de acoes acima do grid, no canto esquerdo, como primeira informacao visual antes de titulo, contador, busca ou acoes secundarias
+- Componentes/Telas:
+  - `frontend/src/app/contas-a-pagar/certificados-digitais/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0018
+
+- Data: 2026-06-02
+- Padrao: grid zebrado com contraste perceptivel
+- Contexto: na tela `PRINCIPAL_PROFESSORES`, foi aprovado que as linhas do grid precisam ter zebrado mais destacado
+- Alteracao: o `PAT-015.2` passa a registrar zebrado com contraste perceptivel no corpo do grid: linhas pares ativas brancas, linhas impares ativas em `slate-200/70` ou equivalente, inativas em tons rose mais fortes e hover um nivel acima sem perder a leitura do zebrado
+- Componentes/Telas:
+  - `C:/Sistemas/IA/Escola/frontend/src/app/principal/professores/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0019
+
+- Data: 2026-06-02
+- Padrao: destaque persistente da linha clicada no grid
+- Contexto: na tela `PRINCIPAL_PROFESSORES`, foi aprovado que ao clicar em uma linha do grid ela deve ficar destacada
+- Alteracao: o `PAT-015.2` passa a registrar que a linha clicada deve permanecer destacada ate outra linha ser selecionada, sobrepondo temporariamente o zebrado com fundo azul claro, contorno azul perceptivel e `aria-selected` quando houver suporte
+- Componentes/Telas:
+  - `C:/Sistemas/IA/Escola/frontend/src/app/principal/professores/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0020
+
+- Data: 2026-06-02
+- Padrao: total de registros no rodape do grid
+- Contexto: na tela `PRINCIPAL_PROFESSORES`, foi aprovado que o total de registros deve aparecer no rodape ao lado do semaforo/status
+- Alteracao: o `PAT-015.2` passa a registrar que o rodape do grid deve exibir `Total registros: N` ao lado do semaforo/status, antes dos controles de quantidade por pagina e navegacao
+- Componentes/Telas:
+  - `C:/Sistemas/IA/Escola/frontend/src/app/principal/professores/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0021
+
+- Data: 2026-06-02
+- Padrao: quantidade padrao de 10 registros por pagina no grid
+- Contexto: foi aprovado que toda tela com grid deve abrir com o combobox de quantidade por pagina marcado em `10`
+- Alteracao: o `PAT-015.2` passa a registrar que grids paginados devem iniciar obrigatoriamente com `10` registros por pagina, mantendo as opcoes `10`, `20`, `50` e `100`
+- Componentes/Telas:
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado
+
+### UIP-0022
+
+- Data: 2026-06-02
+- Padrao: logotipo institucional obrigatorio em cabecalho de popup Escola/Financeiro
+- Contexto: na tela `PRINCIPAL_ALUNOS` da Escola, foi reforcado que todo popup deve manter o logotipo institucional no cabecalho, inclusive quando houver foto/avatar do registro.
+- Alteracao: o `PAT-017` passa a registrar que, no `Financeiro`, o logotipo institucional e obrigatorio e nao pode ser substituido por avatar/foto/icone do registro; quando existir avatar do registro, ele deve ser adicional ao logotipo.
+- Componentes/Telas:
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+  - `C:/Sistemas/IA/Escola/frontend/src/app/components/grid-record-popover.tsx`
+- Status: aprovado

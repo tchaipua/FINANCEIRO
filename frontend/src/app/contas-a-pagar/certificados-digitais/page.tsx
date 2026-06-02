@@ -2,6 +2,7 @@
 import {
   ChangeEvent,
   FormEvent,
+  ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -67,7 +68,7 @@ ORDENACAO:
 type CertificadosAuditParams = {
   sourceSystem?: string | null;
   sourceTenantId?: string | null;
-  status: 'ALL' | 'ACTIVE' | 'INACTIVE';
+  status: CertificateStatusFilter;
   search: string;
   displayedRowsCount: number;
 };
@@ -152,6 +153,32 @@ type CertificateExportColumnKey =
   | 'default'
   | 'lastSyncAt';
 
+type CertificateGridColumnKey =
+  | 'aliasName'
+  | 'holder'
+  | 'environment'
+  | 'validTo'
+  | 'default';
+
+type CertificateFilterColumn = 'status' | CertificateGridColumnKey;
+type CertificateSortDirection = 'asc' | 'desc';
+type CertificateStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
+type CertificateDefaultFilter = 'ALL' | 'YES' | 'NO';
+type CertificateSortState = {
+  column: CertificateFilterColumn;
+  direction: CertificateSortDirection;
+} | null;
+
+type CertificateFilters = {
+  status: CertificateStatusFilter;
+  aliasName: string;
+  holder: string;
+  environment: string;
+  validToFrom: string;
+  validToTo: string;
+  default: CertificateDefaultFilter;
+};
+
 const CERTIFICATE_EXPORT_COLUMNS: GridColumnDefinition<
   FiscalCertificateItem,
   CertificateExportColumnKey
@@ -196,6 +223,27 @@ const CERTIFICATE_EXPORT_COLUMNS: GridColumnDefinition<
   },
 ];
 
+const CERTIFICATE_GRID_COLUMNS: Array<{
+  key: CertificateGridColumnKey;
+  label: string;
+}> = [
+  { key: 'aliasName', label: 'Apelido' },
+  { key: 'holder', label: 'Titular' },
+  { key: 'environment', label: 'Ambiente' },
+  { key: 'validTo', label: 'Validade' },
+  { key: 'default', label: 'Padrão' },
+];
+
+const EMPTY_CERTIFICATE_FILTERS: CertificateFilters = {
+  status: 'ALL',
+  aliasName: '',
+  holder: '',
+  environment: '',
+  validToFrom: '',
+  validToTo: '',
+  default: 'ALL',
+};
+
 const emptyCertificateForm: CertificateFormState = {
   id: null,
   aliasName: '',
@@ -207,6 +255,120 @@ const emptyCertificateForm: CertificateFormState = {
   certificatePassword: '',
   fileName: '',
 };
+
+function buildDateOnlyInputValue(value?: string | null) {
+  if (!value) {
+    return '';
+  }
+
+  const normalized = String(value).trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.slice(0, 10);
+}
+
+function normalizeCertificateFilterValue(value?: string | number | null) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function normalizeCertificateDigits(value?: string | number | null) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function matchesCertificateTextFilter(
+  values: Array<string | number | null | undefined>,
+  filterValue: string,
+) {
+  const normalizedFilter = normalizeCertificateFilterValue(filterValue);
+  const filterDigits = normalizeCertificateDigits(filterValue);
+
+  if (!normalizedFilter) {
+    return true;
+  }
+
+  return values.some((value) => {
+    const normalizedValue = normalizeCertificateFilterValue(value);
+
+    if (normalizedValue.includes(normalizedFilter)) {
+      return true;
+    }
+
+    return Boolean(
+      filterDigits &&
+        normalizeCertificateDigits(value).includes(filterDigits),
+    );
+  });
+}
+
+function getCertificateStatusFilterValue(
+  certificate: FiscalCertificateItem,
+): Exclude<CertificateStatusFilter, 'ALL'> {
+  if (certificate.status !== 'ACTIVE') {
+    return 'INACTIVE';
+  }
+
+  return certificate.expired ? 'EXPIRED' : 'ACTIVE';
+}
+
+function getCertificateStatusLabel(certificate: FiscalCertificateItem) {
+  const status = getCertificateStatusFilterValue(certificate);
+
+  if (status === 'INACTIVE') {
+    return 'INATIVO';
+  }
+
+  return status === 'EXPIRED' ? 'VENCIDO' : 'ATIVO';
+}
+
+function getCertificateEnvironmentLabel(certificate: FiscalCertificateItem) {
+  return certificate.environment === 'PRODUCTION' ? 'PRODUÇÃO' : 'HOMOLOGAÇÃO';
+}
+
+function getCertificateSortValue(
+  certificate: FiscalCertificateItem,
+  column: CertificateFilterColumn,
+) {
+  if (column === 'status') {
+    return getCertificateStatusLabel(certificate);
+  }
+
+  if (column === 'aliasName') {
+    return `${certificate.aliasName || ''} ${certificate.purpose || ''}`;
+  }
+
+  if (column === 'holder') {
+    return `${certificate.holderName || ''} ${certificate.holderDocument || ''}`;
+  }
+
+  if (column === 'environment') {
+    return `${getCertificateEnvironmentLabel(certificate)} ${
+      certificate.authorStateCode || ''
+    }`;
+  }
+
+  if (column === 'validTo') {
+    return buildDateOnlyInputValue(certificate.validTo);
+  }
+
+  return certificate.isDefault ? 1 : 0;
+}
+
+function compareCertificateSortValues(left: string | number, right: string | number) {
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right;
+  }
+
+  return String(left).localeCompare(String(right), 'pt-BR', {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
 
 function getStatusClass(certificate: FiscalCertificateItem) {
   if (certificate.status !== 'ACTIVE') {
@@ -221,15 +383,15 @@ function getStatusClass(certificate: FiscalCertificateItem) {
 }
 
 function getSemaphoreClass(certificate: FiscalCertificateItem) {
-  if (certificate.status !== 'ACTIVE') {
-    return 'bg-slate-400';
-  }
+  return certificate.status === 'ACTIVE' && !certificate.expired
+    ? 'bg-emerald-500'
+    : 'bg-rose-500';
+}
 
-  if (certificate.expired) {
-    return 'bg-rose-500';
-  }
-
-  return 'bg-emerald-500';
+function getCertificateIndicatorLabel(certificate: FiscalCertificateItem) {
+  return certificate.status === 'ACTIVE' && !certificate.expired
+    ? 'ATIVO'
+    : 'INATIVO';
 }
 
 function buildCertificateForm(
@@ -522,16 +684,166 @@ function CertificateModal({
   );
 }
 
+function CertificateGridConfigModal({
+  isOpen,
+  hidden,
+  onSave,
+  onClose,
+}: {
+  isOpen: boolean;
+  hidden: CertificateGridColumnKey[];
+  onSave: (hidden: CertificateGridColumnKey[]) => void;
+  onClose: () => void;
+}) {
+  const [draftHidden, setDraftHidden] =
+    useState<CertificateGridColumnKey[]>(hidden);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDraftHidden(hidden);
+    }
+  }, [hidden, isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const visibleCount = CERTIFICATE_GRID_COLUMNS.length - draftHidden.length + 2;
+
+  return (
+    <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
+      <div className={FINANCE_GRID_PAGE_LAYOUT.modalPanel}>
+        <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              Configuração da tela
+            </div>
+            <h2 className="mt-1 text-2xl font-black text-slate-900">
+              Configurar colunas do grid
+            </h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Selecione as colunas informativas da lista de certificados.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            X
+          </button>
+        </div>
+
+        <div className={FINANCE_GRID_PAGE_LAYOUT.modalBody}>
+          <div className={FINANCE_GRID_PAGE_LAYOUT.modalSummaryCard}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-sm font-black text-slate-700">
+                  Colunas visíveis: {visibleCount}
+                </div>
+                <div className="text-xs font-medium text-slate-500">
+                  Situação e ações permanecem fixas neste grid.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDraftHidden([])}
+                  className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  Restaurar padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSave(draftHidden);
+                    onClose();
+                  }}
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 min-h-0 flex-1 overflow-auto pr-1">
+            <div className="space-y-3">
+              {CERTIFICATE_GRID_COLUMNS.map((column) => {
+                const visible = !draftHidden.includes(column.key);
+
+                return (
+                  <div
+                    key={column.key}
+                    className={`${FINANCE_GRID_PAGE_LAYOUT.modalListItem} ${
+                      visible
+                        ? FINANCE_GRID_PAGE_LAYOUT.modalActiveItem
+                        : FINANCE_GRID_PAGE_LAYOUT.modalInactiveItem
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraftHidden((current) =>
+                          current.includes(column.key)
+                            ? current.filter((item) => item !== column.key)
+                            : [...current, column.key],
+                        )
+                      }
+                      className={
+                        visible
+                          ? FINANCE_GRID_PAGE_LAYOUT.modalToggleOn
+                          : FINANCE_GRID_PAGE_LAYOUT.modalToggleOff
+                      }
+                    >
+                      {visible ? '✓' : 'X'}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-black uppercase tracking-[0.12em] text-slate-700">
+                        {column.label}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-slate-500">
+                        Controle a visibilidade desta coluna no grid.
+                      </div>
+                    </div>
+
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                      {visible ? 'Visível' : 'Oculta'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FinanceiroCertificadosDigitaisPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [items, setItems] = useState<FiscalCertificateItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>(
-    'ALL',
-  );
+  const [statusFilter, setStatusFilter] =
+    useState<CertificateStatusFilter>('ALL');
+  const [certificateFilters, setCertificateFilters] =
+    useState<CertificateFilters>(EMPTY_CERTIFICATE_FILTERS);
+  const [certificateFilterDrafts, setCertificateFilterDrafts] =
+    useState<CertificateFilters>(EMPTY_CERTIFICATE_FILTERS);
+  const [certificateSort, setCertificateSort] =
+    useState<CertificateSortState>(null);
+  const [certificateActiveFilter, setCertificateActiveFilter] =
+    useState<CertificateFilterColumn | null>(null);
+  const [certificatePageSize, setCertificatePageSize] = useState(10);
+  const [certificatePage, setCertificatePage] = useState(1);
+  const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
+  const [hiddenColumns, setHiddenColumns] = useState<
+    CertificateGridColumnKey[]
+  >([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
   const [exportColumns, setExportColumns] = useState<
@@ -557,28 +869,13 @@ export default function FinanceiroCertificadosDigitaisPage() {
 
     try {
       const queryString = buildFinanceApiQueryString(runtimeContext, {
-        status: statusFilter,
+        status: 'ALL',
       });
       const response = await getJson<FiscalCertificateItem[]>(
         `/fiscal-certificates${queryString}`,
       );
 
-      const normalizedSearch = searchInput.trim().toUpperCase();
-      const filtered = normalizedSearch
-        ? response.filter((item) =>
-            [
-              item.aliasName,
-              item.holderName,
-              item.holderDocument,
-              item.serialNumber || '',
-            ]
-              .join(' ')
-              .toUpperCase()
-              .includes(normalizedSearch),
-          )
-        : response;
-
-      setItems(filtered);
+      setItems(response);
     } catch (error) {
       setErrorMessage(
         getFriendlyRequestErrorMessage(
@@ -589,19 +886,153 @@ export default function FinanceiroCertificadosDigitaisPage() {
     } finally {
       setLoading(false);
     }
-  }, [runtimeContext, searchInput, statusFilter]);
+  }, [runtimeContext]);
 
   useEffect(() => {
     void loadCertificates();
   }, [loadCertificates]);
+
+  const visibleCertificateGridColumns = useMemo(
+    () =>
+      CERTIFICATE_GRID_COLUMNS.filter(
+        (column) => !hiddenColumns.includes(column.key),
+      ),
+    [hiddenColumns],
+  );
+
+  const isCertificateGridColumnVisible = useCallback(
+    (column: CertificateGridColumnKey) =>
+      visibleCertificateGridColumns.some((item) => item.key === column),
+    [visibleCertificateGridColumns],
+  );
+
+  const certificateGridColSpan = visibleCertificateGridColumns.length + 2;
+
+  const filteredCertificates = useMemo(() => {
+    const filtered = items.filter((item) => {
+      const status = getCertificateStatusFilterValue(item);
+      const validTo = buildDateOnlyInputValue(item.validTo);
+
+      if (statusFilter !== 'ALL' && status !== statusFilter) {
+        return false;
+      }
+
+      if (
+        certificateFilters.validToFrom &&
+        (!validTo || validTo < certificateFilters.validToFrom)
+      ) {
+        return false;
+      }
+
+      if (
+        certificateFilters.validToTo &&
+        (!validTo || validTo > certificateFilters.validToTo)
+      ) {
+        return false;
+      }
+
+      if (
+        certificateFilters.default !== 'ALL' &&
+        (certificateFilters.default === 'YES') !== item.isDefault
+      ) {
+        return false;
+      }
+
+      if (
+        !matchesCertificateTextFilter(
+          [item.aliasName, item.purpose, item.serialNumber || ''],
+          certificateFilters.aliasName,
+        )
+      ) {
+        return false;
+      }
+
+      if (
+        !matchesCertificateTextFilter(
+          [item.holderName, item.holderDocument],
+          certificateFilters.holder,
+        )
+      ) {
+        return false;
+      }
+
+      return matchesCertificateTextFilter(
+        [getCertificateEnvironmentLabel(item), item.authorStateCode],
+        certificateFilters.environment,
+      );
+    });
+
+    if (!certificateSort) {
+      return filtered;
+    }
+
+    return [...filtered].sort((left, right) => {
+      const result = compareCertificateSortValues(
+        getCertificateSortValue(left, certificateSort.column),
+        getCertificateSortValue(right, certificateSort.column),
+      );
+
+      return certificateSort.direction === 'asc' ? result : result * -1;
+    });
+  }, [certificateFilters, certificateSort, items, statusFilter]);
+
+  const certificateTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCertificates.length / certificatePageSize),
+  );
+  const currentCertificatePage = Math.min(
+    certificatePage,
+    certificateTotalPages,
+  );
+  const paginatedCertificates = useMemo(() => {
+    const startIndex = (currentCertificatePage - 1) * certificatePageSize;
+    return filteredCertificates.slice(
+      startIndex,
+      startIndex + certificatePageSize,
+    );
+  }, [certificatePageSize, currentCertificatePage, filteredCertificates]);
+
+  const certificateFilterSummary = useMemo(() => {
+    const activeFilters = [];
+
+    if (statusFilter !== 'ALL') {
+      activeFilters.push(`status=${statusFilter}`);
+    }
+
+    if (certificateFilters.aliasName.trim()) {
+      activeFilters.push(`apelido=${certificateFilters.aliasName.trim()}`);
+    }
+
+    if (certificateFilters.holder.trim()) {
+      activeFilters.push(`titular=${certificateFilters.holder.trim()}`);
+    }
+
+    if (certificateFilters.environment.trim()) {
+      activeFilters.push(`ambiente=${certificateFilters.environment.trim()}`);
+    }
+
+    if (certificateFilters.validToFrom || certificateFilters.validToTo) {
+      activeFilters.push(
+        `validade=${certificateFilters.validToFrom || '*'}..${
+          certificateFilters.validToTo || '*'
+        }`,
+      );
+    }
+
+    if (certificateFilters.default !== 'ALL') {
+      activeFilters.push(`padrao=${certificateFilters.default}`);
+    }
+
+    return activeFilters.join('; ');
+  }, [certificateFilters, statusFilter]);
 
   const certificadosAuditContext = useMemo(() => {
     const auditParams: CertificadosAuditParams = {
       sourceSystem: runtimeContext.sourceSystem,
       sourceTenantId: runtimeContext.sourceTenantId,
       status: statusFilter,
-      search: searchInput,
-      displayedRowsCount: items.length,
+      search: certificateFilterSummary,
+      displayedRowsCount: filteredCertificates.length,
     };
 
     return {
@@ -609,10 +1040,10 @@ export default function FinanceiroCertificadosDigitaisPage() {
       sqlText: buildCertificadosAuditSql(auditParams),
     };
   }, [
-    items.length,
+    certificateFilterSummary,
+    filteredCertificates.length,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
-    searchInput,
     statusFilter,
   ]);
 
@@ -642,6 +1073,179 @@ export default function FinanceiroCertificadosDigitaisPage() {
       { total: 0, defaults: 0, active: 0, expired: 0 },
     );
   }, [items]);
+
+  useEffect(() => {
+    setCertificatePage(1);
+  }, [certificateFilters, certificatePageSize, certificateSort, statusFilter]);
+
+  useEffect(() => {
+    setCertificatePage((current) =>
+      Math.min(Math.max(current, 1), certificateTotalPages),
+    );
+  }, [certificateTotalPages]);
+
+  const hasCertificateFilters = useMemo(
+    () =>
+      statusFilter !== 'ALL' ||
+      certificateFilters.aliasName !== EMPTY_CERTIFICATE_FILTERS.aliasName ||
+      certificateFilters.holder !== EMPTY_CERTIFICATE_FILTERS.holder ||
+      certificateFilters.environment !==
+        EMPTY_CERTIFICATE_FILTERS.environment ||
+      certificateFilters.validToFrom !==
+        EMPTY_CERTIFICATE_FILTERS.validToFrom ||
+      certificateFilters.validToTo !== EMPTY_CERTIFICATE_FILTERS.validToTo ||
+      certificateFilters.default !== EMPTY_CERTIFICATE_FILTERS.default ||
+      Boolean(certificateSort),
+    [certificateFilters, certificateSort, statusFilter],
+  );
+
+  const updateCertificateFilterDrafts = useCallback(
+    (patch: Partial<CertificateFilters>) => {
+      setCertificateFilterDrafts((current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [],
+  );
+
+  const updateCertificateFilters = useCallback(
+    (patch: Partial<CertificateFilters>) => {
+      setCertificateFilters((current) => ({
+        ...current,
+        ...patch,
+      }));
+    },
+    [],
+  );
+
+  const setCertificateStatusFilter = useCallback(
+    (value: CertificateStatusFilter) => {
+      setStatusFilter(value);
+      updateCertificateFilters({ status: value });
+      updateCertificateFilterDrafts({ status: value });
+    },
+    [updateCertificateFilterDrafts, updateCertificateFilters],
+  );
+
+  const clearCertificateFilters = useCallback(() => {
+    setStatusFilter('ALL');
+    setCertificateFilters(EMPTY_CERTIFICATE_FILTERS);
+    setCertificateFilterDrafts(EMPTY_CERTIFICATE_FILTERS);
+    setCertificateSort(null);
+    setCertificateActiveFilter(null);
+  }, []);
+
+  const openCertificateFilter = useCallback(
+    (column: CertificateFilterColumn | null) => {
+      if (column) {
+        setCertificateFilterDrafts({
+          ...certificateFilters,
+          status: statusFilter,
+        });
+      }
+
+      setCertificateActiveFilter(column);
+    },
+    [certificateFilters, statusFilter],
+  );
+
+  const applyCertificateSort = useCallback(
+    (column: CertificateFilterColumn, direction: CertificateSortDirection) => {
+      setCertificateSort({ column, direction });
+      setCertificateActiveFilter(null);
+    },
+    [],
+  );
+
+  const applyCertificateColumnFilter = useCallback(
+    (column: CertificateFilterColumn) => {
+      if (column === 'status') {
+        setCertificateStatusFilter(certificateFilterDrafts.status);
+      } else if (column === 'aliasName') {
+        updateCertificateFilters({
+          aliasName: certificateFilterDrafts.aliasName.trim(),
+        });
+      } else if (column === 'holder') {
+        updateCertificateFilters({
+          holder: certificateFilterDrafts.holder.trim(),
+        });
+      } else if (column === 'environment') {
+        updateCertificateFilters({
+          environment: certificateFilterDrafts.environment.trim(),
+        });
+      } else if (column === 'validTo') {
+        updateCertificateFilters({
+          validToFrom: certificateFilterDrafts.validToFrom,
+          validToTo: certificateFilterDrafts.validToTo,
+        });
+      } else {
+        updateCertificateFilters({
+          default: certificateFilterDrafts.default,
+        });
+      }
+
+      setCertificateActiveFilter(null);
+    },
+    [
+      certificateFilterDrafts,
+      setCertificateStatusFilter,
+      updateCertificateFilters,
+    ],
+  );
+
+  const clearCertificateColumnFilter = useCallback(
+    (column: CertificateFilterColumn) => {
+      if (column === 'status') {
+        setCertificateStatusFilter('ALL');
+      } else if (column === 'aliasName') {
+        updateCertificateFilters({
+          aliasName: EMPTY_CERTIFICATE_FILTERS.aliasName,
+        });
+        updateCertificateFilterDrafts({
+          aliasName: EMPTY_CERTIFICATE_FILTERS.aliasName,
+        });
+      } else if (column === 'holder') {
+        updateCertificateFilters({ holder: EMPTY_CERTIFICATE_FILTERS.holder });
+        updateCertificateFilterDrafts({
+          holder: EMPTY_CERTIFICATE_FILTERS.holder,
+        });
+      } else if (column === 'environment') {
+        updateCertificateFilters({
+          environment: EMPTY_CERTIFICATE_FILTERS.environment,
+        });
+        updateCertificateFilterDrafts({
+          environment: EMPTY_CERTIFICATE_FILTERS.environment,
+        });
+      } else if (column === 'validTo') {
+        updateCertificateFilters({
+          validToFrom: EMPTY_CERTIFICATE_FILTERS.validToFrom,
+          validToTo: EMPTY_CERTIFICATE_FILTERS.validToTo,
+        });
+        updateCertificateFilterDrafts({
+          validToFrom: EMPTY_CERTIFICATE_FILTERS.validToFrom,
+          validToTo: EMPTY_CERTIFICATE_FILTERS.validToTo,
+        });
+      } else {
+        updateCertificateFilters({
+          default: EMPTY_CERTIFICATE_FILTERS.default,
+        });
+        updateCertificateFilterDrafts({
+          default: EMPTY_CERTIFICATE_FILTERS.default,
+        });
+      }
+
+      setCertificateSort((current) =>
+        current?.column === column ? null : current,
+      );
+      setCertificateActiveFilter(null);
+    },
+    [
+      setCertificateStatusFilter,
+      updateCertificateFilterDrafts,
+      updateCertificateFilters,
+    ],
+  );
 
   const handleFileSelected = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -886,186 +1490,636 @@ export default function FinanceiroCertificadosDigitaisPage() {
     [loadCertificates, runtimeContext],
   );
 
+  const certificateFilterInputClass = `${FINANCE_GRID_PAGE_LAYOUT.input} h-9 rounded-xl px-3 py-2 text-xs`;
+
+  const isCertificateColumnFilterActive = (
+    column: CertificateFilterColumn,
+  ) => {
+    if (column === 'status') {
+      return statusFilter !== 'ALL';
+    }
+
+    if (column === 'aliasName') {
+      return certificateFilters.aliasName !== EMPTY_CERTIFICATE_FILTERS.aliasName;
+    }
+
+    if (column === 'holder') {
+      return certificateFilters.holder !== EMPTY_CERTIFICATE_FILTERS.holder;
+    }
+
+    if (column === 'environment') {
+      return (
+        certificateFilters.environment !==
+        EMPTY_CERTIFICATE_FILTERS.environment
+      );
+    }
+
+    if (column === 'validTo') {
+      return (
+        certificateFilters.validToFrom !==
+          EMPTY_CERTIFICATE_FILTERS.validToFrom ||
+        certificateFilters.validToTo !== EMPTY_CERTIFICATE_FILTERS.validToTo
+      );
+    }
+
+    return certificateFilters.default !== EMPTY_CERTIFICATE_FILTERS.default;
+  };
+
+  const buildCertificateSortButtonClass = (
+    column: CertificateFilterColumn,
+    direction: CertificateSortDirection,
+  ) =>
+    `inline-flex h-8 w-full items-center justify-center rounded-xl border px-2 text-[10px] font-black uppercase tracking-[0.12em] transition ${
+      certificateSort?.column === column && certificateSort.direction === direction
+        ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+    }`;
+
+  const buildCertificateFilterPillClass = (
+    active: boolean,
+    tone: 'blue' | 'emerald' | 'amber' | 'rose' | 'slate',
+  ) => {
+    const toneClass =
+      tone === 'emerald'
+        ? active
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm'
+          : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'
+        : tone === 'amber'
+        ? active
+          ? 'border-amber-300 bg-amber-50 text-amber-700 shadow-sm'
+          : 'border-amber-200 bg-white text-amber-700 hover:bg-amber-50'
+        : tone === 'rose'
+        ? active
+          ? 'border-rose-300 bg-rose-50 text-rose-700 shadow-sm'
+          : 'border-rose-200 bg-white text-rose-700 hover:bg-rose-50'
+        : tone === 'slate'
+        ? active
+          ? 'border-slate-300 bg-slate-100 text-slate-700 shadow-sm'
+          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+        : active
+        ? 'border-blue-300 bg-blue-50 text-blue-700 shadow-sm'
+        : 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50';
+
+    return `inline-flex h-8 w-full items-center justify-center rounded-full border px-3 text-[10px] font-black uppercase tracking-[0.16em] transition ${toneClass}`;
+  };
+
+  const renderCertificateSortControls = (
+    column: CertificateFilterColumn,
+  ) => (
+    <div className="space-y-2">
+      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+        Ordenar
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => applyCertificateSort(column, 'asc')}
+          className={buildCertificateSortButtonClass(column, 'asc')}
+        >
+          Crescente
+        </button>
+        <button
+          type="button"
+          onClick={() => applyCertificateSort(column, 'desc')}
+          className={buildCertificateSortButtonClass(column, 'desc')}
+        >
+          Decrescente
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderCertificateClearColumnButton = (
+    column: CertificateFilterColumn,
+  ) => (
+    <button
+      type="button"
+      onClick={() => clearCertificateColumnFilter(column)}
+      className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:bg-white"
+    >
+      Limpar
+    </button>
+  );
+
+  const renderCertificateClearAllButton = () => (
+    <button
+      type="button"
+      onClick={clearCertificateFilters}
+      title="Limpar todos os filtros"
+      aria-label="Limpar todos os filtros do grid"
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
+        hasCertificateFilters
+          ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+          : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+      }`}
+    >
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 6h18" />
+        <path d="M8 6V4h8v2" />
+        <path d="M10 11v6" />
+        <path d="M14 11v6" />
+        <path d="M6 6l1 14h10l1-14" />
+      </svg>
+    </button>
+  );
+
+  const renderCertificateTextFilter = (
+    column: Extract<
+      CertificateFilterColumn,
+      'aliasName' | 'holder' | 'environment'
+    >,
+    placeholder: string,
+  ) => (
+    <div className="space-y-3">
+      {renderCertificateSortControls(column)}
+      <div className="space-y-1.5">
+        <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+          Filtrar
+        </div>
+        <input
+          value={certificateFilterDrafts[column]}
+          onChange={(event) =>
+            updateCertificateFilterDrafts({ [column]: event.target.value })
+          }
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              applyCertificateColumnFilter(column);
+            }
+          }}
+          placeholder={placeholder}
+          className={certificateFilterInputClass}
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => applyCertificateColumnFilter(column)}
+        className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+      >
+        Filtrar
+      </button>
+      {renderCertificateClearColumnButton(column)}
+    </div>
+  );
+
+  const renderCertificateDateFilter = () => (
+    <div className="space-y-3">
+      {renderCertificateSortControls('validTo')}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            De
+          </span>
+          <input
+            type="date"
+            value={certificateFilterDrafts.validToFrom}
+            onChange={(event) =>
+              updateCertificateFilterDrafts({
+                validToFrom: event.target.value,
+              })
+            }
+            className={certificateFilterInputClass}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+            Até
+          </span>
+          <input
+            type="date"
+            value={certificateFilterDrafts.validToTo}
+            onChange={(event) =>
+              updateCertificateFilterDrafts({
+                validToTo: event.target.value,
+              })
+            }
+            className={certificateFilterInputClass}
+          />
+        </label>
+      </div>
+      <button
+        type="button"
+        onClick={() => applyCertificateColumnFilter('validTo')}
+        className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+      >
+        Filtrar
+      </button>
+      {renderCertificateClearColumnButton('validTo')}
+    </div>
+  );
+
+  const renderCertificateStatusFilter = () => (
+    <div className="space-y-3">
+      {renderCertificateSortControls('status')}
+      <div className="space-y-2">
+        <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+          Filtrar status
+        </div>
+        <div className="grid gap-2">
+          {[
+            { value: 'ALL', label: 'Ambos', tone: 'blue' },
+            { value: 'ACTIVE', label: 'Ativos', tone: 'emerald' },
+            { value: 'EXPIRED', label: 'Vencidos', tone: 'rose' },
+            { value: 'INACTIVE', label: 'Inativos', tone: 'slate' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                const value = option.value as CertificateStatusFilter;
+                setCertificateStatusFilter(value);
+                setCertificateActiveFilter(null);
+              }}
+              className={buildCertificateFilterPillClass(
+                statusFilter === option.value,
+                option.tone as 'blue' | 'emerald' | 'rose' | 'slate',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {renderCertificateClearColumnButton('status')}
+    </div>
+  );
+
+  const renderCertificateDefaultFilter = () => (
+    <div className="space-y-3">
+      {renderCertificateSortControls('default')}
+      <div className="space-y-2">
+        <div className="text-center text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+          Filtrar padrão
+        </div>
+        <div className="grid gap-2">
+          {[
+            { value: 'ALL', label: 'Ambos', tone: 'blue' },
+            { value: 'YES', label: 'Sim', tone: 'emerald' },
+            { value: 'NO', label: 'Não', tone: 'rose' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                updateCertificateFilters({
+                  default: option.value as CertificateDefaultFilter,
+                });
+                updateCertificateFilterDrafts({
+                  default: option.value as CertificateDefaultFilter,
+                });
+                setCertificateActiveFilter(null);
+              }}
+              className={buildCertificateFilterPillClass(
+                certificateFilters.default === option.value,
+                option.tone as 'blue' | 'emerald' | 'rose',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {renderCertificateClearColumnButton('default')}
+    </div>
+  );
+
+  const renderCertificateHeader = (
+    column: CertificateFilterColumn,
+    label: string,
+    filterContent: ReactNode,
+    align: 'left' | 'right' = 'left',
+  ) => {
+    const isOpen = certificateActiveFilter === column;
+    const isActive =
+      isCertificateColumnFilterActive(column) ||
+      certificateSort?.column === column;
+
+    return (
+      <div
+        className={`relative flex items-center gap-2 ${
+          align === 'right' ? 'justify-end' : ''
+        }`}
+      >
+        <span>{label}</span>
+        <button
+          type="button"
+          onClick={() => openCertificateFilter(isOpen ? null : column)}
+          aria-label={`Filtrar ${label}`}
+          title={`Filtrar ${label}`}
+          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
+            isActive || isOpen
+              ? 'border-blue-300 bg-blue-50 text-blue-700'
+              : 'border-slate-200 bg-white text-slate-400 hover:border-blue-200 hover:text-blue-600'
+          }`}
+        >
+          <svg
+            className="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+        </button>
+        {isOpen ? (
+          <div
+            className={`absolute top-full z-40 mt-2 w-[276px] rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-xl ${
+              align === 'right' ? 'right-0' : 'left-0'
+            }`}
+          >
+            {filterContent}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
       <section className={FINANCE_GRID_PAGE_LAYOUT.card}>
-          <div className="grid gap-6 p-6">
-          <div className="grid justify-center gap-4 md:grid-cols-4">
-            <div className="w-full max-w-[220px] rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+        <div className="flex h-[calc(100vh-1.5rem)] min-h-[620px] min-w-0 flex-col gap-3 overflow-hidden p-4">
+          <div className="grid shrink-0 justify-center gap-3 md:grid-cols-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-slate-200 bg-slate-50 px-5 py-3">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Certificados</div>
               <div className="mt-1 text-2xl font-black text-slate-900">{summary.total}</div>
             </div>
-            <div className="w-full max-w-[220px] rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-3">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">Ativos</div>
               <div className="mt-1 text-2xl font-black text-emerald-800">{summary.active}</div>
             </div>
-            <div className="w-full max-w-[220px] rounded-3xl border border-blue-200 bg-blue-50 px-5 py-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-blue-200 bg-blue-50 px-5 py-3">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">Padrão</div>
               <div className="mt-1 text-2xl font-black text-blue-800">{summary.defaults}</div>
             </div>
-            <div className="w-full max-w-[220px] rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4">
+            <div className="w-full max-w-[220px] rounded-3xl border border-rose-200 bg-rose-50 px-5 py-3">
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-600">Vencidos</div>
               <div className="mt-1 text-2xl font-black text-rose-800">{summary.expired}</div>
             </div>
           </div>
 
-          <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <form className="grid gap-4 xl:grid-cols-[auto_minmax(0,1.35fr)] xl:items-end">
-              <button
-                type="button"
-                onClick={handleOpenCreate}
-                aria-label="INCLUIR NOVO CERTIFICADO"
-                title="INCLUIR NOVO CERTIFICADO"
-                className="inline-flex h-[50px] w-[50px] shrink-0 items-center justify-center self-end rounded-2xl border border-blue-200 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 5v14" />
-                  <path d="M5 12h14" />
-                </svg>
-              </button>
-
-              <div className="min-w-0">
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                    Buscar certificado
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={searchInput}
-                      onChange={(event) => setSearchInput(event.target.value)}
-                      placeholder="APELIDO, TITULAR, DOCUMENTO..."
-                      className={`${FINANCE_GRID_PAGE_LAYOUT.input} flex-1`}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => void loadCertificates()}
-                      aria-label="Buscar certificados"
-                      title="Buscar certificados"
-                      className="inline-flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="m20 20-3.5-3.5" />
-                      </svg>
-                    </button>
-                  </div>
-                </label>
-              </div>
-            </form>
-          </section>
-
           {errorMessage ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+            <div className="shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
               {errorMessage}
             </div>
           ) : null}
 
           {successMessage ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            <div className="shrink-0 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
               {successMessage}
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenCreate}
+                  aria-label="INCLUIR NOVO CERTIFICADO"
+                  title="INCLUIR NOVO CERTIFICADO"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-blue-600 text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 5v14" />
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
+                  Certificados digitais
+                </div>
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">
+                  {filteredCertificates.length} certificado{filteredCertificates.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {!runtimeContext.embedded ? (
+                  <ScreenNameCopy
+                    screenId={SCREEN_ID}
+                    className="justify-end"
+                    originText="Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\contas-a-pagar\\certificados-digitais\\page.tsx"
+                    auditText={certificadosAuditContext.auditText || auditText}
+                    sqlText={certificadosAuditContext.sqlText}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+              <table className="w-full min-w-[1180px] table-fixed divide-y divide-slate-200">
+                <colgroup>
+                  <col className="w-[46px]" />
+                  {isCertificateGridColumnVisible('aliasName') ? (
+                    <col className="w-[260px]" />
+                  ) : null}
+                  {isCertificateGridColumnVisible('holder') ? (
+                    <col />
+                  ) : null}
+                  {isCertificateGridColumnVisible('environment') ? (
+                    <col className="w-[170px]" />
+                  ) : null}
+                  {isCertificateGridColumnVisible('validTo') ? (
+                    <col className="w-[220px]" />
+                  ) : null}
+                  {isCertificateGridColumnVisible('default') ? (
+                    <col className="w-[110px]" />
+                  ) : null}
+                  <col className="w-[260px]" />
+                </colgroup>
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Semáforo</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Apelido</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Titular</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ambiente</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Validade</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Padrão</th>
-                    <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ações</th>
+                    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      <div className="flex items-center">
+                        {renderCertificateClearAllButton()}
+                      </div>
+                    </th>
+                    {isCertificateGridColumnVisible('aliasName') ? (
+                      <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderCertificateHeader(
+                          'aliasName',
+                          'Apelido',
+                          renderCertificateTextFilter(
+                            'aliasName',
+                            'APELIDO, FINALIDADE OU SÉRIE...',
+                          ),
+                        )}
+                      </th>
+                    ) : null}
+                    {isCertificateGridColumnVisible('holder') ? (
+                      <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderCertificateHeader(
+                          'holder',
+                          'Titular',
+                          renderCertificateTextFilter(
+                            'holder',
+                            'TITULAR OU DOCUMENTO...',
+                          ),
+                        )}
+                      </th>
+                    ) : null}
+                    {isCertificateGridColumnVisible('environment') ? (
+                      <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderCertificateHeader(
+                          'environment',
+                          'Ambiente',
+                          renderCertificateTextFilter(
+                            'environment',
+                            'AMBIENTE OU UF...',
+                          ),
+                        )}
+                      </th>
+                    ) : null}
+                    {isCertificateGridColumnVisible('validTo') ? (
+                      <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderCertificateHeader(
+                          'validTo',
+                          'Validade',
+                          renderCertificateDateFilter(),
+                        )}
+                      </th>
+                    ) : null}
+                    {isCertificateGridColumnVisible('default') ? (
+                      <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        {renderCertificateHeader(
+                          'default',
+                          'Padrão',
+                          renderCertificateDefaultFilter(),
+                        )}
+                      </th>
+                    ) : null}
+                    <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      Ações
+                    </th>
                   </tr>
+                  {certificateActiveFilter ? (
+                    <tr aria-hidden="true">
+                      <th colSpan={certificateGridColSpan} className="h-56 bg-white p-0" />
+                    </tr>
+                  ) : null}
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                      <td colSpan={certificateGridColSpan} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                         Carregando certificados digitais...
                       </td>
                     </tr>
-                  ) : items.length ? (
-                    items.map((item) => (
+                  ) : paginatedCertificates.length ? (
+                    paginatedCertificates.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50/80">
-                        <td className="px-4 py-4 align-top">
-                          <div className="flex items-center gap-3">
-                            <span className={`inline-flex h-3.5 w-3.5 rounded-full ${getSemaphoreClass(item)}`} />
-                            <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${getStatusClass(item)}`}>
-                              {item.status === 'ACTIVE'
-                                ? item.expired
-                                  ? 'VENCIDO'
-                                  : 'ATIVO'
-                                : 'INATIVO'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                          <div className="font-black text-slate-900">{item.aliasName}</div>
-                          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            {item.purpose}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                          <div>{item.holderName}</div>
-                          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            {item.holderDocument}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                          <div>{item.environment === 'PRODUCTION' ? 'PRODUÇÃO' : 'HOMOLOGAÇÃO'}</div>
-                          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            UF {item.authorStateCode}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                          <div>{formatDateLabel(item.validTo || null)}</div>
-                          <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                            {item.lastSyncAt
-                              ? `ÚLT. SINCRONIZAÇÃO ${formatDateLabel(item.lastSyncAt)}`
-                              : 'SEM SINCRONIZAÇÃO'}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
-                          {item.isDefault ? 'SIM' : 'NÃO'}
-                        </td>
-                        <td className="px-4 py-4 align-top">
+                        <td className="px-3 py-3 align-top" />
+                        {isCertificateGridColumnVisible('aliasName') ? (
+                          <td className="px-3 py-3 align-top text-sm font-semibold text-slate-700">
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`mt-1 inline-flex h-3.5 w-3.5 shrink-0 rounded-full ${getSemaphoreClass(item)}`}
+                                title={getCertificateIndicatorLabel(item)}
+                                aria-label={getCertificateIndicatorLabel(item)}
+                                role="img"
+                              />
+                              <div className="min-w-0">
+                                <div className="font-black text-slate-900">{item.aliasName}</div>
+                                <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                  {item.purpose}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        ) : null}
+                        {isCertificateGridColumnVisible('holder') ? (
+                          <td className="px-3 py-3 align-top text-sm font-semibold text-slate-700">
+                            <div>{item.holderName}</div>
+                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {item.holderDocument}
+                            </div>
+                          </td>
+                        ) : null}
+                        {isCertificateGridColumnVisible('environment') ? (
+                          <td className="px-3 py-3 align-top text-sm font-semibold text-slate-700">
+                            <div>{getCertificateEnvironmentLabel(item)}</div>
+                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              UF {item.authorStateCode}
+                            </div>
+                          </td>
+                        ) : null}
+                        {isCertificateGridColumnVisible('validTo') ? (
+                          <td className="px-3 py-3 align-top text-sm font-semibold text-slate-700">
+                            <div>{formatDateLabel(item.validTo || null)}</div>
+                            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {item.lastSyncAt
+                                ? `ÚLT. SINCRONIZAÇÃO ${formatDateLabel(item.lastSyncAt)}`
+                                : 'SEM SINCRONIZAÇÃO'}
+                            </div>
+                          </td>
+                        ) : null}
+                        {isCertificateGridColumnVisible('default') ? (
+                          <td className="px-3 py-3 align-top text-sm font-semibold text-slate-700">
+                            {item.isDefault ? 'SIM' : 'NÃO'}
+                          </td>
+                        ) : null}
+                        <td className="px-3 py-3 align-top">
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => handleOpenEdit(item)}
                               disabled={actionCertificateId === item.id}
-                              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50"
+                              aria-label="Alterar certificado"
+                              title="Alterar certificado"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Alterar
+                              <svg
+                                viewBox="0 0 24 24"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.9"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                              </svg>
                             </button>
                             {!item.isDefault ? (
                               <button
                                 type="button"
                                 onClick={() => void handleSetDefault(item)}
                                 disabled={actionCertificateId === item.id}
-                                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
+                                aria-label="Definir como certificado padrão"
+                                title="Definir como certificado padrão"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Padrão
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.9"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M12 3l2.7 5.47 6.03.88-4.36 4.25 1.03 6L12 16.76 6.6 19.6l1.03-6-4.36-4.25 6.03-.88Z" />
+                                </svg>
                               </button>
                             ) : null}
                             {item.status === 'ACTIVE' ? (
@@ -1073,18 +2127,46 @@ export default function FinanceiroCertificadosDigitaisPage() {
                                 type="button"
                                 onClick={() => void handleStatusChange(item, 'inactivate')}
                                 disabled={actionCertificateId === item.id}
-                                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                                aria-label="Excluir certificado"
+                                title="Excluir certificado"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Excluir
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.9"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M3 6h18" />
+                                  <path d="M8 6V4h8v2" />
+                                  <path d="M10 11v6" />
+                                  <path d="M14 11v6" />
+                                  <path d="M6 6l1 14h10l1-14" />
+                                </svg>
                               </button>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => void handleStatusChange(item, 'activate')}
                                 disabled={actionCertificateId === item.id}
-                                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                                aria-label="Ativar certificado"
+                                title="Ativar certificado"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Ativar
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.9"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M20 6 9 17l-5-5" />
+                                </svg>
                               </button>
                             )}
                           </div>
@@ -1093,7 +2175,7 @@ export default function FinanceiroCertificadosDigitaisPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                      <td colSpan={certificateGridColSpan} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                         Nenhum certificado digital encontrado com os filtros atuais.
                       </td>
                     </tr>
@@ -1102,15 +2184,21 @@ export default function FinanceiroCertificadosDigitaisPage() {
               </table>
             </div>
 
-            <div className="border-t border-slate-200 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 px-4 py-3 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-center gap-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsColumnConfigOpen(true)}
+                    className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+                  >
+                    ☰ Colunas
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsExportModalOpen(true)}
-                    aria-label="Exportar"
-                    title="Exportar"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+                    aria-label="Imprimir"
+                    title="Imprimir"
+                    className={FINANCE_GRID_PAGE_LAYOUT.footerIconButton}
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -1127,86 +2215,138 @@ export default function FinanceiroCertificadosDigitaisPage() {
                       <path d="M17 12h.01" />
                     </svg>
                   </button>
-                </div>
+                  <div className="flex items-center justify-center gap-2">
+                    {[
+                      {
+                        value: 'ACTIVE',
+                        label: 'Ativos',
+                        tone: 'bg-emerald-500',
+                        activeTone: 'bg-emerald-700',
+                        dot: 'bg-white',
+                      },
+                      {
+                        value: 'ALL',
+                        label: 'Ambos',
+                        tone: 'bg-amber-200',
+                        activeTone: 'bg-amber-400',
+                        dot: 'bg-white',
+                      },
+                      {
+                        value: 'INACTIVE',
+                        label: 'Inativos',
+                        tone: 'bg-rose-200',
+                        activeTone: 'bg-rose-400',
+                        dot: 'bg-white',
+                      },
+                    ].map((item) => {
+                      const isActive = statusFilter === item.value;
 
-                <div className="flex items-center justify-center gap-2">
-                  {[
-                    {
-                      value: 'ACTIVE',
-                      label: 'Ativos',
-                      tone: 'bg-emerald-500',
-                      activeTone: 'bg-emerald-700',
-                      dot: 'bg-white',
-                    },
-                    {
-                      value: 'ALL',
-                      label: 'Ambos',
-                      tone: 'bg-amber-200',
-                      activeTone: 'bg-amber-400',
-                      dot: 'bg-white',
-                    },
-                    {
-                      value: 'INACTIVE',
-                      label: 'Inativos',
-                      tone: 'bg-rose-200',
-                      activeTone: 'bg-rose-400',
-                      dot: 'bg-white',
-                    },
-                  ].map((item) => {
-                    const isActive = statusFilter === item.value;
-
-                    return (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() =>
-                          setStatusFilter(item.value as 'ALL' | 'ACTIVE' | 'INACTIVE')
-                        }
-                        aria-label={item.label}
-                        title={item.label}
-                        aria-pressed={isActive}
-                        className={`relative h-6 w-14 rounded-full border transition duration-200 ${
-                          isActive
-                            ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
-                            : `${item.tone} border-transparent opacity-55 hover:opacity-85`
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full shadow-sm ${item.dot} ${
-                            isActive ? 'right-1' : 'left-1'
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() =>
+                            setCertificateStatusFilter(
+                              item.value as CertificateStatusFilter,
+                            )
+                          }
+                          aria-label={item.label}
+                          title={item.label}
+                          aria-pressed={isActive}
+                          className={`relative h-6 w-14 rounded-full border transition duration-200 ${
+                            isActive
+                              ? `${item.activeTone} scale-105 border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100`
+                              : `${item.tone} border-transparent opacity-55 hover:opacity-85`
                           }`}
-                        />
-                        <span className="sr-only">{item.label}</span>
-                      </button>
-                    );
-                  })}
+                        >
+                          <span
+                            className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full shadow-sm ${item.dot} ${
+                              isActive ? 'right-1' : 'left-1'
+                            }`}
+                          />
+                          <span className="sr-only">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-                    Registros exibidos ({items.length})
-                  </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <select
+                    value={certificatePageSize}
+                    onChange={(event) =>
+                      setCertificatePageSize(Number(event.target.value))
+                    }
+                    aria-label="Registros por página"
+                    className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600 outline-none transition hover:bg-slate-50 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  >
+                    {[10, 20, 50, 100].map((pageSize) => (
+                      <option key={pageSize} value={pageSize}>
+                        {pageSize}
+                      </option>
+                    ))}
+                  </select>
 
-                  {!runtimeContext.embedded ? (
-                    <ScreenNameCopy
-                      screenId={SCREEN_ID}
-                      className="justify-end"
-                      originText="Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\contas-a-pagar\\certificados-digitais\\page.tsx"
-                      auditText={certificadosAuditContext.auditText || auditText}
-                      sqlText={certificadosAuditContext.sqlText}
-                    />
-                  ) : null}
+                  <button
+                    type="button"
+                    aria-label="Voltar para o início"
+                    title="Voltar para o início"
+                    onClick={() => setCertificatePage(1)}
+                    disabled={currentCertificatePage <= 1}
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {'<<'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Voltar uma página"
+                    title="Voltar uma página"
+                    onClick={() =>
+                      setCertificatePage((current) => Math.max(1, current - 1))
+                    }
+                    disabled={currentCertificatePage <= 1}
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {'<'}
+                  </button>
+                  <div className="min-w-20 text-center text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    {currentCertificatePage}/{certificateTotalPages}
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Avançar uma página"
+                    title="Avançar uma página"
+                    onClick={() =>
+                      setCertificatePage((current) =>
+                        Math.min(certificateTotalPages, current + 1),
+                      )
+                    }
+                    disabled={currentCertificatePage >= certificateTotalPages}
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {'>'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Ir para o fim"
+                    title="Ir para o fim"
+                    onClick={() => setCertificatePage(certificateTotalPages)}
+                    disabled={currentCertificatePage >= certificateTotalPages}
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {'>>'}
+                  </button>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
         </div>
       </section>
 
       <GridExportModal
         isOpen={isExportModalOpen}
         title="Exportar certificados digitais"
-        description={`A exportação considera ${items.length} registro(s) do filtro atual.`}
+        description={`A exportação considera ${filteredCertificates.length} registro(s) do filtro atual.`}
         format={exportFormat}
         onFormatChange={setExportFormat}
         columns={CERTIFICATE_EXPORT_COLUMNS.map((column) => ({
@@ -1220,7 +2360,7 @@ export default function FinanceiroCertificadosDigitaisPage() {
         onClose={() => setIsExportModalOpen(false)}
         onExport={async (config) => {
           await exportGridRows({
-            rows: items,
+            rows: filteredCertificates,
             columns: CERTIFICATE_EXPORT_COLUMNS,
             selectedColumns: config.selectedColumns,
             format: exportFormat,
@@ -1236,6 +2376,13 @@ export default function FinanceiroCertificadosDigitaisPage() {
           setExportColumns(config.selectedColumns);
           setIsExportModalOpen(false);
         }}
+      />
+
+      <CertificateGridConfigModal
+        isOpen={isColumnConfigOpen}
+        hidden={hiddenColumns}
+        onSave={setHiddenColumns}
+        onClose={() => setIsColumnConfigOpen(false)}
       />
 
       <CertificateModal

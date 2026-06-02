@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
+import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
@@ -18,6 +19,12 @@ import {
   formatDateLabel,
   getFriendlyRequestErrorMessage,
 } from '@/app/lib/formatters';
+import {
+  buildDefaultExportColumns,
+  exportGridRows,
+  type GridColumnDefinition,
+  type GridExportFormat,
+} from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
   buildFinanceApiQueryString,
@@ -238,6 +245,21 @@ type RecentImportFilters = {
   installments: string;
 };
 
+type RecentImportGridColumnKey =
+  | 'invoice'
+  | 'issueDate'
+  | 'total'
+  | 'installments';
+
+type RecentImportExportColumnKey =
+  | 'status'
+  | 'invoice'
+  | 'supplier'
+  | 'supplierDocument'
+  | 'issueDate'
+  | 'total'
+  | 'installments';
+
 const EMPTY_RECENT_IMPORT_FILTERS: RecentImportFilters = {
   status: 'ALL',
   invoice: '',
@@ -247,6 +269,61 @@ const EMPTY_RECENT_IMPORT_FILTERS: RecentImportFilters = {
   total: '',
   installments: '',
 };
+
+const RECENT_IMPORT_GRID_COLUMNS: Array<{
+  key: RecentImportGridColumnKey;
+  label: string;
+}> = [
+  { key: 'invoice', label: 'Nota fiscal' },
+  { key: 'issueDate', label: 'Emissão' },
+  { key: 'total', label: 'Valor total' },
+  { key: 'installments', label: 'Duplicatas' },
+];
+
+const RECENT_IMPORT_EXPORT_STORAGE_KEY =
+  'financeiro:contas-a-pagar:importacao-notas:pendentes:export';
+
+const RECENT_IMPORT_EXPORT_COLUMNS: GridColumnDefinition<
+  PayableInvoiceImportSummary,
+  RecentImportExportColumnKey
+>[] = [
+  {
+    key: 'status',
+    label: 'Status',
+    getValue: (item) => item.statusLabel || item.status || '---',
+  },
+  {
+    key: 'invoice',
+    label: 'Nota fiscal',
+    getValue: (item) =>
+      `NF-e ${item.invoiceNumber || '---'}${item.series ? ` / ${item.series}` : ''}`,
+  },
+  {
+    key: 'supplier',
+    label: 'Fornecedor',
+    getValue: (item) => item.supplierName || '---',
+  },
+  {
+    key: 'supplierDocument',
+    label: 'Documento fornecedor',
+    getValue: (item) => item.supplierDocument || '---',
+  },
+  {
+    key: 'issueDate',
+    label: 'Emissão',
+    getValue: (item) => formatDateLabel(item.issueDate),
+  },
+  {
+    key: 'total',
+    label: 'Valor total',
+    getValue: (item) => formatCurrency(item.totalInvoiceAmount),
+  },
+  {
+    key: 'installments',
+    label: 'Duplicatas',
+    getValue: (item) => String(item.installmentsCount || 0),
+  },
+];
 
 const emptyCertificateForm: CertificateFormState = {
   id: null,
@@ -527,12 +604,6 @@ function SefazSyncProgressModal({
       </div>
     </div>
   );
-}
-
-function getStatusClass(status: string) {
-  return status === 'APPROVED'
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
 function getSemaphoreClass(semaphore: 'GREEN' | 'YELLOW') {
@@ -1161,6 +1232,145 @@ ORDER BY PIIT.lineNumber ASC;`}
   );
 }
 
+function RecentImportGridConfigModal({
+  isOpen,
+  hidden,
+  onSave,
+  onClose,
+}: {
+  isOpen: boolean;
+  hidden: RecentImportGridColumnKey[];
+  onSave: (hidden: RecentImportGridColumnKey[]) => void;
+  onClose: () => void;
+}) {
+  const [draftHidden, setDraftHidden] =
+    useState<RecentImportGridColumnKey[]>(hidden);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDraftHidden(hidden);
+    }
+  }, [hidden, isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const visibleCount =
+    RECENT_IMPORT_GRID_COLUMNS.length - draftHidden.length + 3;
+
+  return (
+    <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
+      <div className={FINANCE_GRID_PAGE_LAYOUT.modalPanel}>
+        <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              Configuração da tela
+            </div>
+            <h2 className="mt-1 text-2xl font-black text-slate-900">
+              Configurar colunas do grid
+            </h2>
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              Selecione as colunas informativas da lista de notas pendentes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className={FINANCE_GRID_PAGE_LAYOUT.modalBody}>
+          <div className={FINANCE_GRID_PAGE_LAYOUT.modalSummaryCard}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-sm font-black text-slate-700">
+                  Colunas visíveis: {visibleCount}
+                </div>
+                <div className="text-xs font-medium text-slate-500">
+                  Semáforo, fornecedor e ações permanecem fixos neste grid.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDraftHidden([])}
+                  className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  Restaurar padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSave(draftHidden);
+                    onClose();
+                  }}
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 min-h-0 flex-1 overflow-auto pr-1">
+            <div className="space-y-3">
+              {RECENT_IMPORT_GRID_COLUMNS.map((column) => {
+                const visible = !draftHidden.includes(column.key);
+
+                return (
+                  <div
+                    key={column.key}
+                    className={`${FINANCE_GRID_PAGE_LAYOUT.modalListItem} ${
+                      visible
+                        ? FINANCE_GRID_PAGE_LAYOUT.modalActiveItem
+                        : FINANCE_GRID_PAGE_LAYOUT.modalInactiveItem
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraftHidden((current) =>
+                          current.includes(column.key)
+                            ? current.filter((item) => item !== column.key)
+                            : [...current, column.key],
+                        )
+                      }
+                      className={
+                        visible
+                          ? FINANCE_GRID_PAGE_LAYOUT.modalToggleOn
+                          : FINANCE_GRID_PAGE_LAYOUT.modalToggleOff
+                      }
+                    >
+                      {visible ? '✓' : '✕'}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-black uppercase tracking-[0.12em] text-slate-700">
+                        {column.label}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-slate-500">
+                        Controle a visibilidade desta coluna no grid.
+                      </div>
+                    </div>
+
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+                      {visible ? 'Visível' : 'Oculta'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FinanceiroImportacaoNotasPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
@@ -1176,6 +1386,18 @@ export default function FinanceiroImportacaoNotasPage() {
     useState<RecentImportSortState>(null);
   const [recentImportPageSize, setRecentImportPageSize] = useState(10);
   const [recentImportPage, setRecentImportPage] = useState(1);
+  const [isRecentImportColumnConfigOpen, setIsRecentImportColumnConfigOpen] =
+    useState(false);
+  const [recentImportHiddenColumns, setRecentImportHiddenColumns] = useState<
+    RecentImportGridColumnKey[]
+  >([]);
+  const [isRecentImportExportModalOpen, setIsRecentImportExportModalOpen] =
+    useState(false);
+  const [recentImportExportFormat, setRecentImportExportFormat] =
+    useState<GridExportFormat>('excel');
+  const [recentImportExportColumns, setRecentImportExportColumns] = useState(
+    () => buildDefaultExportColumns(RECENT_IMPORT_EXPORT_COLUMNS),
+  );
   const [certificates, setCertificates] = useState<FiscalCertificateItem[]>([]);
   const [importResult, setImportResult] = useState<PayableInvoiceImportDetail | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -1321,6 +1543,21 @@ export default function FinanceiroImportacaoNotasPage() {
       Boolean(recentImportSort),
     [recentImportFilters, recentImportSort],
   );
+
+  const visibleRecentImportGridColumns = useMemo(
+    () =>
+      RECENT_IMPORT_GRID_COLUMNS.filter(
+        (column) => !recentImportHiddenColumns.includes(column.key),
+      ),
+    [recentImportHiddenColumns],
+  );
+  const isRecentImportGridColumnVisible = useCallback(
+    (column: RecentImportGridColumnKey) =>
+      visibleRecentImportGridColumns.some((item) => item.key === column),
+    [visibleRecentImportGridColumns],
+  );
+  const recentImportGridColSpan =
+    visibleRecentImportGridColumns.length + 3;
 
   const updateRecentImportFilters = useCallback(
     (patch: Partial<RecentImportFilters>) => {
@@ -1560,13 +1797,6 @@ export default function FinanceiroImportacaoNotasPage() {
       startIndex + recentImportPageSize,
     );
   }, [currentRecentImportPage, filteredRecentImports, recentImportPageSize]);
-  const recentImportFirstVisibleIndex = filteredRecentImports.length
-    ? (currentRecentImportPage - 1) * recentImportPageSize + 1
-    : 0;
-  const recentImportLastVisibleIndex = filteredRecentImports.length
-    ? recentImportFirstVisibleIndex + paginatedRecentImports.length - 1
-    : 0;
-
   useEffect(() => {
     setRecentImportPage(1);
   }, [recentImportFilters, recentImportPageSize, recentImportSort]);
@@ -2644,10 +2874,10 @@ export default function FinanceiroImportacaoNotasPage() {
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden bg-slate-100 p-4">
-          <div className="shrink-0 space-y-3">
-            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
-              <div className="space-y-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden bg-slate-100 p-3">
+          <div className="shrink-0 space-y-2">
+            <section className="rounded-3xl border border-slate-200 bg-slate-50 p-2">
+              <div className="space-y-1.5">
                 {loadingCertificates ? (
                   <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-500">
                     Carregando certificados fiscais...
@@ -2656,9 +2886,9 @@ export default function FinanceiroImportacaoNotasPage() {
                   certificates.map((certificate, index) => (
                     <div
                       key={certificate.id}
-                      className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm"
+                      className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
                     >
-                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="text-base font-black leading-tight text-slate-900">
@@ -2676,27 +2906,25 @@ export default function FinanceiroImportacaoNotasPage() {
                                   : 'ATIVO'
                                 : 'INATIVO'}
                             </span>
+                            <span className="truncate text-xs font-semibold text-slate-600">
+                              {certificate.holderName} • {certificate.holderDocument}
+                            </span>
                           </div>
 
-                          <div className="mt-1 truncate text-xs font-semibold text-slate-600">
-                            {certificate.holderName} • {certificate.holderDocument}
-                          </div>
-
-                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                             <span>{certificate.environment === 'PRODUCTION' ? 'PRODUÇÃO' : 'HOMOLOGAÇÃO'}</span>
                             <span>UF {certificate.authorStateCode}</span>
                             <span>{certificate.purpose}</span>
                             <span>Validade: {formatDateLabel(certificate.validTo || null)}</span>
-                          </div>
-
-                          <div className="mt-1.5 line-clamp-2 text-[11px] font-semibold leading-4 text-slate-500">
-                            Última sincronização: {formatDateLabel(certificate.lastSyncAt || null)}{' '}
-                            {certificate.lastSyncStatus ? `• status ${certificate.lastSyncStatus}` : ''}
-                            {certificate.lastSyncMessage ? ` • ${certificate.lastSyncMessage}` : ''}
+                            <span>
+                              Última sincronização: {formatDateLabel(certificate.lastSyncAt || null)}
+                              {certificate.lastSyncStatus ? ` • status ${certificate.lastSyncStatus}` : ''}
+                              {certificate.lastSyncMessage ? ` • ${certificate.lastSyncMessage}` : ''}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                           {!certificate.isDefault ? (
                             <button
                               type="button"
@@ -2776,13 +3004,13 @@ export default function FinanceiroImportacaoNotasPage() {
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-              <div>
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                   Pendentes de aprovação
                 </div>
-                <div className="mt-1 text-sm font-medium text-slate-500">
-                  Últimas notas aguardando estoque e duplicatas.
-                </div>
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">
+                  {recentImports.length} nota{recentImports.length === 1 ? '' : 's'}
+                </span>
               </div>
 
               <Link
@@ -2797,37 +3025,42 @@ export default function FinanceiroImportacaoNotasPage() {
               <div className="min-h-0 min-w-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[1020px] table-fixed divide-y divide-slate-200">
                   <colgroup>
-                    <col className="w-[126px]" />
-                    <col className="w-[226px]" />
-                    <col className="w-[236px]" />
-                    <col className="w-[98px]" />
-                    <col className="w-[104px]" />
-                    <col className="w-[70px]" />
-                    <col className="w-[158px]" />
+                    <col className="w-[50px]" />
+                    {isRecentImportGridColumnVisible('invoice') ? (
+                      <col className="w-[210px]" />
+                    ) : null}
+                    <col />
+                    {isRecentImportGridColumnVisible('issueDate') ? (
+                      <col className="w-[98px]" />
+                    ) : null}
+                    {isRecentImportGridColumnVisible('total') ? (
+                      <col className="w-[126px]" />
+                    ) : null}
+                    {isRecentImportGridColumnVisible('installments') ? (
+                      <col className="w-[120px]" />
+                    ) : null}
+                    <col className="w-[166px]" />
                   </colgroup>
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        <div className="flex items-center gap-2">
+                      <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                        <div className="flex items-center">
                           {renderRecentImportClearAllButton()}
-                          {renderRecentImportHeader(
-                            'status',
-                            'Semáforo',
-                            renderRecentImportStatusFilter(),
-                          )}
                         </div>
                       </th>
-                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        {renderRecentImportHeader(
-                          'invoice',
-                          'Nota fiscal',
-                          renderRecentImportTextFilter(
+                      {isRecentImportGridColumnVisible('invoice') ? (
+                        <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                          {renderRecentImportHeader(
                             'invoice',
-                            'NF-E, SERIE OU CHAVE...',
-                          ),
-                        )}
-                      </th>
-                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                            'Nota fiscal',
+                            renderRecentImportTextFilter(
+                              'invoice',
+                              'NF-E, SERIE OU CHAVE...',
+                            ),
+                          )}
+                        </th>
+                      ) : null}
+                      <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                         {renderRecentImportHeader(
                           'supplier',
                           'Fornecedor',
@@ -2837,49 +3070,55 @@ export default function FinanceiroImportacaoNotasPage() {
                           ),
                         )}
                       </th>
-                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        {renderRecentImportHeader(
-                          'issueDate',
-                          'Emissão',
-                          renderRecentImportDateFilter(),
-                        )}
-                      </th>
-                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        {renderRecentImportHeader(
-                          'total',
-                          'Valor total',
-                          renderRecentImportTextFilter(
+                      {isRecentImportGridColumnVisible('issueDate') ? (
+                        <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                          {renderRecentImportHeader(
+                            'issueDate',
+                            'Emissão',
+                            renderRecentImportDateFilter(),
+                          )}
+                        </th>
+                      ) : null}
+                      {isRecentImportGridColumnVisible('total') ? (
+                        <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                          {renderRecentImportHeader(
                             'total',
-                            'VALOR...',
-                          ),
-                          'right',
-                        )}
-                      </th>
-                      <th className="px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                        {renderRecentImportHeader(
-                          'installments',
-                          'Duplicatas',
-                          renderRecentImportTextFilter(
+                            'Valor total',
+                            renderRecentImportTextFilter(
+                              'total',
+                              'VALOR...',
+                            ),
+                            'right',
+                          )}
+                        </th>
+                      ) : null}
+                      {isRecentImportGridColumnVisible('installments') ? (
+                        <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                          {renderRecentImportHeader(
                             'installments',
-                            'QTDE...',
-                          ),
-                          'right',
-                        )}
-                      </th>
-                      <th className="px-2.5 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                            'Duplicatas',
+                            renderRecentImportTextFilter(
+                              'installments',
+                              'QTDE...',
+                            ),
+                            'right',
+                          )}
+                        </th>
+                      ) : null}
+                      <th className="sticky top-0 z-20 bg-slate-50 px-2.5 py-2 text-right text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                         Ações
                       </th>
                     </tr>
                     {recentImportActiveFilter ? (
                       <tr aria-hidden="true">
-                        <th colSpan={7} className="h-56 bg-white p-0" />
+                        <th colSpan={recentImportGridColSpan} className="h-56 bg-white p-0" />
                       </tr>
                     ) : null}
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {loadingRecent ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                        <td colSpan={recentImportGridColSpan} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                           Carregando notas pendentes...
                         </td>
                       </tr>
@@ -2887,19 +3126,23 @@ export default function FinanceiroImportacaoNotasPage() {
                       paginatedRecentImports.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50/80">
                           <td className="px-2.5 py-2 align-middle">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${getSemaphoreClass(item.semaphore)}`} />
-                              <span className={`truncate rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${getStatusClass(item.status)}`}>
-                                {item.statusLabel}
-                              </span>
+                            <div className="flex items-center">
+                              <span
+                                className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${getSemaphoreClass(item.semaphore)}`}
+                                title={item.statusLabel || 'AGUARDANDO APROVAÇÃO'}
+                                aria-label={item.statusLabel || 'AGUARDANDO APROVAÇÃO'}
+                                role="img"
+                              />
                             </div>
                           </td>
-                          <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
-                            <div className="truncate font-black text-slate-900">
-                              NF-e {item.invoiceNumber}
-                              {item.series ? ` / ${item.series}` : ''}
-                            </div>
-                          </td>
+                          {isRecentImportGridColumnVisible('invoice') ? (
+                            <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
+                              <div className="truncate font-black text-slate-900">
+                                NF-e {item.invoiceNumber}
+                                {item.series ? ` / ${item.series}` : ''}
+                              </div>
+                            </td>
+                          ) : null}
                           <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
                             <div className="truncate" title={item.supplierName || '---'}>
                               {item.supplierName || '---'}
@@ -2908,15 +3151,21 @@ export default function FinanceiroImportacaoNotasPage() {
                               {item.supplierDocument || 'SEM DOCUMENTO'}
                             </div>
                           </td>
-                          <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
-                            {formatDateLabel(item.issueDate)}
-                          </td>
-                          <td className="px-2.5 py-2 align-middle text-xs font-black text-slate-900">
-                            {formatCurrency(item.totalInvoiceAmount)}
-                          </td>
-                          <td className="px-2.5 py-2 align-middle text-center text-xs font-semibold text-slate-700">
-                            {item.installmentsCount}
-                          </td>
+                          {isRecentImportGridColumnVisible('issueDate') ? (
+                            <td className="px-2.5 py-2 align-middle text-xs font-semibold text-slate-700">
+                              {formatDateLabel(item.issueDate)}
+                            </td>
+                          ) : null}
+                          {isRecentImportGridColumnVisible('total') ? (
+                            <td className="px-2.5 py-2 align-middle text-xs font-black text-slate-900">
+                              {formatCurrency(item.totalInvoiceAmount)}
+                            </td>
+                          ) : null}
+                          {isRecentImportGridColumnVisible('installments') ? (
+                            <td className="px-2.5 py-2 align-middle text-center text-xs font-semibold text-slate-700">
+                              {item.installmentsCount}
+                            </td>
+                          ) : null}
                           <td className="px-2.5 py-2 align-middle">
                             <div className="flex justify-end gap-1.5">
                               <button
@@ -3008,7 +3257,7 @@ export default function FinanceiroImportacaoNotasPage() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                        <td colSpan={recentImportGridColSpan} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                           Nenhuma nota pendente encontrada para este tenant.
                         </td>
                       </tr>
@@ -3018,54 +3267,106 @@ export default function FinanceiroImportacaoNotasPage() {
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {filteredRecentImports.length
-                    ? `${recentImportFirstVisibleIndex}-${recentImportLastVisibleIndex} de ${filteredRecentImports.length} registro(s)`
-                    : '0 registro(s) no resultado'}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsRecentImportColumnConfigOpen(true)}
+                    className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+                  >
+                    ☰ Colunas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsRecentImportExportModalOpen(true)}
+                    className={FINANCE_GRID_PAGE_LAYOUT.footerIconButton}
+                    aria-label="Imprimir"
+                    title="Imprimir"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                      <path d="M6 9V3h12v6" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M6 14h12v7H6z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Semáforo AGUARDANDO APROVAÇÃO"
+                    title="AGUARDANDO APROVAÇÃO"
+                    aria-pressed="true"
+                    className="relative h-6 w-14 scale-105 rounded-full border border-white bg-amber-400 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 transition duration-200"
+                  >
+                    <span className="absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm" />
+                    <span className="sr-only">AGUARDANDO APROVAÇÃO</span>
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+                  <select
+                    value={recentImportPageSize}
+                    onChange={(event) =>
+                      setRecentImportPageSize(Number(event.target.value))
+                    }
+                    aria-label="Registros por página"
+                    className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600 outline-none transition hover:bg-slate-50 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                  >
                     {[10, 20, 50, 100].map((pageSize) => (
-                      <button
+                      <option
                         key={pageSize}
-                        type="button"
-                        onClick={() => setRecentImportPageSize(pageSize)}
-                        className={`h-7 rounded-full px-3 text-[10px] font-black uppercase tracking-[0.12em] transition ${
-                          recentImportPageSize === pageSize
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-slate-500 hover:bg-white hover:text-blue-700'
-                        }`}
+                        value={pageSize}
                       >
                         {pageSize}
-                      </button>
+                      </option>
                     ))}
-                  </div>
+                  </select>
 
                   <button
                     type="button"
+                    aria-label="Voltar para o início"
+                    title="Voltar para o início"
+                    onClick={() => setRecentImportPage(1)}
+                    disabled={currentRecentImportPage <= 1}
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {'<<'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Voltar uma página"
+                    title="Voltar uma página"
                     onClick={() =>
                       setRecentImportPage((current) => Math.max(1, current - 1))
                     }
                     disabled={currentRecentImportPage <= 1}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Anterior
+                    {'<'}
                   </button>
                   <div className="min-w-20 text-center text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                     {currentRecentImportPage}/{recentImportTotalPages}
                   </div>
                   <button
                     type="button"
+                    aria-label="Avançar uma página"
+                    title="Avançar uma página"
                     onClick={() =>
                       setRecentImportPage((current) =>
                         Math.min(recentImportTotalPages, current + 1),
                       )
                     }
                     disabled={currentRecentImportPage >= recentImportTotalPages}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Próxima
+                    {'>'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Ir para o fim"
+                    title="Ir para o fim"
+                    onClick={() => setRecentImportPage(recentImportTotalPages)}
+                    disabled={currentRecentImportPage >= recentImportTotalPages}
+                    className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {'>>'}
                   </button>
                 </div>
               </div>
@@ -3073,6 +3374,68 @@ export default function FinanceiroImportacaoNotasPage() {
           </section>
         </div>
       </section>
+
+      <RecentImportGridConfigModal
+        isOpen={isRecentImportColumnConfigOpen}
+        hidden={recentImportHiddenColumns}
+        onSave={setRecentImportHiddenColumns}
+        onClose={() => setIsRecentImportColumnConfigOpen(false)}
+      />
+
+      <GridExportModal
+        isOpen={isRecentImportExportModalOpen}
+        title="Exportar notas pendentes"
+        description={`A exportação considera ${filteredRecentImports.length} registro(s) do filtro atual.`}
+        format={recentImportExportFormat}
+        onFormatChange={setRecentImportExportFormat}
+        columns={RECENT_IMPORT_EXPORT_COLUMNS.map((column) => ({
+          key: column.key,
+          label: column.label,
+        }))}
+        selectedColumns={recentImportExportColumns}
+        storageKey={RECENT_IMPORT_EXPORT_STORAGE_KEY}
+        brandingName={runtimeContext.companyName || 'FINANCEIRO'}
+        brandingLogoUrl={runtimeContext.logoUrl}
+        onClose={() => setIsRecentImportExportModalOpen(false)}
+        onExport={async (config) => {
+          await exportGridRows({
+            rows: filteredRecentImports,
+            columns: (config.orderedColumns || []).length
+              ? config.orderedColumns
+                  .map((key) =>
+                    RECENT_IMPORT_EXPORT_COLUMNS.find(
+                      (definition) => definition.key === key,
+                    ),
+                  )
+                  .filter(
+                    (
+                      column,
+                    ): column is GridColumnDefinition<
+                      PayableInvoiceImportSummary,
+                      RecentImportExportColumnKey
+                    > => Boolean(column),
+                  )
+              : RECENT_IMPORT_EXPORT_COLUMNS,
+            selectedColumns: config.selectedColumns,
+            format: recentImportExportFormat,
+            fileBaseName: 'notas-pendentes-aprovacao',
+            branding: {
+              title: 'Notas pendentes de aprovação',
+              subtitle: 'Exportação das notas pendentes filtradas no contas a pagar.',
+              schoolName:
+                runtimeContext.companyName ||
+                filteredRecentImports[0]?.companyName ||
+                recentImports[0]?.companyName ||
+                'FINANCEIRO',
+              logoUrl: runtimeContext.logoUrl,
+            },
+            pdfOptions: config.pdfOptions,
+          });
+
+          setRecentImportExportColumns(config.selectedColumns);
+          setIsRecentImportExportModalOpen(false);
+        }}
+      />
 
       <CertificateModal
         isOpen={isCertificateModalOpen}

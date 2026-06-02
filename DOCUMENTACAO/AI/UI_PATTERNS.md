@@ -72,8 +72,8 @@ Arquivos de referencia tecnica no Financeiro:
 - telas com grid/lista nao devem exibir faixa explicativa contextual entre o cabecalho principal e a area da listagem
 - telas com grid/lista nao devem criar uma segunda faixa azul interna repetindo `eyebrow`, titulo, descricao ou botao de voltar/menu logo abaixo do cabecalho principal
 - a tela deve abrir direto na barra operacional da listagem e no grid; qualquer explicacao adicional sobre a finalidade da tela deve aguardar o local especifico aprovado pelo usuario
-- quando a tela tiver acao de incluir/cadastrar novo registro, esse botao deve ficar na mesma linha da busca
-- a posicao aprovada para essa acao e no lado esquerdo do campo de busca, como primeiro elemento da linha
+- quando a tela tiver acao de incluir/cadastrar novo registro, esse botao deve ficar no canto esquerdo da area da listagem/grid
+- a posicao aprovada para essa acao e como primeira informacao visual da linha de acoes acima do grid, antes de titulo, contador, busca ou qualquer acao secundaria
 - o botao de incluir deve preferir formato compacto, mostrando apenas o icone `+`, com tooltip explicando a acao de cadastro
 - a barra deve funcionar como segundo padrao oficial compartilhado entre Escola e Financeiro
 - o uso continua manual, tela por tela, e nunca deve ser aplicado em paginas sem listagem
@@ -119,6 +119,50 @@ Referencia aprovada:
 - `PRINCIPAL_FINANCEIRO_ESTOQUE`
 - filtros `Produto` e `Código interno` da tela `PRINCIPAL_FINANCEIRO_ESTOQUE`
 
+### PAT-015.2 - Grid com rolagem interna, cabecalho fixo e rodape paginado
+
+- este modelo deve ser usado quando a tela possuir grid/listagem operacional com paginacao e volume suficiente para rolagem interna
+- referencia aprovada: `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS`
+- a barra de rolagem vertical deve ficar dentro do grid; a pagina/tela externa nao deve ganhar uma segunda rolagem para percorrer os registros
+- a rolagem deve mover apenas os registros do corpo da tabela
+- o cabecalho das colunas deve permanecer fixo no topo do grid durante a rolagem dos registros
+- o cabecalho fixo deve manter fundo solido e camada acima das linhas para nao misturar texto de coluna com conteudo rolado
+- as linhas do corpo do grid devem ser zebradas com contraste perceptivel:
+  - linhas pares ativas: fundo branco
+  - linhas impares ativas: fundo `slate-200/70` ou contraste visual equivalente
+  - linhas pares inativas: fundo `rose-100/80`
+  - linhas impares inativas: fundo `rose-200/70`
+  - o hover pode intensificar um nivel, sem remover a leitura do zebrado
+- ao clicar em uma linha do grid, ela deve ficar destacada ate outra linha ser selecionada:
+  - o destaque deve sobrepor temporariamente o zebrado
+  - usar fundo azul claro e contorno azul perceptivel, como `bg-blue-100` com `outline-blue-400`
+  - marcar a linha com `aria-selected` quando houver suporte na implementacao
+- quando houver filtros por coluna, o filtro deve ficar no proprio cabecalho da coluna, seguindo `PAT-015.1`
+- o botao iconico `Limpar todos os filtros` deve ser sempre a primeira informacao visual do cabecalho do grid, no canto esquerdo, antes da primeira coluna filtravel
+- quando houver acao de incluir/cadastrar registro, o botao de incluir deve ficar na faixa de acoes acima do grid, no canto esquerdo, como primeira informacao visual da tela com grid; o cabecalho interno da tabela continua preservando `Limpar todos os filtros` como primeiro item quando existirem filtros por coluna
+- o titulo acima do grid deve ser compacto; quando houver total importante para a operacao, mostrar esse total em pill ao lado do titulo, sem texto descritivo longo abaixo
+- o rodape do grid deve ficar em uma unica linha sempre que houver largura disponivel
+- no lado esquerdo do rodape devem ficar, nesta ordem:
+  - botao `Colunas`
+  - botao de impressao/exportacao
+  - semaforo/status da listagem, como `ATIVOS`, `INATIVOS` e `AMBOS`, ou o equivalente aprovado para a tela
+  - total de registros filtrados/exibidos, com texto compacto no formato `Total registros: N`
+- o semaforo/status deve ficar ao lado do botao de impressao/exportacao, na mesma linha
+- o total de registros deve ficar ao lado do semaforo/status, na mesma linha, antes dos controles de paginacao
+- no canto direito do rodape devem ficar, na mesma linha:
+  - combobox de quantidade de registros por pagina, com opcoes como `10`, `20`, `50` e `100`
+  - navegacao de paginas com `<<`, `<`, indicador `pagina/total`, `>` e `>>`
+- ao abrir qualquer tela com grid paginado, o combobox de quantidade por pagina deve iniciar obrigatoriamente em `10`
+- `<<` volta para o inicio, `<` volta uma pagina, `>` avanca uma pagina e `>>` vai para o fim
+- neste modelo nao exibir texto de intervalo como `1-10 de 100 registro(s)` no rodape; o rodape deve priorizar controles compactos
+- acoes de linha no grid devem usar botoes iconicos, sem texto visivel dentro do botao; cada botao deve ter `title`/tooltip e `aria-label` explicando claramente a acao, como alterar, excluir, ativar, definir padrao, visualizar ou abrir detalhes
+- quando a situacao ativa/inativa precisar aparecer na linha do grid, usar somente uma bolinha antes da descricao principal do registro, sem texto visivel de status:
+  - bolinha verde = `ATIVO`
+  - bolinha vermelha = `INATIVO`
+  - a bolinha deve ter `title`/tooltip e `aria-label` com `ATIVO` ou `INATIVO`
+  - nao criar coluna com titulo `Semaforo` nem pill textual `ATIVO`/`INATIVO` na linha
+- preservar os botoes e controles ja aprovados da tela, alterando apenas a estrutura necessaria para cumprir este padrao
+
 ### PAT-016 - Tela do Financeiro embutida na vertical consumidora
 
 - quando uma tela do `Financeiro` for aberta dentro da `Escola` ou de outra vertical consumidora, o layout principal visivel deve continuar sendo da vertical consumidora
@@ -143,6 +187,8 @@ Arquivos de referencia tecnica no Financeiro:
 ### PAT-017 - Popup/modal com logotipo, identificador exclusivo e auditoria SQL
 
 - todo novo popup/modal do `Financeiro` deve nascer por padrao com logotipo institucional no cabecalho
+- o mesmo padrao e compartilhado com a `Escola`: o logotipo institucional no cabecalho e obrigatorio em todo popup/modal quando houver contexto de escola/empresa
+- quando o popup tambem exibir foto, avatar ou icone do registro, o logotipo institucional continua obrigatorio e deve permanecer separado do avatar do registro
 - o popup/modal deve ter um nome tecnico exclusivo, estavel e nao reutilizavel em outro fluxo visual
 - o rodape deve reservar um bloco proprio para `Tela:` e para o identificador tecnico do popup
 - o identificador deve reutilizar `ScreenNameCopy` ou o mesmo comportamento visual/funcional homologado

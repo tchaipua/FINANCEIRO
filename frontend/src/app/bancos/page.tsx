@@ -3,7 +3,9 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
+import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import { API_BASE_URL, getJson } from '@/app/lib/api';
 import {
   formatCurrency,
@@ -181,6 +183,13 @@ type BankGridConfig = {
   hidden: BankGridColumnKey[];
 };
 
+type BankGridSortDirection = 'ASC' | 'DESC';
+type BankGridSort = {
+  key: BankGridColumnKey | null;
+  direction: BankGridSortDirection;
+};
+type BankColumnFilters = Record<BankGridColumnKey, string>;
+
 type BankFormTabKey = 'bank' | 'beneficiary' | 'boleto' | 'credentials' | 'rules';
 
 const BANK_FORM_TABS: Array<{ key: BankFormTabKey; label: string }> = [
@@ -338,6 +347,14 @@ const DEFAULT_BANK_GRID_CONFIG: BankGridConfig = {
     (column) => column.key,
   ),
 };
+const EMPTY_BANK_COLUMN_FILTERS = BANK_GRID_COLUMNS.reduce((filters, column) => {
+  filters[column.key] = '';
+  return filters;
+}, {} as BankColumnFilters);
+const DEFAULT_BANK_GRID_SORT: BankGridSort = {
+  key: null,
+  direction: 'ASC',
+};
 
 const BANK_GRID_STORAGE_PREFIX = 'financeiro:bancos:grid-columns:';
 const BANK_EXPORT_STORAGE_PREFIX = 'financeiro:bancos:export-config:';
@@ -493,6 +510,69 @@ function buildFormFromBank(bank: BankItem): BankFormState {
 
 function normalizeUppercase(value: string) {
   return value.trim().toUpperCase();
+}
+
+function normalizeBankGridFilterValue(value: string | number | null | undefined) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function getBankGridFilterValue(bank: BankItem, columnKey: BankGridColumnKey) {
+  if (columnKey === 'bankName') {
+    return [bank.bankName, bank.bankCode, bank.companyName].join(' ');
+  }
+
+  if (columnKey === 'account') {
+    return [
+      bank.branchNumber,
+      bank.branchDigit,
+      bank.accountNumber,
+      bank.accountDigit,
+    ].join(' ');
+  }
+
+  if (columnKey === 'wallet') {
+    return [bank.walletCode, bank.agreementCode, bank.pixKey].join(' ');
+  }
+
+  if (columnKey === 'beneficiary') {
+    return [bank.beneficiaryName, bank.companyName, bank.beneficiaryDocument].join(' ');
+  }
+
+  if (columnKey === 'lastStatementBalance') {
+    return [
+      typeof bank.lastStatementBalance === 'number'
+        ? formatCurrency(bank.lastStatementBalance)
+        : '',
+      formatDateLabel(bank.lastStatementBalanceDate),
+      formatDateLabel(bank.lastStatementPulledAt),
+    ].join(' ');
+  }
+
+  const column = BANK_GRID_COLUMNS.find((item) => item.key === columnKey);
+  return column ? column.getValue(bank) : '';
+}
+
+function matchesBankColumnFilters(bank: BankItem, filters: BankColumnFilters) {
+  return BANK_GRID_COLUMNS.every((column) => {
+    const filter = normalizeBankGridFilterValue(filters[column.key]);
+    if (!filter) {
+      return true;
+    }
+
+    return normalizeBankGridFilterValue(getBankGridFilterValue(bank, column.key)).includes(filter);
+  });
+}
+
+function compareBankGridValues(leftValue: string, rightValue: string) {
+  return normalizeBankGridFilterValue(leftValue).localeCompare(
+    normalizeBankGridFilterValue(rightValue),
+    'pt-BR',
+    { numeric: true, sensitivity: 'base' },
+  );
 }
 
 function normalizeOptionalDecimal(value: string, label: string) {
@@ -872,10 +952,23 @@ export default function FinanceiroBanksPage() {
   );
 
   const [scope, setScope] = useState<ScopeState>(defaultScope);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{ search: string; status: GridStatusFilterValue }>({
     search: '',
     status: 'ACTIVE',
   });
+  const [bankColumnFilters, setBankColumnFilters] = useState<BankColumnFilters>({
+    ...EMPTY_BANK_COLUMN_FILTERS,
+  });
+  const [bankColumnFilterDrafts, setBankColumnFilterDrafts] = useState<BankColumnFilters>({
+    ...EMPTY_BANK_COLUMN_FILTERS,
+  });
+  const [activeBankFilterColumn, setActiveBankFilterColumn] = useState<BankGridColumnKey | null>(
+    null,
+  );
+  const [bankGridSort, setBankGridSort] = useState<BankGridSort>({ ...DEFAULT_BANK_GRID_SORT });
+  const [bankPageSize, setBankPageSize] = useState(10);
+  const [bankPage, setBankPage] = useState(1);
+  const [selectedBankGridRowId, setSelectedBankGridRowId] = useState<string | null>(null);
   const [columnOrder, setColumnOrder] = useState<BankGridColumnKey[]>(
     DEFAULT_BANK_GRID_CONFIG.order,
   );
@@ -912,9 +1005,42 @@ export default function FinanceiroBanksPage() {
   const isLastStatementBalanceVisible = activeBankColumns.some(
     (column) => column.key === 'lastStatementBalance',
   );
+  const hasBankGridFilters = useMemo(
+    () =>
+      Boolean(filters.search.trim()) ||
+      BANK_GRID_COLUMNS.some((column) => Boolean(bankColumnFilters[column.key].trim())) ||
+      Boolean(bankGridSort.key),
+    [bankColumnFilters, bankGridSort.key, filters.search],
+  );
+  const displayedBanks = useMemo(() => {
+    const filteredBanks = banks.filter((bank) => matchesBankColumnFilters(bank, bankColumnFilters));
+
+    if (!bankGridSort.key) {
+      return filteredBanks;
+    }
+
+    const directionMultiplier = bankGridSort.direction === 'DESC' ? -1 : 1;
+    return [...filteredBanks].sort(
+      (left, right) =>
+        compareBankGridValues(
+          getBankGridFilterValue(left, bankGridSort.key as BankGridColumnKey),
+          getBankGridFilterValue(right, bankGridSort.key as BankGridColumnKey),
+        ) * directionMultiplier,
+    );
+  }, [bankColumnFilters, bankGridSort.direction, bankGridSort.key, banks]);
+  const bankTotalPages = Math.max(1, Math.ceil(displayedBanks.length / bankPageSize));
+  const currentBankPage = Math.min(bankPage, bankTotalPages);
+  const paginatedBanks = useMemo(
+    () =>
+      displayedBanks.slice(
+        (currentBankPage - 1) * bankPageSize,
+        currentBankPage * bankPageSize,
+      ),
+    [currentBankPage, displayedBanks, bankPageSize],
+  );
   const lastStatementBalanceTotal = useMemo(
     () =>
-      banks.reduce(
+      displayedBanks.reduce(
         (total, bank) =>
           total +
           (typeof bank.lastStatementBalance === 'number'
@@ -922,7 +1048,7 @@ export default function FinanceiroBanksPage() {
             : 0),
         0,
       ),
-    [banks],
+    [displayedBanks],
   );
   const shouldReturnToSchoolMenu = Boolean(runtimeContext.embedded && schoolBaseUrl);
   const backToMenuHref = shouldReturnToSchoolMenu
@@ -1134,6 +1260,113 @@ export default function FinanceiroBanksPage() {
     void loadBanks();
   }, [loadBanks]);
 
+  useEffect(() => {
+    setBankPage(1);
+  }, [
+    bankColumnFilters,
+    bankGridSort.direction,
+    bankGridSort.key,
+    bankPageSize,
+    filters.search,
+    filters.status,
+  ]);
+
+  useEffect(() => {
+    if (bankPage > bankTotalPages) {
+      setBankPage(bankTotalPages);
+    }
+  }, [bankPage, bankTotalPages]);
+
+  function clearAllBankGridFilters() {
+    setFilters((current) => ({ ...current, search: '' }));
+    setBankColumnFilters({ ...EMPTY_BANK_COLUMN_FILTERS });
+    setBankColumnFilterDrafts({ ...EMPTY_BANK_COLUMN_FILTERS });
+    setBankGridSort({ ...DEFAULT_BANK_GRID_SORT });
+    setActiveBankFilterColumn(null);
+  }
+
+  function openBankColumnFilter(columnKey: BankGridColumnKey) {
+    setBankColumnFilterDrafts((current) => ({
+      ...current,
+      [columnKey]: bankColumnFilters[columnKey],
+    }));
+    setActiveBankFilterColumn((current) => (current === columnKey ? null : columnKey));
+  }
+
+  function applyBankColumnFilter(columnKey: BankGridColumnKey) {
+    setBankColumnFilters((current) => ({
+      ...current,
+      [columnKey]: bankColumnFilterDrafts[columnKey].trim(),
+    }));
+    setActiveBankFilterColumn(null);
+  }
+
+  function clearBankColumnFilter(columnKey: BankGridColumnKey) {
+    setBankColumnFilters((current) => ({
+      ...current,
+      [columnKey]: '',
+    }));
+    setBankColumnFilterDrafts((current) => ({
+      ...current,
+      [columnKey]: '',
+    }));
+    setActiveBankFilterColumn(null);
+  }
+
+  function renderBankClearAllButton() {
+    return (
+      <button
+        type="button"
+        onClick={clearAllBankGridFilters}
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+          hasBankGridFilters
+            ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+            : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+        }`}
+        title="Limpar todos os filtros"
+        aria-label="Limpar todos os filtros"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 12h10M10 18h4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 15l3 3m0-3-3 3" />
+        </svg>
+      </button>
+    );
+  }
+
+  function renderBankColumnHeader(column: BankGridColumnDefinition, columnIndex: number) {
+    const isActive =
+      Boolean(bankColumnFilters[column.key].trim()) || bankGridSort.key === column.key;
+
+    return (
+      <div className="flex items-center gap-1.5">
+        {columnIndex === 0 ? renderBankClearAllButton() : null}
+        <GridColumnFilterHeader
+          label={column.label}
+          isOpen={activeBankFilterColumn === column.key}
+          isActive={isActive}
+          filterValue={bankColumnFilterDrafts[column.key]}
+          placeholder={`DIGITE ${column.label.toUpperCase()}`}
+          align={column.key === 'lastStatementBalance' || column.key === 'updatedAt' ? 'right' : 'left'}
+          sortDirection={bankGridSort.key === column.key ? bankGridSort.direction : null}
+          onToggle={() => openBankColumnFilter(column.key)}
+          onSort={(direction) => {
+            setBankGridSort({ key: column.key, direction });
+            setActiveBankFilterColumn(null);
+          }}
+          onFilterValueChange={(value) =>
+            setBankColumnFilterDrafts((current) => ({
+              ...current,
+              [column.key]: value,
+            }))
+          }
+          onApply={() => applyBankColumnFilter(column.key)}
+          onClear={() => clearBankColumnFilter(column.key)}
+        />
+      </div>
+    );
+  }
+
   function resetForm() {
     setError(null);
     setStatusMessage(null);
@@ -1147,7 +1380,7 @@ export default function FinanceiroBanksPage() {
     setForm(buildEmptyBankForm(scope.companyName));
   }
 
-  function handleStatusFilter(nextStatus: 'ALL' | 'ACTIVE' | 'INACTIVE') {
+  function handleStatusFilter(nextStatus: GridStatusFilterValue) {
     setFilters((current) => ({
       ...current,
       status: nextStatus,
@@ -2156,43 +2389,66 @@ export default function FinanceiroBanksPage() {
 
       {!isCreateRoute ? (
         <>
-        <section className={`${cardClass} overflow-hidden`}>
+        <section className={`${cardClass} flex h-[calc(100vh-19rem)] min-h-[540px] flex-col overflow-hidden`}>
           <div className="border-b border-slate-100 px-6 py-5">
             <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
               Consulta bancária
             </div>
             <h2 className="mt-1 text-xl font-black text-slate-900">
-              {isLoading ? 'Carregando...' : `${banks.length} banco(s) encontrado(s)`}
+              {isLoading ? 'Carregando...' : `${displayedBanks.length} banco(s) encontrado(s)`}
             </h2>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="min-w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+              <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-[0_1px_0_rgba(226,232,240,1)]">
                 <tr>
-                  {activeBankColumns.map((column) => (
+                  {activeBankColumns.map((column, columnIndex) => (
                     <th key={column.key} className="px-4 py-3">
-                      {column.label}
+                      {renderBankColumnHeader(column, columnIndex)}
                     </th>
                   ))}
                   <th className="px-4 py-3">Ações</th>
                 </tr>
+                {activeBankFilterColumn ? (
+                  <tr aria-hidden="true">
+                    <th colSpan={activeBankColumns.length + 1} className="h-44 bg-white p-0" />
+                  </tr>
+                ) : null}
               </thead>
               <tbody>
-                {banks.map((bank) => (
-                  <tr key={bank.id} className="border-t border-slate-100">
+                {paginatedBanks.map((bank, bankIndex) => {
+                  const isSelected = selectedBankGridRowId === bank.id;
+                  const zebraClass =
+                    bank.status === 'ACTIVE'
+                      ? bankIndex % 2
+                        ? 'bg-slate-200/70'
+                        : 'bg-white'
+                      : bankIndex % 2
+                        ? 'bg-rose-200/70'
+                        : 'bg-rose-100/80';
+
+                  return (
+                  <tr
+                    key={bank.id}
+                    onClick={() => setSelectedBankGridRowId(bank.id)}
+                    aria-selected={isSelected}
+                    className={`cursor-pointer border-t border-slate-100 transition hover:bg-blue-50 ${
+                      isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-300' : zebraClass
+                    }`}
+                  >
                     {activeBankColumns.map((column) => {
                       if (column.key === 'status') {
                         return (
                           <td key={column.key} className="px-4 py-4">
                             <span
-                              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
-                                bank.status === 'ACTIVE'
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                  : 'border-amber-200 bg-amber-50 text-amber-700'
+                              className={`inline-flex h-3 w-3 rounded-full ${
+                                bank.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
                               }`}
+                              title={bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                              aria-label={bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
                             >
-                              {column.getValue(bank)}
+                              <span className="sr-only">{column.getValue(bank)}</span>
                             </span>
                           </td>
                         );
@@ -2201,8 +2457,15 @@ export default function FinanceiroBanksPage() {
                       if (column.key === 'bankName') {
                         return (
                           <td key={column.key} className="px-4 py-4">
-                            <div className="font-black text-slate-900">
-                              {bank.bankName}
+                            <div className="flex items-center gap-2 font-black text-slate-900">
+                              <span
+                                className={`h-3 w-3 shrink-0 rounded-full ${
+                                  bank.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
+                                }`}
+                                title={bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                                aria-label={bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                              />
+                              <span>{bank.bankName}</span>
                             </div>
                             <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                               CÓDIGO {bank.bankCode}
@@ -2366,9 +2629,10 @@ export default function FinanceiroBanksPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
 
-                {!isLoading && !banks.length ? (
+                {!isLoading && !displayedBanks.length ? (
                   <tr>
                     <td
                       colSpan={activeBankColumns.length + 1}
@@ -2379,130 +2643,27 @@ export default function FinanceiroBanksPage() {
                   </tr>
                 ) : null}
               </tbody>
-              {!isLoading && banks.length && isLastStatementBalanceVisible ? (
-                <tfoot className="border-t border-slate-200 bg-slate-50">
-                  <tr>
-                    {activeBankColumns.map((column, columnIndex) => {
-                      if (column.key === 'lastStatementBalance') {
-                        return (
-                          <td key={column.key} className="px-4 py-4">
-                            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                              Total
-                            </div>
-                            <div className="mt-1 font-black text-slate-900">
-                              {formatCurrency(lastStatementBalanceTotal)}
-                            </div>
-                          </td>
-                        );
-                      }
-
-                      return (
-                        <td
-                          key={column.key}
-                          className="px-4 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500"
-                        >
-                          {columnIndex === 0 ? 'Total geral' : ''}
-                        </td>
-                      );
-                    })}
-                    <td className="px-4 py-4" />
-                  </tr>
-                </tfoot>
-              ) : null}
             </table>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsColumnConfigOpen(true)}
-                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                ☰ Colunas
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsExportModalOpen(true)}
-                aria-label="Imprimir"
-                title="Imprimir"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M6 9V4h12v5" />
-                  <path d="M6 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1" />
-                  <path d="M6 14h12v6H6z" />
-                  <path d="M17 12h.01" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex items-center justify-center gap-2">
-              {[
-                {
-                  value: 'ACTIVE',
-                  label: 'Ativos',
-                  tone: 'bg-emerald-500',
-                  activeTone: 'bg-emerald-700',
-                  dot: 'bg-white',
-                },
-                {
-                  value: 'ALL',
-                  label: 'Todos',
-                  tone: 'bg-amber-200',
-                  activeTone: 'bg-amber-400',
-                  dot: 'bg-white',
-                },
-                {
-                  value: 'INACTIVE',
-                  label: 'Inativos',
-                  tone: 'bg-rose-200',
-                  activeTone: 'bg-rose-400',
-                  dot: 'bg-white',
-                },
-              ].map((item) => {
-                const isActive = filters.status === item.value;
-
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => handleStatusFilter(item.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
-                    aria-label={item.label}
-                    title={item.label}
-                    aria-pressed={isActive}
-                    className={`relative h-6 w-14 rounded-full border transition duration-200 ${
-                      isActive
-                        ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
-                        : `${item.tone} border-transparent opacity-55 hover:opacity-85`
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full shadow-sm ${item.dot} ${
-                        isActive ? 'right-1' : 'left-1'
-                      }`}
-                    />
-                    <span className="sr-only">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-              Registros exibidos ({banks.length})
-            </div>
-          </div>
-        </section>
+        <GridStandardFooter
+          statusFilter={filters.status}
+          totalRecords={displayedBanks.length}
+          pageSize={bankPageSize}
+          currentPage={currentBankPage}
+          totalPages={bankTotalPages}
+          aggregateSummaries={
+            isLastStatementBalanceVisible
+              ? [{ label: 'Saldo total', value: formatCurrency(lastStatementBalanceTotal) }]
+              : []
+          }
+          onColumnSettings={() => setIsColumnConfigOpen(true)}
+          onExport={() => setIsExportModalOpen(true)}
+          onStatusFilterChange={handleStatusFilter}
+          onPageSizeChange={setBankPageSize}
+          onPageChange={setBankPage}
+        />
         <BankGridConfigModal
           isOpen={isColumnConfigOpen}
           title="Configurar colunas do grid"
@@ -2519,7 +2680,7 @@ export default function FinanceiroBanksPage() {
         <GridExportModal
           isOpen={isExportModalOpen}
           title="Exportar bancos"
-          description={`A exportação respeita a busca atual e inclui ${banks.length} registro(s).`}
+          description={`A exportação respeita a busca atual e inclui ${displayedBanks.length} registro(s).`}
           format={exportFormat}
           onFormatChange={setExportFormat}
           columns={BANK_EXPORT_COLUMNS.map((column) => ({
@@ -2533,7 +2694,7 @@ export default function FinanceiroBanksPage() {
           onExport={async (config) => {
             try {
               await exportGridRows({
-                rows: banks,
+                rows: displayedBanks,
                 columns: (config.orderedColumns || []).length
                   ? config.orderedColumns
                       .map((key) =>

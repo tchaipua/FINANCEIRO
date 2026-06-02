@@ -33,6 +33,7 @@
 
 - Toda tela criada ou alterada deve manter no rodape o botao de copiar o nome tecnico da tela.
 - Todo novo popup/modal criado deve nascer por padrao com logotipo institucional no cabecalho, nome tecnico exclusivo e bloco de auditoria visual no rodape.
+- Quando o popup/modal tambem exibir foto, avatar ou icone do registro, esse elemento nao substitui o logotipo institucional; ambos devem ficar separados no cabecalho.
 - O nome tecnico de popup/modal deve ser exclusivo, estavel e nao pode ser reaproveitado por outro fluxo visual.
 - O nome tecnico deve seguir o contexto em que a tela aparece. Em telas embutidas em uma vertical, usar o identificador da tela principal da vertical quando aplicavel, como `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`.
 - Em telas do `Financeiro` abertas dentro de outra vertical, como a `Escola`, a navegacao lateral, o cabecalho institucional e a moldura principal devem continuar sendo da vertical consumidora.

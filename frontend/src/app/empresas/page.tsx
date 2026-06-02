@@ -1,7 +1,9 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
+import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import { formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
@@ -147,10 +149,24 @@ const COMPANY_GRID_COLUMNS: GridColumnDefinition<CompanyItem, CompanyGridColumnK
 
 const COMPANY_GRID_STORAGE_PREFIX = 'financeiro:empresas:grid-columns:';
 const COMPANY_EXPORT_STORAGE_PREFIX = 'financeiro:empresas:export-config:';
+type CompanyGridSortDirection = 'ASC' | 'DESC';
+type CompanyGridSort = {
+  key: CompanyGridColumnKey | null;
+  direction: CompanyGridSortDirection;
+};
+type CompanyColumnFilters = Record<CompanyGridColumnKey, string>;
 
 const DEFAULT_COMPANY_GRID_CONFIG: CompanyGridConfig = {
   order: COMPANY_GRID_COLUMNS.map((column) => column.key),
   hidden: [],
+};
+const EMPTY_COMPANY_COLUMN_FILTERS = COMPANY_GRID_COLUMNS.reduce((filters, column) => {
+  filters[column.key] = '';
+  return filters;
+}, {} as CompanyColumnFilters);
+const DEFAULT_COMPANY_GRID_SORT: CompanyGridSort = {
+  key: null,
+  direction: 'ASC',
 };
 
 function formatOptionalNumberInput(value?: number | null) {
@@ -262,6 +278,46 @@ function getVisibleCompanyColumns(config: CompanyGridConfig) {
     .map((key) => COMPANY_GRID_COLUMNS.find((column) => column.key === key))
     .filter((column): column is GridColumnDefinition<CompanyItem, CompanyGridColumnKey> => Boolean(column))
     .filter((column) => !config.hidden.includes(column.key));
+}
+
+function normalizeCompanyGridFilterValue(value: string | number | null | undefined) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function getCompanyStatusLabel(status: string) {
+  return status === 'ACTIVE' ? 'ATIVO' : 'INATIVO';
+}
+
+function getCompanyGridFilterValue(company: CompanyItem, columnKey: CompanyGridColumnKey) {
+  if (columnKey === 'name') {
+    return [company.name, getCompanyStatusLabel(company.status)].join(' ');
+  }
+
+  const column = COMPANY_GRID_COLUMNS.find((item) => item.key === columnKey);
+  return column ? column.getValue(company) : '';
+}
+
+function matchesCompanyColumnFilters(company: CompanyItem, filters: CompanyColumnFilters) {
+  return COMPANY_GRID_COLUMNS.every((column) => {
+    const filter = normalizeCompanyGridFilterValue(filters[column.key]);
+    if (!filter) {
+      return true;
+    }
+
+    return normalizeCompanyGridFilterValue(getCompanyGridFilterValue(company, column.key)).includes(filter);
+  });
+}
+
+function compareCompanyGridValues(leftValue: string, rightValue: string) {
+  return normalizeCompanyGridFilterValue(leftValue).localeCompare(
+    normalizeCompanyGridFilterValue(rightValue),
+    'pt-BR',
+    { numeric: true, sensitivity: 'base' },
+  );
 }
 
 function moveArrayItem<T>(items: T[], fromIndex: number, toIndex: number) {
@@ -890,6 +946,21 @@ export default function FinanceiroEmpresasPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [search, setSearch] = useState('');
   const [companies, setCompanies] = useState<CompanyItem[]>([]);
+  const [companyStatusFilter, setCompanyStatusFilter] = useState<GridStatusFilterValue>('ACTIVE');
+  const [companyColumnFilters, setCompanyColumnFilters] = useState<CompanyColumnFilters>({
+    ...EMPTY_COMPANY_COLUMN_FILTERS,
+  });
+  const [companyColumnFilterDrafts, setCompanyColumnFilterDrafts] = useState<CompanyColumnFilters>({
+    ...EMPTY_COMPANY_COLUMN_FILTERS,
+  });
+  const [activeCompanyFilterColumn, setActiveCompanyFilterColumn] =
+    useState<CompanyGridColumnKey | null>(null);
+  const [companyGridSort, setCompanyGridSort] = useState<CompanyGridSort>({
+    ...DEFAULT_COMPANY_GRID_SORT,
+  });
+  const [companyPageSize, setCompanyPageSize] = useState(10);
+  const [companyPage, setCompanyPage] = useState(1);
+  const [selectedCompanyGridRowId, setSelectedCompanyGridRowId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -926,6 +997,48 @@ export default function FinanceiroEmpresasPage() {
   const visibleCompanyColumns = useMemo(
     () => getVisibleCompanyColumns({ order: columnOrder, hidden: hiddenColumns }),
     [columnOrder, hiddenColumns],
+  );
+  const hasCompanyGridFilters = useMemo(
+    () =>
+      Boolean(search.trim()) ||
+      COMPANY_GRID_COLUMNS.some((column) => Boolean(companyColumnFilters[column.key].trim())) ||
+      Boolean(companyGridSort.key),
+    [companyColumnFilters, companyGridSort.key, search],
+  );
+  const displayedCompanies = useMemo(() => {
+    const statusFilteredCompanies = companies.filter((company) => {
+      if (companyStatusFilter === 'ALL') {
+        return true;
+      }
+
+      return company.status === companyStatusFilter;
+    });
+    const columnFilteredCompanies = statusFilteredCompanies.filter((company) =>
+      matchesCompanyColumnFilters(company, companyColumnFilters),
+    );
+
+    if (!companyGridSort.key) {
+      return columnFilteredCompanies;
+    }
+
+    const directionMultiplier = companyGridSort.direction === 'DESC' ? -1 : 1;
+    return [...columnFilteredCompanies].sort(
+      (left, right) =>
+        compareCompanyGridValues(
+          getCompanyGridFilterValue(left, companyGridSort.key as CompanyGridColumnKey),
+          getCompanyGridFilterValue(right, companyGridSort.key as CompanyGridColumnKey),
+        ) * directionMultiplier,
+    );
+  }, [companies, companyColumnFilters, companyGridSort.direction, companyGridSort.key, companyStatusFilter]);
+  const companyTotalPages = Math.max(1, Math.ceil(displayedCompanies.length / companyPageSize));
+  const currentCompanyPage = Math.min(companyPage, companyTotalPages);
+  const paginatedCompanies = useMemo(
+    () =>
+      displayedCompanies.slice(
+        (currentCompanyPage - 1) * companyPageSize,
+        currentCompanyPage * companyPageSize,
+      ),
+    [currentCompanyPage, displayedCompanies, companyPageSize],
   );
   const embeddedSingleCompany = runtimeContext.embedded && companies.length === 1;
   const embeddedCompany = embeddedSingleCompany ? companies[0] : null;
@@ -982,6 +1095,23 @@ export default function FinanceiroEmpresasPage() {
   }, [columnOrder, hiddenColumns, runtimeContext.sourceTenantId]);
 
   useEffect(() => {
+    setCompanyPage(1);
+  }, [
+    companyColumnFilters,
+    companyGridSort.direction,
+    companyGridSort.key,
+    companyPageSize,
+    companyStatusFilter,
+    search,
+  ]);
+
+  useEffect(() => {
+    if (companyPage > companyTotalPages) {
+      setCompanyPage(companyTotalPages);
+    }
+  }, [companyPage, companyTotalPages]);
+
+  useEffect(() => {
     if (!runtimeContext.embedded || isLoading || companies.length !== 1) {
       return;
     }
@@ -997,6 +1127,106 @@ export default function FinanceiroEmpresasPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void loadCompanies(search);
+  }
+
+  function clearAllCompanyGridFilters() {
+    setSearch('');
+    setCompanyColumnFilters({ ...EMPTY_COMPANY_COLUMN_FILTERS });
+    setCompanyColumnFilterDrafts({ ...EMPTY_COMPANY_COLUMN_FILTERS });
+    setCompanyGridSort({ ...DEFAULT_COMPANY_GRID_SORT });
+    setActiveCompanyFilterColumn(null);
+    void loadCompanies();
+  }
+
+  function openCompanyColumnFilter(columnKey: CompanyGridColumnKey) {
+    setCompanyColumnFilterDrafts((current) => ({
+      ...current,
+      [columnKey]: companyColumnFilters[columnKey],
+    }));
+    setActiveCompanyFilterColumn((current) => (current === columnKey ? null : columnKey));
+  }
+
+  function applyCompanyColumnFilter(columnKey: CompanyGridColumnKey) {
+    setCompanyColumnFilters((current) => ({
+      ...current,
+      [columnKey]: companyColumnFilterDrafts[columnKey].trim(),
+    }));
+    setActiveCompanyFilterColumn(null);
+  }
+
+  function clearCompanyColumnFilter(columnKey: CompanyGridColumnKey) {
+    setCompanyColumnFilters((current) => ({
+      ...current,
+      [columnKey]: '',
+    }));
+    setCompanyColumnFilterDrafts((current) => ({
+      ...current,
+      [columnKey]: '',
+    }));
+    setActiveCompanyFilterColumn(null);
+  }
+
+  function renderCompanyClearAllButton() {
+    return (
+      <button
+        type="button"
+        onClick={clearAllCompanyGridFilters}
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+          hasCompanyGridFilters
+            ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+            : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+        }`}
+        title="Limpar todos os filtros"
+        aria-label="Limpar todos os filtros"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 12h10M10 18h4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 15l3 3m0-3-3 3" />
+        </svg>
+      </button>
+    );
+  }
+
+  function renderCompanyColumnHeader(
+    column: GridColumnDefinition<CompanyItem, CompanyGridColumnKey>,
+    columnIndex: number,
+  ) {
+    const isActive =
+      Boolean(companyColumnFilters[column.key].trim()) || companyGridSort.key === column.key;
+
+    return (
+      <div className="flex items-center gap-1.5">
+        {columnIndex === 0 ? renderCompanyClearAllButton() : null}
+        <GridColumnFilterHeader
+          label={column.label}
+          isOpen={activeCompanyFilterColumn === column.key}
+          isActive={isActive}
+          filterValue={companyColumnFilterDrafts[column.key]}
+          placeholder={`DIGITE ${column.label.toUpperCase()}`}
+          align={
+            ['receivableTitleCount', 'installmentCount', 'cashSessionCount', 'createdAt'].includes(
+              column.key,
+            )
+              ? 'right'
+              : 'left'
+          }
+          sortDirection={companyGridSort.key === column.key ? companyGridSort.direction : null}
+          onToggle={() => openCompanyColumnFilter(column.key)}
+          onSort={(direction) => {
+            setCompanyGridSort({ key: column.key, direction });
+            setActiveCompanyFilterColumn(null);
+          }}
+          onFilterValueChange={(value) =>
+            setCompanyColumnFilterDrafts((current) => ({
+              ...current,
+              [column.key]: value,
+            }))
+          }
+          onApply={() => applyCompanyColumnFilter(column.key)}
+          onClear={() => clearCompanyColumnFilter(column.key)}
+        />
+      </div>
+    );
   }
 
   function openFinancialSettings(company: CompanyItem) {
@@ -1161,7 +1391,7 @@ export default function FinanceiroEmpresasPage() {
       sourceTenantId: runtimeContext.sourceTenantId,
       companyName: embeddedCompany?.name || companies[0]?.name,
       search,
-      displayedRowsCount: companies.length,
+      displayedRowsCount: displayedCompanies.length,
     };
 
     return {
@@ -1170,6 +1400,7 @@ export default function FinanceiroEmpresasPage() {
     };
   }, [
     companies,
+    displayedCompanies.length,
     embeddedCompany?.name,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
@@ -1353,50 +1584,66 @@ export default function FinanceiroEmpresasPage() {
       ) : null}
 
       {!runtimeContext.embedded ? (
-        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex h-[calc(100vh-19rem)] min-h-[540px] flex-col overflow-hidden`}>
           <div className="border-b border-slate-100 px-6 py-5">
-            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresas ativas</div>
+            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Empresas</div>
             <h2 className="mt-1 text-xl font-black text-slate-900">
-              {isLoading ? 'Carregando...' : `${companies.length} empresa(s) encontrada(s)`}
+              {isLoading ? 'Carregando...' : `${displayedCompanies.length} empresa(s) encontrada(s)`}
             </h2>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="min-w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+              <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-[0_1px_0_rgba(226,232,240,1)]">
                 <tr>
-                  {visibleCompanyColumns.map((column) => (
+                  {visibleCompanyColumns.map((column, columnIndex) => (
                     <th key={column.key} className="px-4 py-3">
-                      {column.label}
+                      {renderCompanyColumnHeader(column, columnIndex)}
                     </th>
                   ))}
+                  <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
+                {activeCompanyFilterColumn ? (
+                  <tr aria-hidden="true">
+                    <th colSpan={visibleCompanyColumns.length + 1} className="h-44 bg-white p-0" />
+                  </tr>
+                ) : null}
               </thead>
               <tbody>
-                {companies.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100">
+                {paginatedCompanies.map((item, companyIndex) => {
+                  const isSelected = selectedCompanyGridRowId === item.id;
+                  const zebraClass =
+                    item.status === 'ACTIVE'
+                      ? companyIndex % 2
+                        ? 'bg-slate-200/70'
+                        : 'bg-white'
+                      : companyIndex % 2
+                        ? 'bg-rose-200/70'
+                        : 'bg-rose-100/80';
+
+                  return (
+                  <tr
+                    key={item.id}
+                    onClick={() => setSelectedCompanyGridRowId(item.id)}
+                    aria-selected={isSelected}
+                    className={`cursor-pointer border-t border-slate-100 transition hover:bg-blue-50 ${
+                      isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-300' : zebraClass
+                    }`}
+                  >
                     {visibleCompanyColumns.map((column) => (
                       <td key={column.key} className="px-4 py-4">
                         {column.key === 'name' ? (
                           <div>
-                            <div className="font-black text-slate-900">{item.name}</div>
-                            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                              {item.status}
+                            <div className="flex items-center gap-2 font-black text-slate-900">
+                              <span
+                                className={`h-3 w-3 shrink-0 rounded-full ${
+                                  item.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
+                                }`}
+                                title={getCompanyStatusLabel(item.status)}
+                                aria-label={getCompanyStatusLabel(item.status)}
+                              />
+                              <span>{item.name}</span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => openFinancialSettings(item)}
-                              className="mt-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
-                            >
-                              Alterar financeiro
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openBranchSettings(item)}
-                              className="ml-2 mt-3 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
-                            >
-                              Filiais/estoque
-                            </button>
                           </div>
                         ) : column.key === 'sourceSystem' ? (
                           <div>
@@ -1420,12 +1667,39 @@ export default function FinanceiroEmpresasPage() {
                         )}
                       </td>
                     ))}
+                    <td className="px-4 py-4">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openFinancialSettings(item)}
+                          title="Alterar financeiro"
+                          aria-label="Alterar financeiro"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-800"
+                        >
+                          <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.4-9.4a2 2 0 1 1 2.8 2.8L11.8 15H9v-2.8l8.6-8.6z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openBranchSettings(item)}
+                          title="Filiais e estoque"
+                          aria-label="Filiais e estoque"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 hover:text-emerald-800"
+                        >
+                          <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M8 10h.01M12 10h.01M16 10h.01" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
 
-                {!isLoading && !companies.length ? (
+                {!isLoading && !displayedCompanies.length ? (
                   <tr>
-                    <td colSpan={visibleCompanyColumns.length || 1} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                    <td colSpan={visibleCompanyColumns.length + 1 || 1} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
                       {runtimeTenantReady
                         ? 'Nenhuma empresa financeira foi localizada para o tenant atual.'
                         : 'Nenhuma empresa pode ser exibida sem o tenant atual informado.'}
@@ -1460,40 +1734,25 @@ export default function FinanceiroEmpresasPage() {
       ) : null}
 
       {!runtimeContext.embedded ? (
-        <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} border-slate-100 bg-slate-50 px-6 py-4`}>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                title="COLUNAS"
-                aria-label="COLUNAS"
-                onClick={() => setIsColumnConfigOpen(true)}
-                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                ☰ Colunas
-              </button>
-              <button
-                type="button"
-                title="IMPRIMIR"
-                aria-label="IMPRIMIR"
-                onClick={() => setIsExportModalOpen(true)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9V4h12v5" />
-                  <path d="M6 18h12v-6H6z" />
-                  <path d="M8 14h8" />
-                </svg>
-              </button>
-            </div>
-            <ScreenNameCopy
-              screenId={embeddedCompanyScreenId}
-              className="justify-end"
-              auditText={empresasAuditContext.auditText}
-              sqlText={empresasAuditContext.sqlText}
-            />
-          </div>
-        </section>
+        <GridStandardFooter
+          statusFilter={companyStatusFilter}
+          totalRecords={displayedCompanies.length}
+          pageSize={companyPageSize}
+          currentPage={currentCompanyPage}
+          totalPages={companyTotalPages}
+          onColumnSettings={() => setIsColumnConfigOpen(true)}
+          onExport={() => setIsExportModalOpen(true)}
+          onStatusFilterChange={setCompanyStatusFilter}
+          onPageSizeChange={setCompanyPageSize}
+          onPageChange={setCompanyPage}
+        >
+          <ScreenNameCopy
+            screenId={embeddedCompanyScreenId}
+            className="justify-end"
+            auditText={empresasAuditContext.auditText}
+            sqlText={empresasAuditContext.sqlText}
+          />
+        </GridStandardFooter>
       ) : null}
 
       <CompanyGridConfigModal
@@ -1558,7 +1817,7 @@ export default function FinanceiroEmpresasPage() {
       <GridExportModal
         isOpen={isExportModalOpen}
         title="Exportar empresas"
-        description={`A exportação respeita a busca atual e inclui ${companies.length} registro(s).`}
+        description={`A exportação respeita a busca atual e inclui ${displayedCompanies.length} registro(s).`}
         format={exportFormat}
         onFormatChange={setExportFormat}
         columns={COMPANY_GRID_COLUMNS.map((column) => ({
@@ -1571,7 +1830,7 @@ export default function FinanceiroEmpresasPage() {
         onClose={() => setIsExportModalOpen(false)}
         onExport={async (config) => {
           await exportGridRows({
-            rows: companies,
+            rows: displayedCompanies,
             columns: (config.orderedColumns || []).length
               ? config.orderedColumns
                   .map((key) => COMPANY_GRID_COLUMNS.find((column) => column.key === key))

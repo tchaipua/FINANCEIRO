@@ -2,6 +2,7 @@
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
+import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
@@ -847,7 +848,10 @@ export default function FinanceiroProdutosPage() {
   const [productGridSort, setProductGridSort] = useState<ProductGridSort>({
     ...DEFAULT_PRODUCT_GRID_SORT,
   });
-  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ALL' | 'INACTIVE'>('ACTIVE');
+  const [statusFilter, setStatusFilter] = useState<GridStatusFilterValue>('ACTIVE');
+  const [productPageSize, setProductPageSize] = useState(10);
+  const [productPage, setProductPage] = useState(1);
+  const [selectedProductGridRowId, setSelectedProductGridRowId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -884,6 +888,17 @@ export default function FinanceiroProdutosPage() {
       return compared * directionMultiplier;
     });
   }, [productGridSort.direction, productGridSort.key, products]);
+
+  const productTotalPages = Math.max(1, Math.ceil(displayedProducts.length / productPageSize));
+  const currentProductPage = Math.min(productPage, productTotalPages);
+  const paginatedProducts = useMemo(
+    () =>
+      displayedProducts.slice(
+        (currentProductPage - 1) * productPageSize,
+        currentProductPage * productPageSize,
+      ),
+    [currentProductPage, displayedProducts, productPageSize],
+  );
 
   const productAuditContext = useMemo(() => {
     const auditParams: ProductAuditParams = {
@@ -983,6 +998,16 @@ export default function FinanceiroProdutosPage() {
   useEffect(() => {
     void loadBranchInventoryConfig();
   }, [loadBranchInventoryConfig]);
+
+  useEffect(() => {
+    setProductPage(1);
+  }, [productColumnFilters, productGridSort.direction, productGridSort.key, productPageSize, statusFilter]);
+
+  useEffect(() => {
+    if (productPage > productTotalPages) {
+      setProductPage(productTotalPages);
+    }
+  }, [productPage, productTotalPages]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1309,7 +1334,7 @@ export default function FinanceiroProdutosPage() {
         ) : null}
       </section>
 
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex h-[calc(100vh-18rem)] min-h-[520px] flex-col overflow-hidden`}>
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1326,9 +1351,9 @@ export default function FinanceiroProdutosPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-white">
+            <thead className="sticky top-0 z-20 bg-white shadow-[0_1px_0_rgba(226,232,240,1)]">
               <tr>
                 {visibleColumns.map((column) => (
                   <th
@@ -1348,7 +1373,7 @@ export default function FinanceiroProdutosPage() {
                 </tr>
               ) : null}
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-slate-100">
               {!loading && !displayedProducts.length ? (
                 <tr>
                   <td
@@ -1360,14 +1385,39 @@ export default function FinanceiroProdutosPage() {
                 </tr>
               ) : null}
 
-              {displayedProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-slate-50/70">
+              {paginatedProducts.map((product, productIndex) => {
+                const isSelected = selectedProductGridRowId === product.id;
+                const zebraClass =
+                  product.status === 'ACTIVE'
+                    ? productIndex % 2
+                      ? 'bg-slate-200/70'
+                      : 'bg-white'
+                    : productIndex % 2
+                      ? 'bg-rose-200/70'
+                      : 'bg-rose-100/80';
+
+                return (
+                <tr
+                  key={product.id}
+                  onClick={() => setSelectedProductGridRowId(product.id)}
+                  aria-selected={isSelected}
+                  className={`cursor-pointer transition hover:bg-blue-50 ${
+                    isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-300' : zebraClass
+                  }`}
+                >
                   {visibleColumns.map((column) => {
                     if (column.key === 'name') {
                       return (
                         <td key={column.key} className="px-4 py-4 align-top">
-                          <div className="font-black uppercase tracking-[0.08em] text-slate-900">
-                            {product.name}
+                          <div className="flex items-center gap-2 font-black uppercase tracking-[0.08em] text-slate-900">
+                            <span
+                              className={`h-3 w-3 shrink-0 rounded-full ${
+                                product.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
+                              }`}
+                              title={product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                              aria-label={product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                            />
+                            <span>{product.name}</span>
                           </div>
                           <div className="mt-1 text-xs font-medium text-slate-500">
                             {product.barcode || product.companyName || '---'}
@@ -1406,13 +1456,15 @@ export default function FinanceiroProdutosPage() {
                       return (
                         <td key={column.key} className="px-4 py-4 align-top">
                           <span
-                            className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
-                              product.status === 'ACTIVE'
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-rose-100 text-rose-700'
+                            className={`inline-flex h-3 w-3 rounded-full ${
+                              product.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
                             }`}
+                            title={product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                            aria-label={product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
                           >
-                            {product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                            <span className="sr-only">
+                              {product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
+                            </span>
                           </span>
                         </td>
                       );
@@ -1457,98 +1509,34 @@ export default function FinanceiroProdutosPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
 
-        <div className="grid gap-4 border-t border-slate-200 px-6 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsColumnConfigOpen(true)}
-              className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
-            >
-              ☰ Colunas
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsExportModalOpen(true)}
-              className={FINANCE_GRID_PAGE_LAYOUT.footerIconButton}
-              aria-label="Imprimir"
-              title="Imprimir"
-            >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <path d="M6 9V3h12v6" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M6 14h12v7H6z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex items-center justify-center gap-2">
-            {[
-              {
-                value: 'ACTIVE' as const,
-                label: 'Ativos',
-                tone: 'bg-emerald-500',
-                activeTone: 'bg-emerald-700',
-                dot: 'bg-white',
-              },
-              {
-                value: 'ALL' as const,
-                label: 'Todos',
-                tone: 'bg-amber-200',
-                activeTone: 'bg-amber-400',
-                dot: 'bg-white',
-              },
-              {
-                value: 'INACTIVE' as const,
-                label: 'Inativos',
-                tone: 'bg-rose-200',
-                activeTone: 'bg-rose-400',
-                dot: 'bg-white',
-              },
-            ].map((item) => {
-              const isActive = statusFilter === item.value;
-
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setStatusFilter(item.value)}
-                  aria-label={item.label}
-                  title={item.label}
-                  aria-pressed={isActive}
-                  className={`relative h-6 w-14 rounded-full border transition duration-200 ${
-                    isActive
-                      ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
-                      : `${item.tone} border-transparent opacity-55 hover:opacity-85`
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full shadow-sm ${item.dot} ${
-                      isActive ? 'right-1' : 'left-1'
-                    }`}
-                  />
-                  <span className="sr-only">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-end">
-            {!runtimeContext.embedded ? (
-              <ScreenNameCopy
-                screenId={PRODUCT_SCREEN_ID}
-                className="justify-end"
-                originText="Origem: Sistema Financeiro - frontend/src/app/produtos/page.tsx"
-                auditText={productAuditContext.auditText || screenAuditText}
-                sqlText={productAuditContext.sqlText}
-              />
-            ) : null}
-          </div>
-        </div>
+        <GridStandardFooter
+          statusFilter={statusFilter}
+          totalRecords={displayedProducts.length}
+          pageSize={productPageSize}
+          currentPage={currentProductPage}
+          totalPages={productTotalPages}
+          onColumnSettings={() => setIsColumnConfigOpen(true)}
+          onExport={() => setIsExportModalOpen(true)}
+          onStatusFilterChange={setStatusFilter}
+          onPageSizeChange={setProductPageSize}
+          onPageChange={setProductPage}
+        >
+          {!runtimeContext.embedded ? (
+            <ScreenNameCopy
+              screenId={PRODUCT_SCREEN_ID}
+              className="justify-end"
+              originText="Origem: Sistema Financeiro - frontend/src/app/produtos/page.tsx"
+              auditText={productAuditContext.auditText || screenAuditText}
+              sqlText={productAuditContext.sqlText}
+            />
+          ) : null}
+        </GridStandardFooter>
       </section>
 
       {isFormOpen ? (
