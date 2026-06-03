@@ -112,7 +112,9 @@ function readCompanyLogoUrl() {
   if (typeof window === 'undefined') return null;
 
   const searchParams = new URLSearchParams(window.location.search);
-  const value = String(searchParams.get('companyLogoUrl') || '').trim();
+  const value = String(
+    searchParams.get('companyLogoUrl') || searchParams.get('logoUrl') || '',
+  ).trim();
   return value || null;
 }
 
@@ -343,6 +345,16 @@ export default function FinanceiroManualSettlementPage() {
 
     return `${schoolBaseUrl}/principal/parcelas`;
   }, [runtimeContext, schoolBaseUrl]);
+  const isCompactModal = isModalMode;
+  const pageSpacingClass = isCompactModal ? 'space-y-2' : 'space-y-6';
+  const headerPaddingClass = isCompactModal ? 'px-4 py-3' : 'px-6 py-6';
+  const logoBoxClass = isCompactModal
+    ? 'h-12 w-12 rounded-2xl'
+    : 'h-20 w-20 rounded-3xl';
+  const sectionPaddingClass = isCompactModal ? 'p-3' : 'p-6';
+  const innerCardPaddingClass = isCompactModal ? 'px-3 py-3' : 'px-5 py-5';
+  const fieldCardPaddingClass = isCompactModal ? 'px-3 py-2' : 'px-4 py-4';
+  const actionPaddingClass = isCompactModal ? 'px-4 py-3' : 'px-6 py-5';
 
   useEffect(() => {
     setDiscountAmountInput(formatMoneyInput(0));
@@ -570,17 +582,17 @@ export default function FinanceiroManualSettlementPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={pageSpacingClass}>
       <section className={`${cardClass} overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-white/20 bg-white/10 shadow-lg backdrop-blur-sm">
+        <div className={`bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] text-white ${headerPaddingClass}`}>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className={`flex shrink-0 items-center justify-center overflow-hidden border border-white/20 bg-white/10 shadow-lg backdrop-blur-sm ${logoBoxClass}`}>
                 {companyLogoUrl ? (
                   <img
                     src={companyLogoUrl}
                     alt={`Logo de ${runtimeContext.companyName || 'ESCOLA'}`}
-                    className="h-full w-full object-contain p-2"
+                    className="h-full w-full object-contain p-1.5"
                   />
                 ) : (
                   <span className="text-lg font-black uppercase tracking-[0.25em] text-white">
@@ -589,16 +601,16 @@ export default function FinanceiroManualSettlementPage() {
                 )}
               </div>
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">Contas a receber</div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">Baixa manual</h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Contas a receber</div>
+                <h1 className={`${isCompactModal ? 'mt-0.5 text-xl' : 'mt-2 text-3xl'} font-black tracking-tight`}>Baixa manual</h1>
+                <p className={`${isCompactModal ? 'mt-0.5 text-xs' : 'mt-2 text-sm'} max-w-3xl font-medium text-blue-100/90`}>
                   Selecione a forma de recebimento para concluir a baixa das parcelas no core financeiro.
                 </p>
               </div>
             </div>
-            <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-blue-50">
+            <div className={`${isCompactModal ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm'} rounded-2xl border border-white/15 bg-white/10 font-semibold text-blue-50`}>
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100">Operador</div>
-              <div className="mt-1 text-base font-black">
+              <div className={`${isCompactModal ? 'mt-0 text-sm' : 'mt-1 text-base'} font-black`}>
                 {runtimeContext.cashierDisplayName || 'USUÁRIO NÃO INFORMADO'}
               </div>
             </div>
@@ -606,87 +618,83 @@ export default function FinanceiroManualSettlementPage() {
         </div>
       </section>
 
-      <section className={`${cardClass} p-6`}>
-        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+      <section className={`${cardClass} ${sectionPaddingClass}`}>
+        <div className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-3">
+            <div className={`rounded-3xl border border-slate-200 bg-slate-50 ${innerCardPaddingClass}`}>
               <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Resumo</div>
-              <h2 className="mt-1 text-xl font-black text-slate-900">
+              <h2 className={`${isCompactModal ? 'text-base' : 'text-xl'} mt-1 font-black text-slate-900`}>
                 {isLoading ? 'Carregando parcelas...' : `${installments.length} parcela(s) selecionada(s)`}
               </h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <div className="mt-2 grid gap-2 md:grid-cols-4">
+                <div className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Valor total</div>
-                  <div className="mt-2 text-lg font-black text-slate-900">{formatCurrency(selectedTotalAmount)}</div>
+                  <div className="mt-1 text-base font-black text-slate-900">{formatCurrency(selectedTotalAmount)}</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Caixa em uso</div>
-                  <div className="mt-2 text-sm font-black text-slate-900">
+                  <div className="mt-1 text-xs font-black text-slate-900">
                     {runtimeContext.cashierDisplayName || runtimeContext.cashierUserId || 'CAIXA NÃO INFORMADO'}
                   </div>
                 </div>
-              </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Dias em atraso</div>
-                    <div className="mt-2 text-base font-black text-slate-900">{totalOverdueDays}</div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">% juros</div>
-                    <div className="mt-2 text-base font-black text-slate-900">
-                      {averageInterestRate.toLocaleString('pt-BR', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}%
-                    </div>
+                <div className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Dias em atraso</div>
+                  <div className="mt-1 text-base font-black text-slate-900">{totalOverdueDays}</div>
+                </div>
+                <div className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">% juros</div>
+                  <div className="mt-1 text-base font-black text-slate-900">
+                    {averageInterestRate.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}%
                   </div>
                 </div>
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <label className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Juros calculado</div>
                   <input
                     value={formatMoneyInput(calculatedInterestAmount)}
                     readOnly
-                    className="mt-2 w-full border-0 bg-transparent p-0 text-lg font-black text-slate-900 outline-none"
+                    className="mt-1 w-full border-0 bg-transparent p-0 text-base font-black text-slate-900 outline-none"
                   />
-                  <div className="mt-2 text-xs font-semibold text-slate-500">
+                  <div className="mt-1 text-[11px] font-semibold text-slate-500">
                     Valor automático conforme regra de juros do Financeiro.
                   </div>
                 </label>
-                <label className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <label className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Desconto</div>
                   <input
                     value={discountAmountInput}
                     onChange={(event) => setDiscountAmountInput(event.target.value)}
                     inputMode="decimal"
                     placeholder="0,00"
-                    className="mt-2 w-full border-0 bg-transparent p-0 text-lg font-black text-slate-900 outline-none"
+                    className="mt-1 w-full border-0 bg-transparent p-0 text-base font-black text-slate-900 outline-none"
                   />
-                  <div className="mt-2 text-xs font-semibold text-slate-500">
+                  <div className="mt-1 text-[11px] font-semibold text-slate-500">
                     Informe o desconto manual que será aplicado na baixa.
                   </div>
                 </label>
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <label className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Acréscimo</div>
                   <input
                     value={manualInterestAmountInput}
                     onChange={(event) => setManualInterestAmountInput(event.target.value)}
                     inputMode="decimal"
                     placeholder="0,00"
-                    className="mt-2 w-full border-0 bg-transparent p-0 text-lg font-black text-slate-900 outline-none"
+                    className="mt-1 w-full border-0 bg-transparent p-0 text-base font-black text-slate-900 outline-none"
                   />
-                  <div className="mt-2 text-xs font-semibold text-slate-500">
+                  <div className="mt-1 text-[11px] font-semibold text-slate-500">
                     O campo já vem com o juros calculado. Se alterar, a divergência fica auditável.
                   </div>
                 </label>
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div className={`rounded-2xl border border-slate-200 bg-white ${fieldCardPaddingClass}`}>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Valor final da baixa</div>
-                  <div className="mt-2 text-lg font-black text-slate-900">{formatCurrency(finalReceivedAmount)}</div>
-                  <div className="mt-2 text-xs font-semibold text-slate-500">
+                  <div className="mt-1 text-base font-black text-slate-900">{formatCurrency(finalReceivedAmount)}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-slate-500">
                     Total com desconto e acréscimo aplicados.
                   </div>
                 </div>
@@ -698,9 +706,9 @@ export default function FinanceiroManualSettlementPage() {
               ) : null}
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white px-5 py-5">
+            <div className={`rounded-3xl border border-slate-200 bg-white ${innerCardPaddingClass}`}>
               <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Forma de pagamento</div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="mt-2 grid gap-2 md:grid-cols-5">
                 {PAYMENT_METHOD_OPTIONS.map((option) => {
                   const isSelected = option.value === selectedPaymentMethod;
 
@@ -710,14 +718,14 @@ export default function FinanceiroManualSettlementPage() {
                       type="button"
                       onClick={() => setSelectedPaymentMethod(option.value)}
                       disabled={isSubmitting}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
+                      className={`rounded-2xl border px-3 py-2 text-left transition ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                           : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       <div className="text-[11px] font-black uppercase tracking-[0.18em]">{option.label}</div>
-                      <div className="mt-2 text-xs font-semibold text-inherit">{option.helper}</div>
+                      <div className="mt-1 text-[11px] font-semibold text-inherit">{option.helper}</div>
                     </button>
                   );
                 })}
@@ -766,7 +774,7 @@ export default function FinanceiroManualSettlementPage() {
         </section>
       ) : null}
 
-      <section className={`${cardClass} px-6 py-5`}>
+      <section className={`${cardClass} ${actionPaddingClass}`}>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-sm font-semibold text-slate-500">
             Forma selecionada: <span className="font-black text-slate-900">{selectedPaymentMethodOption.label}</span>

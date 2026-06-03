@@ -149,7 +149,9 @@ Decisao:
 - a linha clicada deve ficar destacada ate outra linha ser selecionada;
 - filtros por coluna ficam no proprio cabecalho, com `Limpar todos os filtros` como primeiro botao a esquerda;
 - quando a tela possuir acao de incluir/cadastrar, esse botao fica no canto esquerdo da area da listagem, como primeira informacao visual acima do grid;
-- o rodape do grid deve manter, na mesma linha, `Colunas`, impressao/exportacao, semaforo/status, total de registros ao lado do semaforo, combobox de quantidade por pagina iniciado em `10` e navegacao `<< < pagina/total > >>`;
+- o final do grid possui dois modelos oficiais: sem totais agregados por coluna nao ha faixa azul e o rodape exibe `Colunas`, impressao/exportacao, semaforo/status, `Total registros: N`, combobox de quantidade por pagina iniciado em `10` e navegacao `<< < pagina/total > >>`;
+- quando houver totais agregados por coluna, a faixa azul fica acima do rodape com `Total registros: N` em pill branco e valores alinhados nas colunas; o contador nao deve ser duplicado no rodape;
+- contar registros sozinho nao justifica a faixa azul de totais;
 - o rodape nao deve exibir texto de intervalo como `1-10 de 100 registro(s)`;
 - o detalhamento completo fica em `DOCUMENTACAO/AI/UI_PATTERNS.md`, `PAT-015.2`.
 

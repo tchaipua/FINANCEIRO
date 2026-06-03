@@ -90,6 +90,7 @@ Arquivos de referencia tecnica no Financeiro:
   - texto, historico, documento ou nome: campo de busca textual
   - status, tipo ou categoria fechada: seletor com `TODOS` e opcoes da coluna
   - valor numerico/monetario: campos de valor minimo e valor maximo
+- sempre que a coluna filtrada representar uma data, o filtro deve obrigatoriamente ser por periodo, exibindo os campos `De` e `Ate`, mesmo que o pedido do usuario diga apenas "filtrar a data"
 - filtros textuais em coluna devem usar rascunho local: digitar no campo nao aplica automaticamente
 - filtros textuais em coluna devem ter botao `Filtrar`; ao clicar, aplicar o valor, atualizar o grid e fechar o painel
 - pressionar `Enter` dentro do campo textual equivale a clicar em `Filtrar`
@@ -122,7 +123,9 @@ Referencia aprovada:
 ### PAT-015.2 - Grid com rolagem interna, cabecalho fixo e rodape paginado
 
 - este modelo deve ser usado quando a tela possuir grid/listagem operacional com paginacao e volume suficiente para rolagem interna
-- referencia aprovada: `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS`
+- referencias aprovadas:
+  - `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS`
+  - `PRINCIPAL_FINANCEIRO_RETORNOS`
 - a barra de rolagem vertical deve ficar dentro do grid; a pagina/tela externa nao deve ganhar uma segunda rolagem para percorrer os registros
 - a rolagem deve mover apenas os registros do corpo da tabela
 - o cabecalho das colunas deve permanecer fixo no topo do grid durante a rolagem dos registros
@@ -141,14 +144,26 @@ Referencia aprovada:
 - o botao iconico `Limpar todos os filtros` deve ser sempre a primeira informacao visual do cabecalho do grid, no canto esquerdo, antes da primeira coluna filtravel
 - quando houver acao de incluir/cadastrar registro, o botao de incluir deve ficar na faixa de acoes acima do grid, no canto esquerdo, como primeira informacao visual da tela com grid; o cabecalho interno da tabela continua preservando `Limpar todos os filtros` como primeiro item quando existirem filtros por coluna
 - o titulo acima do grid deve ser compacto; quando houver total importante para a operacao, mostrar esse total em pill ao lado do titulo, sem texto descritivo longo abaixo
+- existem dois modelos oficiais para o final do grid:
+  - modelo sem totais agregados: nao exibir faixa azul final; usar somente o rodape em linha unica com `Colunas`, impressao/exportacao, semaforo/status, `Total registros: N`, quantidade por pagina e navegacao
+  - modelo com totais agregados: exibir uma faixa azul fixa no fim do grid, acima do rodape, somente quando pelo menos uma coluna precisar de somatorio/totalizacao operacional
+- contar registros sozinho nao caracteriza totalizacao de coluna e nao deve criar faixa azul
+- em grids sem totais agregados, o contador `Total registros: N` deve ficar no rodape, ao lado do semaforo/status e antes dos controles de paginacao
+- quando o grid tiver totais agregados no final da tabela, a linha final de totais deve ficar no fim do grid, fixa durante a rolagem interna dos registros e alinhada pelas mesmas colunas do grid
+- a linha final de totais aprovada deve usar a mesma cor azul institucional do cabecalho financeiro:
+  - fundo `#1d4f91`
+  - borda superior `#153a6a`
+  - valores em branco (`text-white`)
+  - sem criar rolagem externa na tela/pagina
+- nessa linha final de totais, o contador `Total registros: N` deve aparecer no canto esquerdo em pill branco, usando o formato aprovado em `PRINCIPAL_FINANCEIRO_RETORNOS`:
+  - `h-9`, `rounded-full`, `border-slate-200`, `bg-white`, `px-4`, `text-[10px]`, `font-black`, `uppercase`, `tracking-[0.14em]`, `text-slate-700` e `shadow-sm`
+- em grids com totais agregados, nao duplicar `Total registros: N` no rodape; o contador fica somente na pill branca da linha azul
 - o rodape do grid deve ficar em uma unica linha sempre que houver largura disponivel
 - no lado esquerdo do rodape devem ficar, nesta ordem:
   - botao `Colunas`
   - botao de impressao/exportacao
   - semaforo/status da listagem, como `ATIVOS`, `INATIVOS` e `AMBOS`, ou o equivalente aprovado para a tela
-  - total de registros filtrados/exibidos, com texto compacto no formato `Total registros: N`
 - o semaforo/status deve ficar ao lado do botao de impressao/exportacao, na mesma linha
-- o total de registros deve ficar ao lado do semaforo/status, na mesma linha, antes dos controles de paginacao
 - no canto direito do rodape devem ficar, na mesma linha:
   - combobox de quantidade de registros por pagina, com opcoes como `10`, `20`, `50` e `100`
   - navegacao de paginas com `<<`, `<`, indicador `pagina/total`, `>` e `>>`

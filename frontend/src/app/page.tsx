@@ -19,7 +19,7 @@ const MENU_ITEMS: MenuItem[] = [
   { label: 'Produtos', href: '/produtos' },
   { label: 'Lotes', href: '/recebiveis/lotes', schoolPath: '/principal/financeiro/lotes' },
   { label: 'Retornos', href: '/recebiveis/retornos', schoolPath: '/principal/financeiro/retornos' },
-  { label: 'Parcelas', href: '/recebiveis/parcelas', schoolPath: '/principal/parcelas' },
+  { label: 'Parcelas', href: '/recebiveis/parcelas', schoolPath: '/principal/financeiro/parcelas' },
   { label: 'Caixa', href: '/caixa', schoolPath: '/principal/financeiro/caixa' },
 ];
 

@@ -158,7 +158,6 @@ type BankGridColumnKey =
   | 'wallet'
   | 'beneficiary'
   | 'lastStatementBalance'
-  | 'status'
   | 'updatedAt';
 
 type BankExportColumnKey =
@@ -242,12 +241,6 @@ const BANK_GRID_COLUMNS: BankGridColumnDefinition[] = [
         : '---',
   },
   {
-    key: 'status',
-    label: 'Situação',
-    visibleByDefault: true,
-    getValue: (bank) => (bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'),
-  },
-  {
     key: 'updatedAt',
     label: 'Atualizado em',
     visibleByDefault: false,
@@ -300,11 +293,6 @@ const BANK_EXPORT_COLUMNS: GridColumnDefinition<BankItem, BankExportColumnKey>[]
     key: 'pixKey',
     label: 'Chave PIX',
     getValue: (bank) => bank.pixKey || '---',
-  },
-  {
-    key: 'status',
-    label: 'Situação',
-    getValue: (bank) => (bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'),
   },
   {
     key: 'lastStatementBalance',
@@ -1318,7 +1306,7 @@ export default function FinanceiroBanksPage() {
       <button
         type="button"
         onClick={clearAllBankGridFilters}
-        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition ${
           hasBankGridFilters
             ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
             : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
@@ -1334,36 +1322,33 @@ export default function FinanceiroBanksPage() {
     );
   }
 
-  function renderBankColumnHeader(column: BankGridColumnDefinition, columnIndex: number) {
+  function renderBankColumnHeader(column: BankGridColumnDefinition) {
     const isActive =
       Boolean(bankColumnFilters[column.key].trim()) || bankGridSort.key === column.key;
 
     return (
-      <div className="flex items-center gap-1.5">
-        {columnIndex === 0 ? renderBankClearAllButton() : null}
-        <GridColumnFilterHeader
-          label={column.label}
-          isOpen={activeBankFilterColumn === column.key}
-          isActive={isActive}
-          filterValue={bankColumnFilterDrafts[column.key]}
-          placeholder={`DIGITE ${column.label.toUpperCase()}`}
-          align={column.key === 'lastStatementBalance' || column.key === 'updatedAt' ? 'right' : 'left'}
-          sortDirection={bankGridSort.key === column.key ? bankGridSort.direction : null}
-          onToggle={() => openBankColumnFilter(column.key)}
-          onSort={(direction) => {
-            setBankGridSort({ key: column.key, direction });
-            setActiveBankFilterColumn(null);
-          }}
-          onFilterValueChange={(value) =>
-            setBankColumnFilterDrafts((current) => ({
-              ...current,
-              [column.key]: value,
-            }))
-          }
-          onApply={() => applyBankColumnFilter(column.key)}
-          onClear={() => clearBankColumnFilter(column.key)}
-        />
-      </div>
+      <GridColumnFilterHeader
+        label={column.label}
+        isOpen={activeBankFilterColumn === column.key}
+        isActive={isActive}
+        filterValue={bankColumnFilterDrafts[column.key]}
+        placeholder={`DIGITE ${column.label.toUpperCase()}`}
+        align={column.key === 'lastStatementBalance' || column.key === 'updatedAt' ? 'right' : 'left'}
+        sortDirection={bankGridSort.key === column.key ? bankGridSort.direction : null}
+        onToggle={() => openBankColumnFilter(column.key)}
+        onSort={(direction) => {
+          setBankGridSort({ key: column.key, direction });
+          setActiveBankFilterColumn(null);
+        }}
+        onFilterValueChange={(value) =>
+          setBankColumnFilterDrafts((current) => ({
+            ...current,
+            [column.key]: value,
+          }))
+        }
+        onApply={() => applyBankColumnFilter(column.key)}
+        onClear={() => clearBankColumnFilter(column.key)}
+      />
     );
   }
 
@@ -1615,7 +1600,7 @@ export default function FinanceiroBanksPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={runtimeContext.embedded && !isCreateRoute ? 'flex h-screen min-h-0 flex-col gap-3 overflow-hidden' : 'space-y-6'}>
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} p-6`}>
           <div className="grid gap-4 md:grid-cols-3">
@@ -1672,56 +1657,7 @@ export default function FinanceiroBanksPage() {
         </section>
       ) : null}
 
-      {!isCreateRoute ? (
-        <section className={`${cardClass} p-6`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href={bankFormHref}
-              title="INCLUIR NOVO BANCO"
-              aria-label="INCLUIR NOVO BANCO"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-500 active:scale-95"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-5 w-5"
-              >
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
-              </svg>
-            </Link>
-            <div className="relative w-full max-w-xs">
-              <input
-                value={filters.search}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    search: event.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                placeholder="Buscar banco..."
-              />
-              <svg
-                aria-hidden="true"
-                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="grid gap-6">
+      <section className={runtimeContext.embedded && !isCreateRoute ? 'min-h-0 flex-1' : 'grid gap-6'}>
         {isCreateRoute ? (
           <form onSubmit={handleSubmit} className={`${cardClass} p-6`}>
           <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
@@ -2389,35 +2325,104 @@ export default function FinanceiroBanksPage() {
 
       {!isCreateRoute ? (
         <>
-        <section className={`${cardClass} flex h-[calc(100vh-19rem)] min-h-[540px] flex-col overflow-hidden`}>
-          <div className="border-b border-slate-100 px-6 py-5">
-            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
-              Consulta bancária
+        <section className={`${cardClass} flex ${runtimeContext.embedded ? 'min-h-0 flex-1' : 'h-[calc(100vh-17rem)] min-h-[560px]'} flex-col overflow-hidden`}>
+          <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href={bankFormHref}
+                title="INCLUIR NOVO BANCO"
+                aria-label="INCLUIR NOVO BANCO"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-500 active:scale-95"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                >
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
+              </Link>
+              <div className="relative w-full max-w-xs">
+                <input
+                  value={filters.search}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      search: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Buscar banco..."
+                />
+                <svg
+                  aria-hidden="true"
+                  className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <div className="ml-auto text-xs font-black uppercase tracking-[0.14em] text-slate-600">
+                {isLoading ? 'Carregando...' : `${displayedBanks.length} banco(s) encontrado(s)`}
+              </div>
             </div>
-            <h2 className="mt-1 text-xl font-black text-slate-900">
-              {isLoading ? 'Carregando...' : `${displayedBanks.length} banco(s) encontrado(s)`}
-            </h2>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="min-w-full text-left text-sm text-slate-600">
-              <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-[0_1px_0_rgba(226,232,240,1)]">
-                <tr>
-                  {activeBankColumns.map((column, columnIndex) => (
-                    <th key={column.key} className="px-4 py-3">
-                      {renderBankColumnHeader(column, columnIndex)}
+            <table className="w-full min-w-[1120px] border-collapse text-left text-sm text-slate-600">
+              <colgroup>
+                <col className="w-12" />
+                {activeBankColumns.map((column) => (
+                  <col key={column.key} />
+                ))}
+                <col className="w-64" />
+              </colgroup>
+              <thead className="bg-slate-50">
+                <tr className="border-b border-slate-300 text-[13px] font-bold uppercase tracking-wider text-slate-600">
+                  <th className="sticky top-0 z-20 w-12 bg-slate-50 px-3 py-3 text-left">
+                    {renderBankClearAllButton()}
+                  </th>
+                  {activeBankColumns.map((column) => (
+                    <th
+                      key={column.key}
+                      className={`sticky top-0 z-20 bg-slate-50 px-4 py-3 ${
+                        column.key === 'lastStatementBalance' || column.key === 'updatedAt'
+                          ? 'text-right'
+                          : 'text-left'
+                      }`}
+                    >
+                      {renderBankColumnHeader(column)}
                     </th>
                   ))}
-                  <th className="px-4 py-3">Ações</th>
+                  <th className="sticky top-0 z-20 w-64 bg-slate-50 px-4 py-3 text-right">Ações</th>
                 </tr>
                 {activeBankFilterColumn ? (
                   <tr aria-hidden="true">
-                    <th colSpan={activeBankColumns.length + 1} className="h-44 bg-white p-0" />
+                    <th colSpan={activeBankColumns.length + 2} className="h-56 bg-white p-0" />
                   </tr>
                 ) : null}
               </thead>
               <tbody>
-                {paginatedBanks.map((bank, bankIndex) => {
+                {isLoading ? (
+                  <tr>
+                    <td
+                      colSpan={activeBankColumns.length + 2}
+                      className="px-4 py-10 text-center text-sm font-semibold text-slate-500"
+                    >
+                      Carregando bancos...
+                    </td>
+                  </tr>
+                ) : null}
+
+                {!isLoading && paginatedBanks.map((bank, bankIndex) => {
                   const isSelected = selectedBankGridRowId === bank.id;
                   const zebraClass =
                     bank.status === 'ACTIVE'
@@ -2437,23 +2442,8 @@ export default function FinanceiroBanksPage() {
                       isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-300' : zebraClass
                     }`}
                   >
+                    <td className="px-3 py-4" />
                     {activeBankColumns.map((column) => {
-                      if (column.key === 'status') {
-                        return (
-                          <td key={column.key} className="px-4 py-4">
-                            <span
-                              className={`inline-flex h-3 w-3 rounded-full ${
-                                bank.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
-                              }`}
-                              title={bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
-                              aria-label={bank.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
-                            >
-                              <span className="sr-only">{column.getValue(bank)}</span>
-                            </span>
-                          </td>
-                        );
-                      }
-
                       if (column.key === 'bankName') {
                         return (
                           <td key={column.key} className="px-4 py-4">
@@ -2555,7 +2545,7 @@ export default function FinanceiroBanksPage() {
                       );
                     })}
                     <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
                         <Link
                           href={buildBankRelatedPath('/bancos/extrato', preservedQueryString, bank.id)}
                           title="Controlar Extrato do banco"
@@ -2635,7 +2625,7 @@ export default function FinanceiroBanksPage() {
                 {!isLoading && !displayedBanks.length ? (
                   <tr>
                     <td
-                      colSpan={activeBankColumns.length + 1}
+                      colSpan={activeBankColumns.length + 2}
                       className="px-4 py-10 text-center text-sm font-semibold text-slate-500"
                     >
                       Nenhum banco foi localizado para a empresa e o filtro informados.
@@ -2645,25 +2635,26 @@ export default function FinanceiroBanksPage() {
               </tbody>
             </table>
           </div>
+
+          <GridStandardFooter
+            statusFilter={filters.status}
+            totalRecords={displayedBanks.length}
+            pageSize={bankPageSize}
+            currentPage={currentBankPage}
+            totalPages={bankTotalPages}
+            aggregateSummaries={
+              isLastStatementBalanceVisible
+                ? [{ label: 'Saldo total', value: formatCurrency(lastStatementBalanceTotal) }]
+                : []
+            }
+            onColumnSettings={() => setIsColumnConfigOpen(true)}
+            onExport={() => setIsExportModalOpen(true)}
+            onStatusFilterChange={handleStatusFilter}
+            onPageSizeChange={setBankPageSize}
+            onPageChange={setBankPage}
+          />
         </section>
 
-        <GridStandardFooter
-          statusFilter={filters.status}
-          totalRecords={displayedBanks.length}
-          pageSize={bankPageSize}
-          currentPage={currentBankPage}
-          totalPages={bankTotalPages}
-          aggregateSummaries={
-            isLastStatementBalanceVisible
-              ? [{ label: 'Saldo total', value: formatCurrency(lastStatementBalanceTotal) }]
-              : []
-          }
-          onColumnSettings={() => setIsColumnConfigOpen(true)}
-          onExport={() => setIsExportModalOpen(true)}
-          onStatusFilterChange={handleStatusFilter}
-          onPageSizeChange={setBankPageSize}
-          onPageChange={setBankPage}
-        />
         <BankGridConfigModal
           isOpen={isColumnConfigOpen}
           title="Configurar colunas do grid"
