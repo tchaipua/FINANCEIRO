@@ -30,6 +30,9 @@ type CashSessionDetail = {
     creditCard: number;
     debitCard: number;
     check: number;
+    customerCreditSettlement?: number;
+    customerCreditGenerated?: number;
+    customerCreditUsed?: number;
   };
   movementCount: number;
   settlementCount: number;
@@ -221,6 +224,7 @@ function getPaymentMethodLabel(paymentMethod?: string | null) {
   if (paymentMethod === 'CREDIT_CARD') return 'CARTÃO CRÉDITO';
   if (paymentMethod === 'DEBIT_CARD') return 'CARTÃO DÉBITO';
   if (paymentMethod === 'CHECK') return 'CHEQUE';
+  if (paymentMethod === 'CUSTOMER_CREDIT') return 'CRÉDITO CLIENTE';
   return paymentMethod || '---';
 }
 
@@ -335,6 +339,12 @@ export default function FinanceiroCashDetailPage() {
         cashReceivedCount: 0,
         checkReceivedAmount: 0,
         checkReceivedCount: 0,
+        customerCreditSettlementAmount: 0,
+        customerCreditSettlementCount: 0,
+        customerCreditGeneratedAmount: 0,
+        customerCreditGeneratedCount: 0,
+        customerCreditUsedAmount: 0,
+        customerCreditUsedCount: 0,
         finalChangeAmount: 0,
       };
     }
@@ -344,18 +354,27 @@ export default function FinanceiroCashDetailPage() {
     const cashAdjustments = movements.filter((item) => item.movementType === 'ADJUSTMENT');
     const cashReceipts = movements.filter((item) => item.movementType === 'SETTLEMENT' && item.paymentMethod === 'CASH');
     const checkReceipts = movements.filter((item) => item.movementType === 'SETTLEMENT' && item.paymentMethod === 'CHECK');
+    const customerCreditSettlements = movements.filter((item) => item.movementType === 'SETTLEMENT' && item.paymentMethod === 'CUSTOMER_CREDIT');
+    const customerCreditGenerated = movements.filter((item) => item.movementType === 'CUSTOMER_CREDIT_GENERATED' && item.direction === 'IN');
+    const customerCreditUsed = movements.filter((item) => item.movementType === 'CUSTOMER_CREDIT_USAGE' && item.direction === 'OUT');
     const cashEntryAmount = cashEntries.reduce((total, item) => total + Number(item.amount || 0), 0);
     const cashExitAmount = cashExits.reduce((total, item) => total + Number(item.amount || 0), 0);
     const cashAdjustmentAmount = cashAdjustments
       .reduce((total, item) => total + (item.direction === 'OUT' ? -Number(item.amount || 0) : Number(item.amount || 0)), 0);
     const cashReceivedAmount = session.receivedByPaymentMethod?.cash || 0;
     const checkReceivedAmount = session.receivedByPaymentMethod?.check || 0;
+    const customerCreditSettlementAmount = session.receivedByPaymentMethod?.customerCreditSettlement || 0;
+    const customerCreditGeneratedAmount = session.receivedByPaymentMethod?.customerCreditGenerated || 0;
+    const customerCreditUsedAmount = session.receivedByPaymentMethod?.customerCreditUsed || 0;
     const finalChangeAmount =
       Number(session.openingAmount || 0) +
       cashReceivedAmount +
+      customerCreditSettlementAmount +
       cashEntryAmount -
       cashExitAmount +
       checkReceivedAmount +
+      customerCreditGeneratedAmount -
+      customerCreditUsedAmount +
       cashAdjustmentAmount;
 
     return {
@@ -369,6 +388,12 @@ export default function FinanceiroCashDetailPage() {
       cashReceivedCount: cashReceipts.length,
       checkReceivedAmount,
       checkReceivedCount: checkReceipts.length,
+      customerCreditSettlementAmount,
+      customerCreditSettlementCount: customerCreditSettlements.length,
+      customerCreditGeneratedAmount,
+      customerCreditGeneratedCount: customerCreditGenerated.length,
+      customerCreditUsedAmount,
+      customerCreditUsedCount: customerCreditUsed.length,
       finalChangeAmount,
     };
   }, [session]);
@@ -382,9 +407,14 @@ export default function FinanceiroCashDetailPage() {
       { label: 'Cartão Crédito', value: totals?.creditCard || 0, paymentMethod: 'CREDIT_CARD' },
       { label: 'Cartão Débito', value: totals?.debitCard || 0, paymentMethod: 'DEBIT_CARD' },
       { label: 'Cheque', value: totals?.check || 0, paymentMethod: 'CHECK' },
+      { label: 'Crédito Cliente', value: totals?.customerCreditSettlement || 0, paymentMethod: 'CUSTOMER_CREDIT' },
     ].map((item) => ({
       ...item,
-      count: movements.filter((movement) => movement.paymentMethod === item.paymentMethod).length,
+      count: movements.filter(
+        (movement) =>
+          movement.movementType === 'SETTLEMENT' &&
+          movement.paymentMethod === item.paymentMethod,
+      ).length,
     }));
   }, [session]);
 
@@ -415,8 +445,11 @@ export default function FinanceiroCashDetailPage() {
       Number(session?.openingAmount || 0) +
       cashSummary.cashReceivedAmount +
       cashSummary.checkReceivedAmount +
+      cashSummary.customerCreditSettlementAmount +
       saleCashAmount +
       saleCheckAmount +
+      cashSummary.customerCreditGeneratedAmount -
+      cashSummary.customerCreditUsedAmount +
       cashSummary.cashEntryAmount -
       cashSummary.cashExitAmount +
       cashSummary.cashAdjustmentAmount
@@ -427,6 +460,9 @@ export default function FinanceiroCashDetailPage() {
     cashSummary.cashExitAmount,
     cashSummary.cashReceivedAmount,
     cashSummary.checkReceivedAmount,
+    cashSummary.customerCreditGeneratedAmount,
+    cashSummary.customerCreditSettlementAmount,
+    cashSummary.customerCreditUsedAmount,
     saleCashAmount,
     saleCheckAmount,
     session?.openingAmount,
@@ -467,6 +503,26 @@ export default function FinanceiroCashDetailPage() {
         sqlWhere: `cm."movementType" = ${toSqlLiteral('ADJUSTMENT')}`,
         predicate: (movement: CashSessionDetail['movements'][number]) =>
           movement.movementType === 'ADJUSTMENT',
+      },
+      {
+        label: 'Créditos gerados/retidos',
+        value: cashSummary.customerCreditGeneratedAmount,
+        count: cashSummary.customerCreditGeneratedCount,
+        toneClass: 'text-blue-700',
+        filterLabel: 'Créditos gerados/retidos',
+        sqlWhere: `cm."movementType" = ${toSqlLiteral('CUSTOMER_CREDIT_GENERATED')} AND cm.direction = ${toSqlLiteral('IN')}`,
+        predicate: (movement: CashSessionDetail['movements'][number]) =>
+          movement.movementType === 'CUSTOMER_CREDIT_GENERATED' && movement.direction === 'IN',
+      },
+      {
+        label: 'Créditos utilizados',
+        value: cashSummary.customerCreditUsedAmount,
+        count: cashSummary.customerCreditUsedCount,
+        toneClass: 'text-rose-700',
+        filterLabel: 'Créditos utilizados',
+        sqlWhere: `cm."movementType" = ${toSqlLiteral('CUSTOMER_CREDIT_USAGE')} AND cm.direction = ${toSqlLiteral('OUT')}`,
+        predicate: (movement: CashSessionDetail['movements'][number]) =>
+          movement.movementType === 'CUSTOMER_CREDIT_USAGE' && movement.direction === 'OUT',
       },
       {
         label: 'Previsto sistema',
@@ -623,16 +679,16 @@ export default function FinanceiroCashDetailPage() {
     <div className="space-y-6">
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Operação de caixa
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Detalhe do caixa
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Consulte os valores e movimentos registrados neste caixa.
                 </p>
               </div>
@@ -744,8 +800,8 @@ export default function FinanceiroCashDetailPage() {
             type="button"
             onClick={() => handleSetMovementFilter({
               label: 'Recebimentos',
-              sqlWhere: 'cm."paymentMethod" IS NOT NULL',
-              predicate: (movement) => Boolean(movement.paymentMethod),
+              sqlWhere: `cm."movementType" = ${toSqlLiteral('SETTLEMENT')} AND cm."paymentMethod" IS NOT NULL`,
+              predicate: (movement) => movement.movementType === 'SETTLEMENT' && Boolean(movement.paymentMethod),
             })}
             className={getGroupFilterClass(movementFilter?.label === 'Recebimentos')}
           >
@@ -810,11 +866,13 @@ export default function FinanceiroCashDetailPage() {
             type="button"
             onClick={() => handleSetMovementFilter({
               label: 'Outros',
-              sqlWhere: `cm."movementType" IN (${toSqlLiteral('ENTRY')}, ${toSqlLiteral('EXIT')}, ${toSqlLiteral('ADJUSTMENT')})`,
+              sqlWhere: `cm."movementType" IN (${toSqlLiteral('ENTRY')}, ${toSqlLiteral('EXIT')}, ${toSqlLiteral('ADJUSTMENT')}, ${toSqlLiteral('CUSTOMER_CREDIT_GENERATED')}, ${toSqlLiteral('CUSTOMER_CREDIT_USAGE')})`,
               predicate: (movement) =>
                 movement.movementType === 'ENTRY' ||
                 movement.movementType === 'EXIT' ||
-                movement.movementType === 'ADJUSTMENT',
+                movement.movementType === 'ADJUSTMENT' ||
+                movement.movementType === 'CUSTOMER_CREDIT_GENERATED' ||
+                movement.movementType === 'CUSTOMER_CREDIT_USAGE',
             })}
             className={getGroupFilterClass(movementFilter?.label === 'Outros')}
           >

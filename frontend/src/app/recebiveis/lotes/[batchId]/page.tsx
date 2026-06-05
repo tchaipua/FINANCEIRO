@@ -1168,16 +1168,16 @@ export default function FinanceiroReceivableBatchDetailPage() {
     <div className={pageClassName}>
       {!isEmbedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Contas a receber
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Detalhe do lote
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Consulte as parcelas do lote e defina o banco que fará a emissão dos boletos.
                 </p>
               </div>

@@ -1388,16 +1388,16 @@ export default function FinanceiroBankStatementPage() {
     <div className="space-y-6">
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Bancos
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Extrato bancário
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Consulte os lançamentos reais da conta, com créditos, débitos e saldo do banco.
                 </p>
               </div>
@@ -2126,9 +2126,14 @@ export default function FinanceiroBankStatementPage() {
             <button
               type="button"
               onClick={() => setIsColumnConfigOpen(true)}
-              className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              title="ALTERAR COLUNAS GRID"
+              aria-label="ALTERAR COLUNAS GRID"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
             >
-              ☰ Colunas
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
+              </svg>
             </button>
             <button
               type="button"

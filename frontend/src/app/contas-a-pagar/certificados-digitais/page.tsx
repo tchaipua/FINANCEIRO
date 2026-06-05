@@ -2189,9 +2189,14 @@ export default function FinanceiroCertificadosDigitaisPage() {
                   <button
                     type="button"
                     onClick={() => setIsColumnConfigOpen(true)}
-                    className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+                    title="ALTERAR COLUNAS GRID"
+                    aria-label="ALTERAR COLUNAS GRID"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
                   >
-                    ☰ Colunas
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
+                    </svg>
                   </button>
                   <button
                     type="button"

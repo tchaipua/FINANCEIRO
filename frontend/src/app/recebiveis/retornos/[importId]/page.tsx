@@ -335,16 +335,16 @@ export default function FinanceiroBankReturnImportDetailPage() {
     <div className="space-y-6">
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Contas a receber
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Conferencia do retorno bancario
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Confira os boletos importados do banco antes de baixar as parcelas.
                   Somente os retornos liquidados e vinculados a parcelas em aberto
                   podem ser efetivados.
@@ -386,7 +386,7 @@ export default function FinanceiroBankReturnImportDetailPage() {
       ) : null}
 
       <section className={`${cardClass} p-6`}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
               Importacao

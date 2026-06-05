@@ -277,6 +277,32 @@ export class ListReceivableInstallmentsDto {
   cashierDisplayName?: string;
 }
 
+export class ListReceivableCustomerHistoryDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceTenantId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+}
+
 export class UpdateReceivableInstallmentDto {
   @IsOptional()
   @IsString()

@@ -11,6 +11,7 @@ import {
   ImportBankReturnDto,
   IssueBankSlipsDto,
   ListBankReturnImportsDto,
+  ListReceivableCustomerHistoryDto,
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
   ReceivablesImportDto,
@@ -108,6 +109,14 @@ export class ReceivablesController {
   })
   listInstallments(@Query() query: ListReceivableInstallmentsDto) {
     return this.receivablesService.listInstallments(query);
+  }
+
+  @Get("customer-history")
+  @ApiOperation({
+    summary: "Lista histórico financeiro agrupado por cliente",
+  })
+  listCustomerHistory(@Query() query: ListReceivableCustomerHistoryDto) {
+    return this.receivablesService.listCustomerHistory(query);
   }
 
   @Patch("installments/:installmentId")

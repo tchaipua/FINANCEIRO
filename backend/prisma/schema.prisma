@@ -45,6 +45,8 @@ model Company {
   cashSessions           CashSession[]
   cashMovements          CashMovement[]
   settlements            InstallmentSettlement[]
+  customerCredits         CustomerCredit[]
+  customerCreditMovements CustomerCreditMovement[]
   branches               CompanyBranch[]
 
   @@unique([sourceSystem, sourceTenantId])
@@ -744,6 +746,7 @@ model InstallmentSettlement {
   branchCode          Int       @default(1)
   installmentId       String
   cashSessionId       String
+  settlementGroupId   String?
   receivedAmount      Float
   discountAmount      Float     @default(0)
   interestAmount      Float     @default(0)
@@ -768,10 +771,68 @@ model InstallmentSettlement {
   bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemSettlement")
 
   @@index([companyId, settledAt])
+  @@index([companyId, settlementGroupId])
   @@index([companyId, bankAccountId, bankMovementGroupId])
   @@index([installmentId])
   @@index([cashSessionId])
   @@map("installment_settlements")
+}
+
+model CustomerCredit {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int       @default(1)
+  partyId          String?
+  customerName     String
+  customerDocument String?
+  status           String    @default("OPEN")
+  originalAmount   Float
+  availableAmount  Float
+  sourceType       String    @default("MANUAL")
+  sourceReference  String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
+
+  company   Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  movements CustomerCreditMovement[]
+
+  @@index([companyId, status, customerName])
+  @@index([companyId, customerDocument])
+  @@map("customer_credits")
+}
+
+model CustomerCreditMovement {
+  id            String    @id @default(uuid())
+  companyId     String
+  branchCode    Int       @default(1)
+  creditId      String
+  cashSessionId String?
+  movementType  String
+  direction     String
+  amount        Float
+  referenceType String?
+  referenceId   String?
+  notes         String?
+  occurredAt    DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt
+  updatedBy     String?
+  canceledAt    DateTime?
+  canceledBy    String?
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  credit  CustomerCredit @relation(fields: [creditId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, movementType, occurredAt])
+  @@index([creditId, occurredAt])
+  @@index([cashSessionId])
+  @@map("customer_credit_movements")
 }
 
 model BankReturnImport {

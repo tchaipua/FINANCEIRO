@@ -273,6 +273,105 @@ WHERE BRI.id = :importId
   AND BRI.canceledAt IS NULL
 ORDER BY BRII.dueDate ASC, BRII.paymentDate ASC;`,
   },
+  FINANCEIRO_RECEBIVEIS_HISTORICO_BAIXAS: {
+    originText: buildFinanceOriginText('recebiveis/historico-baixas/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Tela de historico de baixas do contas a receber, agrupando baixas feitas em conjunto.
+
+TABELAS PRINCIPAIS:
+- installment_settlements (IS) - baixas registradas nas parcelas
+- receivable_installments (RI) - parcelas financeiras baixadas
+- cash_sessions (CS) - caixa usado na baixa
+
+RELACIONAMENTOS:
+- installment_settlements.installmentId = receivable_installments.id
+- installment_settlements.cashSessionId = cash_sessions.id
+
+FILTROS APLICADOS AGORA:
+- empresa resolvida por sourceSystem/sourceTenantId
+- status ativo/estornado no rodape do grid
+- pesquisa geral e filtros por coluna
+- ordenacao inicial: settledAt DESC`,
+    sqlText: `SELECT
+  COALESCE(IS.settlementGroupId, IS.id) AS settlementGroupId,
+  MAX(IS.settledAt) AS settledAt,
+  SUM(IS.receivedAmount) AS receivedAmount,
+  COUNT(IS.id) AS installmentCount,
+  CS.cashierDisplayName,
+  RI.payerNameSnapshot
+FROM installment_settlements IS
+INNER JOIN receivable_installments RI
+  ON RI.id = IS.installmentId
+ AND RI.companyId = IS.companyId
+INNER JOIN cash_sessions CS
+  ON CS.id = IS.cashSessionId
+ AND CS.companyId = IS.companyId
+WHERE IS.companyId = :companyId
+GROUP BY COALESCE(IS.settlementGroupId, IS.id), CS.cashierDisplayName, RI.payerNameSnapshot
+ORDER BY MAX(IS.settledAt) DESC;`,
+  },
+  POPUP_FINANCEIRO_RECEBIVEIS_HISTORICO_BAIXAS_DETALHE: {
+    originText: buildFinanceOriginText('recebiveis/historico-baixas/page.tsx'),
+    auditText: 'Popup de detalhe das parcelas vinculadas a uma baixa agrupada.',
+    sqlText: `SELECT IS.*, RI.descriptionSnapshot, RI.dueDate
+FROM installment_settlements IS
+INNER JOIN receivable_installments RI
+  ON RI.id = IS.installmentId
+WHERE COALESCE(IS.settlementGroupId, IS.id) = :settlementGroupId
+ORDER BY RI.dueDate ASC;`,
+  },
+  POPUP_FINANCEIRO_RECEBIVEIS_HISTORICO_BAIXAS_ESTORNO: {
+    originText: buildFinanceOriginText('recebiveis/historico-baixas/page.tsx'),
+    auditText: 'Popup de confirmacao para estornar uma baixa ativa ou um grupo de baixas.',
+    sqlText: `UPDATE installment_settlements
+SET canceledAt = CURRENT_TIMESTAMP
+WHERE COALESCE(settlementGroupId, id) = :settlementGroupId
+  AND canceledAt IS NULL;`,
+  },
+  FINANCEIRO_RECEBIVEIS_HISTORICO_CLIENTE: {
+    originText: buildFinanceOriginText('recebiveis/historico-cliente/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Tela de historico financeiro por cliente no contas a receber.
+
+TABELAS PRINCIPAIS:
+- receivable_titles (RT) - compras/vendas do cliente, exibidas uma vez mesmo quando parceladas
+- receivable_installments (RI) - parcelas abertas e baixadas
+- installment_settlements (IS) - baixas das parcelas com juros, multa e desconto
+
+FILTROS APLICADOS AGORA:
+- empresa por sourceSystem/sourceTenantId
+- pesquisa por cliente/documento
+- filtros por coluna e ordenacao do grid
+- valores em atraso calculados sobre parcelas abertas vencidas`,
+    sqlText: `SELECT
+  RI.payerNameSnapshot,
+  SUM(RI.amount) AS totalPurchaseAmount,
+  SUM(RI.openAmount) AS openAmount,
+  MIN(RT.createdAt) AS firstPurchaseDate,
+  MAX(IS.settledAt) AS lastPaymentDate
+FROM receivable_installments RI
+INNER JOIN receivable_titles RT
+  ON RT.id = RI.titleId
+ AND RT.companyId = RI.companyId
+LEFT JOIN installment_settlements IS
+  ON IS.installmentId = RI.id
+ AND IS.companyId = RI.companyId
+ AND IS.canceledAt IS NULL
+WHERE RI.canceledAt IS NULL
+GROUP BY RI.payerNameSnapshot
+ORDER BY RI.payerNameSnapshot ASC;`,
+  },
+  PRINCIPAL_FINANCEIRO_HISTORICO_CLIENTE: {
+    originText: buildFinanceOriginText('recebiveis/historico-cliente/page.tsx'),
+  },
+  POPUP_FINANCEIRO_RECEBIVEIS_HISTORICO_CLIENTE_VENDAS: {
+    originText: buildFinanceOriginText('recebiveis/historico-cliente/page.tsx'),
+    auditText: 'Popup que lista as compras/vendas do cliente agrupadas por titulo financeiro.',
+  },
+  POPUP_FINANCEIRO_RECEBIVEIS_HISTORICO_CLIENTE_PARCELAS: {
+    originText: buildFinanceOriginText('recebiveis/historico-cliente/page.tsx'),
+    auditText: 'Popup que lista parcelas abertas e baixadas do cliente, incluindo juros pagos e juros em aberto.',
+  },
   FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL: {
     originText: buildFinanceOriginText('recebiveis/baixa-manual/page.tsx'),
     auditText: `--- LOGICA DA TELA ---

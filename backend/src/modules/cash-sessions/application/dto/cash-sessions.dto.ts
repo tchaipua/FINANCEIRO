@@ -14,6 +14,7 @@ export const CASH_SESSION_PAYMENT_METHODS = [
   "CREDIT_CARD",
   "DEBIT_CARD",
   "CHECK",
+  "CUSTOMER_CREDIT",
 ] as const;
 
 export class CurrentCashSessionQueryDto {
@@ -204,6 +205,12 @@ class BaseSettleInstallmentDto {
   penaltyAmount?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  receivedAmount?: number;
+
+  @IsOptional()
   @IsString()
   notes?: string;
 }
@@ -216,9 +223,158 @@ export class SettleManualInstallmentDto extends BaseSettleInstallmentDto {
 
   @IsOptional()
   @IsString()
+  settlementGroupId?: string;
+
+  @IsOptional()
+  @IsString()
   bankAccountId?: string;
 
   @IsOptional()
   @IsString()
   bankMovementGroupId?: string;
+
+  @IsOptional()
+  @IsString()
+  customerCreditId?: string;
+}
+
+export const INSTALLMENT_SETTLEMENT_HISTORY_STATUSES = ["ACTIVE", "INACTIVE", "ALL"] as const;
+
+export class ListInstallmentSettlementHistoryDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceTenantId?: string;
+
+  @IsOptional()
+  @IsIn(INSTALLMENT_SETTLEMENT_HISTORY_STATUSES)
+  status?: (typeof INSTALLMENT_SETTLEMENT_HISTORY_STATUSES)[number];
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+export class ReverseSettlementGroupDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export const CUSTOMER_CREDIT_STATUSES = ["OPEN", "USED", "CANCELED", "ALL"] as const;
+
+export class ListCustomerCreditsDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceTenantId?: string;
+
+  @IsOptional()
+  @IsIn(CUSTOMER_CREDIT_STATUSES)
+  status?: (typeof CUSTOMER_CREDIT_STATUSES)[number];
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+export class CreateCustomerCreditDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  cashierUserId!: string;
+
+  @IsString()
+  cashierDisplayName!: string;
+
+  @IsString()
+  customerName!: string;
+
+  @IsOptional()
+  @IsString()
+  customerDocument?: string;
+
+  @IsOptional()
+  @IsString()
+  partyId?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @IsOptional()
+  @IsDateString()
+  occurredAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class ReverseManualSettlementDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  cashierUserId!: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

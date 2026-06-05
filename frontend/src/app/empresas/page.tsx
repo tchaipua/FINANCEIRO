@@ -1443,7 +1443,7 @@ export default function FinanceiroEmpresasPage() {
     runtimeContext.embedded && showEmbeddedSuccess ? (
       <div className="absolute inset-0 z-[90] flex items-center justify-center bg-slate-900/20 p-6">
         <section className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
-          <div className="bg-gradient-to-r from-[#166534] via-[#15803d] to-[#22c55e] px-6 py-8 text-white">
+          <div className="bg-gradient-to-r from-[#166534] via-[#15803d] to-[#22c55e] px-4 py-5 text-white">
             <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
               <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-lg">
                 {runtimeContext.logoUrl ? (
@@ -1495,12 +1495,12 @@ export default function FinanceiroEmpresasPage() {
     <div className={`space-y-6 ${runtimeContext.embedded ? 'relative' : ''}`}>
       {!runtimeContext.embedded ? (
         <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">Cadastro operacional</div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">Empresas</h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Cadastro operacional</div>
+                <h1 className="mt-1 text-2xl font-black tracking-tight">Empresas</h1>
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Cada empresa é criada automaticamente a partir do sistema de origem e passa a operar no mesmo núcleo financeiro.
                 </p>
               </div>

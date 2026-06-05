@@ -735,14 +735,14 @@ export default function FinanceiroCashPage() {
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Operação de caixa
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">Sessões de Caixa</h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">Sessões de Caixa</h1>
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Abra e feche caixas por operador e empresa de origem, mantendo o histórico financeiro centralizado.
                 </p>
               </div>
@@ -920,12 +920,15 @@ export default function FinanceiroCashPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              title="COLUNAS"
-              aria-label="COLUNAS"
+              title="ALTERAR COLUNAS GRID"
+              aria-label="ALTERAR COLUNAS GRID"
               onClick={() => setIsColumnConfigOpen(true)}
-              className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
             >
-              ☰ Colunas
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
+              </svg>
             </button>
             <button
               type="button"

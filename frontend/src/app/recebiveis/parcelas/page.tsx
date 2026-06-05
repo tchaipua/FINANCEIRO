@@ -106,6 +106,7 @@ const DEFAULT_INSTALLMENT_GRID_SORT: InstallmentGridSort = {
   key: 'dueDate',
   direction: 'ASC',
 };
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 const STATUS_OPTIONS: Array<{ value: InstallmentListStatus; label: string }> = [
   { value: 'OPEN', label: 'ABERTAS' },
@@ -171,12 +172,14 @@ function parseCurrencyInput(value: string) {
 }
 
 function getInstallmentStatusLabel(item: InstallmentResponse) {
+  if (item.openAmount > 0 && item.paidAmount > 0) return 'PARCIAL';
   if (item.status === 'PAID') return 'FECHADA';
   if (item.isOverdue) return 'VENCIDA';
   return 'ABERTA';
 }
 
 function getInstallmentStatusClasses(item: InstallmentResponse) {
+  if (item.openAmount > 0 && item.paidAmount > 0) return 'border-amber-200 bg-amber-50 text-amber-800';
   if (item.status === 'PAID') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   if (item.isOverdue) return 'border-rose-200 bg-rose-50 text-rose-700';
   return 'border-blue-200 bg-blue-50 text-blue-700';
@@ -192,6 +195,27 @@ function includesFilterText(value: string | number | null | undefined, filter: s
   const normalizedFilter = normalizeFilterText(filter);
   if (!normalizedFilter) return true;
   return normalizeFilterText(value).includes(normalizedFilter);
+}
+
+function matchesGeneralGridSearch(item: InstallmentResponse, search: string) {
+  const normalizedSearch = normalizeFilterText(search);
+  if (!normalizedSearch) return true;
+
+  const rowValue = item.status === 'PAID' ? item.paidAmount : item.openAmount;
+  const searchableText = [
+    item.sourceEntityName,
+    item.payerNameSnapshot,
+    item.description,
+    item.classLabel || '---',
+    formatDateLabel(item.dueDate),
+    getDateOnlyValue(item.dueDate),
+    formatCurrency(rowValue),
+    String(rowValue),
+    getInstallmentStatusLabel(item),
+    `PARCELA ${item.installmentNumber}/${item.installmentCount}`,
+  ].join(' ');
+
+  return normalizeFilterText(searchableText).includes(normalizedSearch);
 }
 
 function getDateOnlyValue(value: string | null | undefined) {
@@ -321,9 +345,12 @@ export default function FinanceiroParcelasPage() {
   const [activeFilterColumn, setActiveFilterColumn] =
     useState<InstallmentGridFilterKey | null>(null);
   const [gridSort, setGridSort] = useState<InstallmentGridSort>(DEFAULT_INSTALLMENT_GRID_SORT);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[0]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [installments, setInstallments] = useState<InstallmentResponse[]>([]);
   const [currentSession, setCurrentSession] = useState<CashSessionResponse | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [generalGridSearch, setGeneralGridSearch] = useState('');
   const [openingAmount, setOpeningAmount] = useState('');
   const [openingNotes, setOpeningNotes] = useState('');
   const [isLoadingInstallments, setIsLoadingInstallments] = useState(true);
@@ -331,6 +358,7 @@ export default function FinanceiroParcelasPage() {
   const [isOpeningSession, setIsOpeningSession] = useState(false);
   const [financeSettlementUrl, setFinanceSettlementUrl] = useState<string | null>(null);
   const [isUpdatingInstallment, setIsUpdatingInstallment] = useState(false);
+  const [reversingInstallmentId, setReversingInstallmentId] = useState<string | null>(null);
   const [editInstallmentModal, setEditInstallmentModal] =
     useState<EditInstallmentModalState | null>(null);
   const [alertModal, setAlertModal] = useState<AlertModalState | null>(null);
@@ -440,6 +468,7 @@ export default function FinanceiroParcelasPage() {
       const itemDueDate = getDateOnlyValue(item.dueDate);
       if (appliedFilters.dueDateStart && itemDueDate < appliedFilters.dueDateStart) return false;
       if (appliedFilters.dueDateEnd && itemDueDate > appliedFilters.dueDateEnd) return false;
+      if (!matchesGeneralGridSearch(item, generalGridSearch)) return false;
       if (
         !includesFilterText(
           formatCurrency(item.status === 'PAID' ? item.paidAmount : item.openAmount),
@@ -477,7 +506,35 @@ export default function FinanceiroParcelasPage() {
 
       return String(leftValue).localeCompare(String(rightValue), 'pt-BR') * direction;
     });
-  }, [appliedFilters, gridSort, installments]);
+  }, [appliedFilters, generalGridSearch, gridSort, installments]);
+
+  const totalPages = Math.max(1, Math.ceil(displayInstallments.length / pageSize));
+  const normalizedCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedInstallments = useMemo(() => {
+    const startIndex = (normalizedCurrentPage - 1) * pageSize;
+    return displayInstallments.slice(startIndex, startIndex + pageSize);
+  }, [displayInstallments, normalizedCurrentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage((current) => Math.min(Math.max(1, current), totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    appliedFilters.amount,
+    appliedFilters.classLabel,
+    appliedFilters.description,
+    appliedFilters.dueDateEnd,
+    appliedFilters.dueDateStart,
+    appliedFilters.payerName,
+    appliedFilters.status,
+    appliedFilters.studentName,
+    generalGridSearch,
+    gridSort.direction,
+    gridSort.key,
+    pageSize,
+  ]);
 
   useEffect(() => {
     const visibleSelectableIds = new Set(
@@ -511,8 +568,8 @@ export default function FinanceiroParcelasPage() {
   }, [appliedFilters]);
 
   const selectableInstallments = useMemo(
-    () => displayInstallments.filter((item) => item.status !== 'PAID' && item.openAmount > 0),
-    [displayInstallments],
+    () => paginatedInstallments.filter((item) => item.status !== 'PAID' && item.openAmount > 0),
+    [paginatedInstallments],
   );
   const selectedInstallments = useMemo(
     () => displayInstallments.filter((item) => selectedIds.includes(item.id)),
@@ -625,6 +682,57 @@ export default function FinanceiroParcelasPage() {
     }
   }
 
+  async function handleReverseLatestSettlement(item: InstallmentResponse) {
+    if (!contextReady || !canSettleInstallments || reversingInstallmentId) return;
+
+    const confirmed =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(
+            `Confirma o estorno da última baixa da parcela ${item.installmentNumber}/${item.installmentCount} de ${item.sourceEntityName}?`,
+          );
+
+    if (!confirmed) return;
+
+    try {
+      setReversingInstallmentId(item.id);
+      const payload = await requestJson<{ message?: string | null }>(
+        `/receivables/installments/${item.id}/reverse-latest-settlement`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            cashierUserId,
+            requestedBy: cashierUserId,
+            reason: 'ESTORNO SOLICITADO NA TELA DE PARCELAS',
+          }),
+          fallbackMessage: 'Não foi possível estornar a última baixa da parcela.',
+        },
+      );
+
+      setSelectedIds((current) => current.filter((id) => id !== item.id));
+      setAlertModal({
+        type: 'success',
+        title: 'Baixa estornada',
+        message: payload?.message || 'A última baixa da parcela foi estornada com sucesso.',
+      });
+      void loadCurrentSession();
+      void loadInstallments(appliedFilters);
+    } catch (error) {
+      setAlertModal({
+        type: 'error',
+        title: 'Erro ao estornar baixa',
+        message: getFriendlyRequestErrorMessage(
+          error,
+          'Não foi possível estornar a última baixa da parcela.',
+        ),
+      });
+    } finally {
+      setReversingInstallmentId(null);
+    }
+  }
+
   function applyColumnFilter(columnKey: InstallmentGridFilterKey) {
     setSelectedIds([]);
     if (columnKey === 'dueDate') {
@@ -676,6 +784,7 @@ export default function FinanceiroParcelasPage() {
     setSelectedIds([]);
     setFilterDrafts(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
+    setGeneralGridSearch('');
     setGridSort(DEFAULT_INSTALLMENT_GRID_SORT);
     setActiveFilterColumn(null);
   }
@@ -982,12 +1091,14 @@ export default function FinanceiroParcelasPage() {
   }
 
   function handleToggleAllVisible() {
+    const visibleSelectableIds = selectableInstallments.map((item) => item.id);
+
     if (allSelectableChecked) {
-      setSelectedIds([]);
+      setSelectedIds((current) => current.filter((id) => !visibleSelectableIds.includes(id)));
       return;
     }
 
-    setSelectedIds(selectableInstallments.map((item) => item.id));
+    setSelectedIds((current) => Array.from(new Set([...current, ...visibleSelectableIds])));
   }
 
   function handleOpenEditInstallment(item: InstallmentResponse) {
@@ -1114,16 +1225,16 @@ export default function FinanceiroParcelasPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={runtimeContext.embedded ? 'flex h-screen min-h-0 flex-col overflow-hidden' : 'space-y-6'}>
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                 Contas a receber
               </div>
-              <h1 className="mt-2 text-3xl font-black tracking-tight">Parcelas</h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+              <h1 className="mt-1 text-2xl font-black tracking-tight">Parcelas</h1>
+              <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                 Consulte parcelas abertas, vencidas ou fechadas com visão consolidada das empresas que operam no core financeiro.
               </p>
             </div>
@@ -1131,8 +1242,8 @@ export default function FinanceiroParcelasPage() {
         </section>
       ) : null}
 
-      <section className={`${cardClass} overflow-hidden`}>
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 xl:flex-row xl:items-center xl:justify-end">
+      <section className={`${cardClass} ${runtimeContext.embedded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'overflow-hidden'}`}>
+        <div className="shrink-0 flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 xl:flex-row xl:items-center xl:justify-start">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -1142,15 +1253,19 @@ export default function FinanceiroParcelasPage() {
             >
               Baixa
             </button>
-            <span className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-blue-700">
-              Selecionadas: {selectedInstallments.length} - {formatCurrency(selectedTotalAmount)}
-            </span>
+            <input
+              value={generalGridSearch}
+              onChange={(event) => setGeneralGridSearch(event.target.value)}
+              placeholder="PESQUISAR NO GRID"
+              aria-label="Pesquisar em todos os campos do grid"
+              className="min-w-[260px] rounded-2xl border border-slate-300 bg-white px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white"
+            />
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className={runtimeContext.embedded ? 'min-h-0 flex-1 overflow-auto' : 'overflow-x-auto'}>
           <table className="min-w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 shadow-[0_1px_0_rgba(226,232,240,1)]">
               <tr>
                 <th className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -1187,7 +1302,7 @@ export default function FinanceiroParcelasPage() {
               </tr>
             </thead>
             <tbody>
-              {displayInstallments.map((item) => {
+              {paginatedInstallments.map((item) => {
                 const isSelectable = item.status !== 'PAID' && item.openAmount > 0;
                 const rowValue = item.status === 'PAID' ? item.paidAmount : item.openAmount;
 
@@ -1250,6 +1365,16 @@ export default function FinanceiroParcelasPage() {
                       >
                         {getInstallmentStatusLabel(item)}
                       </span>
+                      {canSettleInstallments && item.paidAmount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleReverseLatestSettlement(item)}
+                          disabled={reversingInstallmentId === item.id}
+                          className="mt-2 block rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {reversingInstallmentId === item.id ? 'Estornando...' : 'Estornar'}
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -1266,14 +1391,29 @@ export default function FinanceiroParcelasPage() {
           </table>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="shrink-0 flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={handleOpenColumns}
-              className="inline-flex h-9 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-[11px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition hover:bg-slate-50"
+              title="ALTERAR COLUNAS GRID"
+              aria-label="ALTERAR COLUNAS GRID"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
             >
-              ☰ Colunas
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="4" y="5" width="16" height="14" rx="2" />
+                <path d="M9 5v14" />
+                <path d="M15 5v14" />
+              </svg>
             </button>
             <button
               type="button"
@@ -1297,7 +1437,7 @@ export default function FinanceiroParcelasPage() {
               </svg>
             </button>
             <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 shadow-sm">
-              Total registros: {displayInstallments.length}
+              Registros: {displayInstallments.length}
             </span>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">
               Selecionadas: {selectedInstallments.length}
@@ -1307,14 +1447,74 @@ export default function FinanceiroParcelasPage() {
             </span>
           </div>
 
-          {!runtimeContext.embedded ? (
-            <ScreenNameCopy
-              screenId={SCREEN_ID}
-              className="justify-end"
-              auditText={parcelasAuditContext.auditText}
-              sqlText={parcelasAuditContext.sqlText}
-            />
-          ) : null}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {!runtimeContext.embedded ? (
+              <ScreenNameCopy
+                screenId={SCREEN_ID}
+                className="justify-end"
+                auditText={parcelasAuditContext.auditText}
+                sqlText={parcelasAuditContext.sqlText}
+              />
+            ) : null}
+            <select
+              value={pageSize}
+              onChange={(event) => setPageSize(Number(event.target.value))}
+              title="Registros por página"
+              aria-label="Registros por página"
+              className="h-8 rounded-full border border-slate-300 bg-white px-2 text-[11px] font-black text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            >
+              {PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={normalizedCurrentPage <= 1}
+                title="Voltar para o início"
+                aria-label="Voltar para o início"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                &lt;&lt;
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={normalizedCurrentPage <= 1}
+                title="Página anterior"
+                aria-label="Página anterior"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                &lt;
+              </button>
+              <div className="min-w-12 text-center text-xs font-black text-slate-700">
+                {normalizedCurrentPage}/{totalPages}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={normalizedCurrentPage >= totalPages}
+                title="Próxima página"
+                aria-label="Próxima página"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                &gt;
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={normalizedCurrentPage >= totalPages}
+                title="Ir para o fim"
+                aria-label="Ir para o fim"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                &gt;&gt;
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1323,7 +1523,7 @@ export default function FinanceiroParcelasPage() {
           <div className="w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.4)]">
             <div className="border-b border-slate-100 bg-slate-50 px-6 py-5">
               <div className="flex items-start gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   {runtimeContext.logoUrl ? (
                     <img
                       src={runtimeContext.logoUrl}

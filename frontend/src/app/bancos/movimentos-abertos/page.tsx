@@ -405,16 +405,16 @@ export default function FinanceiroOpenBankMovementsPage() {
     <div className="space-y-6">
       {!runtimeContext.embedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Bancos
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Movimentos em aberto
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Confira recebimentos vinculados ao banco antes da conciliação bancária.
                 </p>
               </div>
@@ -575,7 +575,7 @@ export default function FinanceiroOpenBankMovementsPage() {
           <section className="max-h-[88vh] w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-6 py-5 md:flex-row md:items-start md:justify-between">
               <div className="flex items-start gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   {runtimeContext.logoUrl ? (
                     <img
                       src={runtimeContext.logoUrl}

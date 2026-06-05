@@ -3,10 +3,15 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CashSessionsService } from "../application/cash-sessions.service";
 import {
   CloseCurrentCashSessionDto,
+  CreateCustomerCreditDto,
   CreateCashMovementDto,
   CurrentCashSessionQueryDto,
+  ListInstallmentSettlementHistoryDto,
+  ListCustomerCreditsDto,
   ListCashSessionsDto,
   OpenCashSessionDto,
+  ReverseSettlementGroupDto,
+  ReverseManualSettlementDto,
   SettleCashInstallmentDto,
   SettleManualInstallmentDto,
 } from "../application/dto/cash-sessions.dto";
@@ -15,6 +20,22 @@ import {
 @Controller()
 export class CashSessionsController {
   constructor(private readonly cashSessionsService: CashSessionsService) {}
+
+  @Get("customer-credits")
+  @ApiOperation({
+    summary: "Lista créditos de clientes no contas a receber",
+  })
+  listCustomerCredits(@Query() query: ListCustomerCreditsDto) {
+    return this.cashSessionsService.listCustomerCredits(query);
+  }
+
+  @Post("customer-credits")
+  @ApiOperation({
+    summary: "Lança crédito manual para cliente no caixa aberto",
+  })
+  createCustomerCredit(@Body() payload: CreateCustomerCreditDto) {
+    return this.cashSessionsService.createCustomerCredit(payload);
+  }
 
   @Get("cash-sessions")
   @ApiOperation({
@@ -67,6 +88,28 @@ export class CashSessionsController {
     return this.cashSessionsService.createMovement(payload);
   }
 
+  @Get("receivables/settlements")
+  @ApiOperation({
+    summary: "Lista histórico de baixas de parcelas a receber",
+  })
+  listSettlementHistory(@Query() query: ListInstallmentSettlementHistoryDto) {
+    return this.cashSessionsService.listSettlementHistory(query);
+  }
+
+  @Post("receivables/settlements/:settlementGroupId/reverse")
+  @ApiOperation({
+    summary: "Estorna uma baixa ou grupo de baixas de parcelas a receber",
+  })
+  reverseSettlementGroup(
+    @Param("settlementGroupId") settlementGroupId: string,
+    @Body() payload: ReverseSettlementGroupDto,
+  ) {
+    return this.cashSessionsService.reverseSettlementGroup(
+      settlementGroupId,
+      payload,
+    );
+  }
+
   @Post("receivables/installments/:installmentId/settle-cash")
   @ApiOperation({
     summary: "Registra baixa em dinheiro na parcela informada",
@@ -88,6 +131,20 @@ export class CashSessionsController {
     @Body() payload: SettleManualInstallmentDto,
   ) {
     return this.cashSessionsService.settleManualInstallment(
+      installmentId,
+      payload,
+    );
+  }
+
+  @Post("receivables/installments/:installmentId/reverse-latest-settlement")
+  @ApiOperation({
+    summary: "Estorna a última baixa ativa da parcela informada",
+  })
+  reverseLatestSettlement(
+    @Param("installmentId") installmentId: string,
+    @Body() payload: ReverseManualSettlementDto,
+  ) {
+    return this.cashSessionsService.reverseLatestSettlement(
       installmentId,
       payload,
     );

@@ -76,6 +76,7 @@ Decisao:
 - o reaproveitamento no `Financeiro` fica registrado em documentacao e no mapa tecnico;
 - a aplicacao em telas existentes nao deve acontecer em lote;
 - qualquer ajuste futuro deve ser feito manualmente, tela por tela, somente apos validacao explicita do usuario.
+- para telas operacionais com grid embutido e necessidade de maximizar area util, fica aprovada a variante compacta validada em `PRINCIPAL_FINANCEIRO_PARCELAS`, preservando botoes laterais, logotipo, texto principal, card do usuario e `VOLTAR` totalmente dentro da faixa azul.
 
 Motivo:
 
@@ -149,10 +150,12 @@ Decisao:
 - a linha clicada deve ficar destacada ate outra linha ser selecionada;
 - filtros por coluna ficam no proprio cabecalho, com `Limpar todos os filtros` como primeiro botao a esquerda;
 - quando a tela possuir acao de incluir/cadastrar, esse botao fica no canto esquerdo da area da listagem, como primeira informacao visual acima do grid;
-- o final do grid possui dois modelos oficiais: sem totais agregados por coluna nao ha faixa azul e o rodape exibe `Colunas`, impressao/exportacao, semaforo/status, `Total registros: N`, combobox de quantidade por pagina iniciado em `10` e navegacao `<< < pagina/total > >>`;
+- o final do grid possui dois modelos oficiais: sem totais agregados por coluna nao ha faixa azul e o rodape exibe botao iconico de colunas com tooltip `CONFIGURAR COLUNAS DO GRID`, impressao/exportacao, semaforo/status, contador de registros, combobox compacto de quantidade por pagina iniciado em `10` e navegacao compacta `<< < pagina/total > >>`;
 - quando houver totais agregados por coluna, a faixa azul fica acima do rodape com `Total registros: N` em pill branco e valores alinhados nas colunas; o contador nao deve ser duplicado no rodape;
 - contar registros sozinho nao justifica a faixa azul de totais;
 - o rodape nao deve exibir texto de intervalo como `1-10 de 100 registro(s)`;
+- o rodape final do grid deve permanecer sempre visivel, sem exigir rolagem da pagina externa ou da casca hospedeira; a barra lateral vertical deve ficar apenas dentro da area de registros do grid;
+- a estrutura aprovada para manter o rodape visivel e: card do grid em coluna flexivel, toolbar superior e rodape com `shrink-0`, area de registros com `min-h-0` e `overflow-auto`, e casca hospedeira/iframe sem rolagem vertical externa;
 - o detalhamento completo fica em `DOCUMENTACAO/AI/UI_PATTERNS.md`, `PAT-015.2`.
 
 Motivo:

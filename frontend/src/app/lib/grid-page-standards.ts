@@ -17,12 +17,12 @@ export const FINANCE_GRID_PAGE_LAYOUT = {
   footerIconButton:
     'inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600',
   gridTotalsRow:
-    'bg-[#1d4f91] text-[13px] font-bold uppercase tracking-wider text-white',
+    'bg-[#1d4f91] text-[11px] font-bold uppercase tracking-wider text-white',
   gridTotalsCell:
-    'sticky bottom-0 z-20 border-t border-[#153a6a] bg-[#1d4f91] px-4 py-3',
+    'sticky bottom-0 z-20 border-t border-[#153a6a] bg-[#1d4f91] px-4 py-1.5',
   gridTotalsValue: 'font-black text-white',
   gridTotalRecordsPill:
-    'inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 shadow-sm',
+    'inline-flex h-6 items-center rounded-full border border-slate-200 bg-white px-3 text-[9px] font-black uppercase tracking-[0.12em] text-slate-700 shadow-sm',
   input:
     'rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100',
   modalOverlay:

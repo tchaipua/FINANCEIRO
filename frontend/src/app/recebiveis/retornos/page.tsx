@@ -516,7 +516,8 @@ function writeStoredReturnGridConfig(
 function ColumnsIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+      <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
     </svg>
   );
 }
@@ -788,12 +789,11 @@ function ReturnGridFooter({
           <button
             type="button"
             onClick={onColumnSettings}
-            title="Selecionar colunas"
-            aria-label="Selecionar colunas"
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            title="ALTERAR COLUNAS GRID"
+            aria-label="ALTERAR COLUNAS GRID"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             <ColumnsIcon />
-            Colunas
           </button>
           <button
             type="button"
@@ -1500,16 +1500,16 @@ export default function FinanceiroBankReturnsPage() {
     <div className={pageClassName}>
       {!isEmbedded ? (
         <section className={`${cardClass} overflow-hidden`}>
-          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-200">
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
                   Contas a receber
                 </div>
-                <h1 className="mt-2 text-3xl font-black tracking-tight">
+                <h1 className="mt-1 text-2xl font-black tracking-tight">
                   Retorno bancario
                 </h1>
-                <p className="mt-2 max-w-3xl text-sm font-medium text-blue-100/90">
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
                   Importe os boletos liquidados e baixados do banco, confira as
                   observacoes e so depois efetive a baixa manual nas parcelas do sistema.
                 </p>

@@ -79,10 +79,10 @@ export default function FinanceiroHomePage() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
       <section className={`${cardClass} relative left-1/2 w-screen -translate-x-1/2 overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-6 text-white">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Controle Financeiro</h1>
+              <h1 className="text-2xl font-black tracking-tight">Controle Financeiro</h1>
             </div>
             <span className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white">
               Menu Financeiro

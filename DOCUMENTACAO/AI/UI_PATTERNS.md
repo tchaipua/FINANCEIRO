@@ -43,6 +43,11 @@ Todo padrao novo aprovado deve atualizar, no mesmo ciclo:
 - o botao `VOLTAR` deve ficar abaixo do card do usuario, alinhado a direita e dentro da mesma faixa azul
 - o conjunto `card do usuario + VOLTAR` deve repetir o encaixe visual aprovado na `PRINCIPAL_PROFESSORES` do sistema Escola
 - esse mesmo encaixe passa a ser a referencia soberana do lado direito para o projeto `Financeiro`
+- em telas operacionais com grid embutido que precisam maximizar area util, pode existir variante compacta aprovada do cabecalho:
+  - altura menor que o cabecalho padrao completo
+  - mesmos elementos obrigatorios: botoes laterais, logotipo, `eyebrow`, titulo, descricao curta, card do usuario e `VOLTAR`
+  - o card do usuario e o botao `VOLTAR` devem continuar totalmente dentro da faixa azul, sem ultrapassar o bloco
+  - referencia aprovada: `PRINCIPAL_FINANCEIRO_PARCELAS`
 - nenhuma tela existente do `Financeiro` deve ser alterada em lote por causa desse padrao:
   - a aplicacao deve acontecer manualmente
   - tela por tela
@@ -63,11 +68,13 @@ Arquivos de referencia tecnica no Financeiro:
 - ele so pode ser usado em telas que possuem grid, lista ou tabela operacional
 - deve ser tratado como barra operacional da listagem
 - estrutura aprovada:
-  - esquerda: botao `COLUNAS` seguido do botao de `EXPORTACAO/IMPRESSAO`
+  - esquerda: botao iconico de colunas seguido do botao de `EXPORTACAO/IMPRESSAO`
   - centro: controles operacionais visuais da listagem, como semaforo horizontal, toggles ou filtros de status
   - direita: contador institucional de registros exibidos
 - o contador da direita deve manter leitura forte em uppercase, no estilo `REGISTROS EXIBIDOS (N)`
-- a exportacao e a impressao da tela com grid devem ficar concentradas apenas no botao ao lado de `COLUNAS`
+- o botao de colunas deve ser somente iconico, sem texto visivel, com tooltip e `aria-label` exatamente `ALTERAR COLUNAS GRID`
+- o icone do botao de colunas deve representar colunas verticais dentro de um retangulo, mantendo botao compacto quadrado/arredondado
+- a exportacao e a impressao da tela com grid devem ficar concentradas apenas no botao ao lado do botao de colunas
 - quando a toolbar padrao estiver presente, o botao textual separado `EXPORTAR` no topo da tela deixa de ser necessario e deve ser removido para evitar duplicidade funcional
 - telas com grid/lista nao devem exibir faixa explicativa contextual entre o cabecalho principal e a area da listagem
 - telas com grid/lista nao devem criar uma segunda faixa azul interna repetindo `eyebrow`, titulo, descricao ou botao de voltar/menu logo abaixo do cabecalho principal
@@ -126,6 +133,7 @@ Referencia aprovada:
 - referencias aprovadas:
   - `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS`
   - `PRINCIPAL_FINANCEIRO_RETORNOS`
+  - `PRINCIPAL_FINANCEIRO_PARCELAS`
 - a barra de rolagem vertical deve ficar dentro do grid; a pagina/tela externa nao deve ganhar uma segunda rolagem para percorrer os registros
 - a rolagem deve mover apenas os registros do corpo da tabela
 - o cabecalho das colunas deve permanecer fixo no topo do grid durante a rolagem dos registros
@@ -147,26 +155,31 @@ Referencia aprovada:
 - existem dois modelos oficiais para o final do grid:
   - modelo sem totais agregados: nao exibir faixa azul final; usar somente o rodape em linha unica com `Colunas`, impressao/exportacao, semaforo/status, `Total registros: N`, quantidade por pagina e navegacao
   - modelo com totais agregados: exibir uma faixa azul fixa no fim do grid, acima do rodape, somente quando pelo menos uma coluna precisar de somatorio/totalizacao operacional
+- o rodape final do grid, com ou sem faixa azul de totais, deve permanecer sempre visivel na area util da tela; o usuario nao deve precisar rolar a pagina externa ou a casca hospedeira para enxergar botao de colunas, impressao/exportacao, semaforo/status, totais, quantidade por pagina, navegacao ou identificador tecnico
+- a rolagem vertical deve ficar somente na area interna de registros do grid; em telas embutidas por iframe, a casca hospedeira deve ajustar a altura do iframe para caber na area disponivel e evitar uma segunda barra lateral fora do grid
+- a estrutura aprovada para isso e: card do grid em coluna flexivel, toolbar superior e rodape com `shrink-0`, area de registros com `min-h-0` e `overflow-auto`, e casca hospedeira/iframe sem rolagem vertical externa
 - contar registros sozinho nao caracteriza totalizacao de coluna e nao deve criar faixa azul
 - em grids sem totais agregados, o contador `Total registros: N` deve ficar no rodape, ao lado do semaforo/status e antes dos controles de paginacao
 - quando o grid tiver totais agregados no final da tabela, a linha final de totais deve ficar no fim do grid, fixa durante a rolagem interna dos registros e alinhada pelas mesmas colunas do grid
 - a linha final de totais aprovada deve usar a mesma cor azul institucional do cabecalho financeiro:
   - fundo `#1d4f91`
   - borda superior `#153a6a`
+  - celulas compactas com `px-4` e `py-1.5`
+  - fonte compacta `text-[11px]`, `font-bold`, `uppercase` e `tracking-wider`
   - valores em branco (`text-white`)
   - sem criar rolagem externa na tela/pagina
-- nessa linha final de totais, o contador `Total registros: N` deve aparecer no canto esquerdo em pill branco, usando o formato aprovado em `PRINCIPAL_FINANCEIRO_RETORNOS`:
-  - `h-9`, `rounded-full`, `border-slate-200`, `bg-white`, `px-4`, `text-[10px]`, `font-black`, `uppercase`, `tracking-[0.14em]`, `text-slate-700` e `shadow-sm`
+- nessa linha final de totais, o contador `Total registros: N` deve aparecer no canto esquerdo em pill branco baixo:
+  - `h-6`, `rounded-full`, `border-slate-200`, `bg-white`, `px-3`, `text-[9px]`, `font-black`, `uppercase`, `tracking-[0.12em]`, `text-slate-700` e `shadow-sm`
 - em grids com totais agregados, nao duplicar `Total registros: N` no rodape; o contador fica somente na pill branca da linha azul
 - o rodape do grid deve ficar em uma unica linha sempre que houver largura disponivel
 - no lado esquerdo do rodape devem ficar, nesta ordem:
-  - botao `Colunas`
+  - botao iconico de colunas, sem texto visivel, com tooltip/aria-label `ALTERAR COLUNAS GRID`
   - botao de impressao/exportacao
   - semaforo/status da listagem, como `ATIVOS`, `INATIVOS` e `AMBOS`, ou o equivalente aprovado para a tela
 - o semaforo/status deve ficar ao lado do botao de impressao/exportacao, na mesma linha
 - no canto direito do rodape devem ficar, na mesma linha:
-  - combobox de quantidade de registros por pagina, com opcoes como `10`, `20`, `50` e `100`
-  - navegacao de paginas com `<<`, `<`, indicador `pagina/total`, `>` e `>>`
+  - combobox compacto de quantidade de registros por pagina, com opcoes como `10`, `20`, `50` e `100`
+  - navegacao compacta de paginas com `<<`, `<`, indicador `pagina/total`, `>` e `>>`
 - ao abrir qualquer tela com grid paginado, o combobox de quantidade por pagina deve iniciar obrigatoriamente em `10`
 - `<<` volta para o inicio, `<` volta uma pagina, `>` avanca uma pagina e `>>` vai para o fim
 - neste modelo nao exibir texto de intervalo como `1-10 de 100 registro(s)` no rodape; o rodape deve priorizar controles compactos

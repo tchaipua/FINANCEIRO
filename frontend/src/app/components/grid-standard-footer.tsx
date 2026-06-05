@@ -12,6 +12,7 @@ type GridStandardFooterProps = {
   totalPages: number;
   pageSizeOptions?: number[];
   aggregateSummaries?: Array<{ label: string; value: string }>;
+  showRecordSummary?: boolean;
   onColumnSettings: () => void;
   onExport: () => void;
   onStatusFilterChange: (value: GridStatusFilterValue) => void;
@@ -23,7 +24,8 @@ type GridStandardFooterProps = {
 function ColumnsIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+      <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
     </svg>
   );
 }
@@ -114,6 +116,7 @@ export default function GridStandardFooter({
   totalPages,
   pageSizeOptions = [10, 20, 50, 100],
   aggregateSummaries = [],
+  showRecordSummary = true,
   onColumnSettings,
   onExport,
   onStatusFilterChange,
@@ -131,12 +134,11 @@ export default function GridStandardFooter({
           <button
             type="button"
             onClick={onColumnSettings}
-            title="Selecionar colunas"
-            aria-label="Selecionar colunas"
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            title="ALTERAR COLUNAS GRID"
+            aria-label="ALTERAR COLUNAS GRID"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             <ColumnsIcon />
-            Colunas
           </button>
           <button
             type="button"
@@ -148,17 +150,21 @@ export default function GridStandardFooter({
             <PrintIcon />
           </button>
           <StatusSwitches value={statusFilter} onChange={onStatusFilterChange} />
-          <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-            Total registros: {totalRecords}
-          </div>
-          {aggregateSummaries.map((summary) => (
-            <div
-              key={summary.label}
-              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600"
-            >
-              {summary.label}: <span className="text-slate-900">{summary.value}</span>
-            </div>
-          ))}
+          {showRecordSummary ? (
+            <>
+              <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-700">
+                Total registros: {totalRecords}
+              </div>
+              {aggregateSummaries.map((summary) => (
+                <div
+                  key={summary.label}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600"
+                >
+                  {summary.label}: <span className="text-slate-900">{summary.value}</span>
+                </div>
+              ))}
+            </>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">

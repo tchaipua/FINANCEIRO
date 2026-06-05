@@ -517,9 +517,9 @@ function SefazSyncProgressModal({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
       <div className="w-full max-w-xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-5 text-white">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/10 shadow-lg">
+        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+          <div className="flex items-center gap-3">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/10 shadow-lg">
               {logoUrl ? (
                 <img
                   src={logoUrl}
@@ -3271,9 +3271,14 @@ export default function FinanceiroImportacaoNotasPage() {
                   <button
                     type="button"
                     onClick={() => setIsRecentImportColumnConfigOpen(true)}
-                    className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+                    title="ALTERAR COLUNAS GRID"
+                    aria-label="ALTERAR COLUNAS GRID"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
                   >
-                    ☰ Colunas
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
+                    </svg>
                   </button>
                   <button
                     type="button"

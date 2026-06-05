@@ -30,6 +30,7 @@ import {
   ImportBankReturnDto,
   IssueBankSlipsDto,
   ListBankReturnImportsDto,
+  ListReceivableCustomerHistoryDto,
   ListReceivableBatchesDto,
   ListReceivableInstallmentsDto,
   ReceivablesImportDto,
@@ -1269,6 +1270,263 @@ export class ReceivablesService {
           installment.status === "OPEN" && isOverdueDate(installment.dueDate),
       };
     });
+  }
+
+  async listCustomerHistory(query: ListReceivableCustomerHistoryDto) {
+    const normalizedSourceSystem = normalizeText(query.sourceSystem);
+    const normalizedSourceTenantId = normalizeText(query.sourceTenantId);
+    const normalizedSearch = normalizeText(query.search);
+
+    if (!normalizedSourceSystem || !normalizedSourceTenantId) {
+      throw new BadRequestException("Origem financeira inválida.");
+    }
+
+    const installments = await this.prisma.receivableInstallment.findMany({
+      where: {
+        canceledAt: null,
+        batchRemovedAt: null,
+        batch: {
+          sourceSystem: normalizedSourceSystem,
+          sourceTenantId: normalizedSourceTenantId,
+        },
+        ...(normalizedSearch
+          ? {
+              OR: [
+                { payerNameSnapshot: { contains: normalizedSearch } },
+                { payerDocumentSnapshot: { contains: normalizedSearch } },
+                {
+                  title: {
+                    sourceEntityName: { contains: normalizedSearch },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        company: {
+          select: {
+            interestRate: true,
+            interestGracePeriod: true,
+            penaltyRate: true,
+            penaltyValue: true,
+            penaltyGracePeriod: true,
+          },
+        },
+        title: {
+          select: {
+            id: true,
+            sourceEntityType: true,
+            sourceEntityId: true,
+            sourceEntityName: true,
+            classLabel: true,
+            businessKey: true,
+            description: true,
+            totalAmount: true,
+            payerNameSnapshot: true,
+            payerDocumentSnapshot: true,
+            createdAt: true,
+          },
+        },
+        settlements: {
+          where: { canceledAt: null },
+          orderBy: [{ settledAt: "asc" }],
+        },
+      },
+      orderBy: [{ payerNameSnapshot: "asc" }, { dueDate: "asc" }],
+    });
+
+    const customers = new Map<string, any>();
+
+    for (const installment of installments as any[]) {
+      const customerName = normalizeText(
+        installment.payerNameSnapshot ||
+          installment.title?.payerNameSnapshot ||
+          installment.title?.sourceEntityName ||
+          "CLIENTE NÃO INFORMADO",
+      )!;
+      const customerDocument =
+        installment.payerDocumentSnapshot ||
+        installment.title?.payerDocumentSnapshot ||
+        null;
+      const customerKey = `${customerName}|${customerDocument || ""}`;
+
+      if (!customers.has(customerKey)) {
+        customers.set(customerKey, {
+          id: customerKey,
+          customerName,
+          customerDocument,
+          totalPurchaseAmount: 0,
+          openAmount: 0,
+          overdueAmount: 0,
+          firstPurchaseDate: null as Date | null,
+          lastPaymentDate: null as Date | null,
+          salesMap: new Map<string, any>(),
+          installments: [],
+        });
+      }
+
+      const customer = customers.get(customerKey);
+      const titleId = installment.titleId;
+      const purchaseDate = installment.title?.createdAt || installment.createdAt;
+      const financialSettings =
+        this.buildInstallmentFinancialSettingsSnapshot(installment);
+      const settlementSuggestion = buildInstallmentSettlementSuggestion({
+        dueDate: installment.dueDate,
+        openAmount: installment.openAmount,
+        settings: financialSettings,
+      });
+      const activeSettlements = installment.settlements || [];
+      const paidWithInterest = roundMoney(
+        activeSettlements.reduce(
+          (total: number, settlement: any) =>
+            total + Number(settlement.interestAmount || 0),
+          0,
+        ),
+      );
+      const paidWithPenalty = roundMoney(
+        activeSettlements.reduce(
+          (total: number, settlement: any) =>
+            total + Number(settlement.penaltyAmount || 0),
+          0,
+        ),
+      );
+      const paidWithDiscount = roundMoney(
+        activeSettlements.reduce(
+          (total: number, settlement: any) =>
+            total + Number(settlement.discountAmount || 0),
+          0,
+        ),
+      );
+      const lastInstallmentPayment = activeSettlements.reduce(
+        (latest: Date | null, settlement: any) => {
+          const settledAt = settlement.settledAt
+            ? new Date(settlement.settledAt)
+            : null;
+          if (!settledAt || Number.isNaN(settledAt.getTime())) return latest;
+          return !latest || settledAt.getTime() > latest.getTime()
+            ? settledAt
+            : latest;
+        },
+        null,
+      );
+
+      if (!customer.firstPurchaseDate || purchaseDate < customer.firstPurchaseDate) {
+        customer.firstPurchaseDate = purchaseDate;
+      }
+
+      if (
+        lastInstallmentPayment &&
+        (!customer.lastPaymentDate ||
+          lastInstallmentPayment.getTime() > customer.lastPaymentDate.getTime())
+      ) {
+        customer.lastPaymentDate = lastInstallmentPayment;
+      }
+
+      if (!customer.salesMap.has(titleId)) {
+        customer.salesMap.set(titleId, {
+          id: titleId,
+          titleId,
+          businessKey: installment.title?.businessKey || null,
+          description: installment.title?.description || installment.descriptionSnapshot,
+          sourceEntityName:
+            installment.title?.sourceEntityName || installment.title?.sourceEntityId || null,
+          classLabel: installment.title?.classLabel || null,
+          purchaseDate: purchaseDate?.toISOString() || null,
+          totalAmount: roundMoney(Number(installment.title?.totalAmount || 0)),
+          openAmount: 0,
+          paidAmount: 0,
+          installmentCount: 0,
+          openInstallmentCount: 0,
+          paidInstallmentCount: 0,
+          overdueAmount: 0,
+          lastPaymentDate: null as string | null,
+        });
+      }
+
+      const sale = customer.salesMap.get(titleId);
+      sale.installmentCount += 1;
+      sale.openAmount = roundMoney(sale.openAmount + Number(installment.openAmount || 0));
+      sale.paidAmount = roundMoney(sale.paidAmount + Number(installment.paidAmount || 0));
+      if (installment.status === "OPEN" && Number(installment.openAmount || 0) > 0) {
+        sale.openInstallmentCount += 1;
+      }
+      if (installment.status === "PAID") {
+        sale.paidInstallmentCount += 1;
+      }
+      if (installment.status === "OPEN" && isOverdueDate(installment.dueDate)) {
+        const overdueValue = roundMoney(
+          Number(installment.openAmount || 0) +
+            Number(settlementSuggestion.suggestedInterestAmount || 0) +
+            Number(settlementSuggestion.suggestedPenaltyAmount || 0),
+        );
+        sale.overdueAmount = roundMoney(sale.overdueAmount + overdueValue);
+        customer.overdueAmount = roundMoney(customer.overdueAmount + overdueValue);
+      }
+      if (lastInstallmentPayment) {
+        const currentSaleLastPayment = sale.lastPaymentDate
+          ? new Date(sale.lastPaymentDate)
+          : null;
+        if (
+          !currentSaleLastPayment ||
+          lastInstallmentPayment.getTime() > currentSaleLastPayment.getTime()
+        ) {
+          sale.lastPaymentDate = lastInstallmentPayment.toISOString();
+        }
+      }
+
+      customer.openAmount = roundMoney(
+        customer.openAmount + Number(installment.openAmount || 0),
+      );
+      customer.totalPurchaseAmount = roundMoney(
+        customer.totalPurchaseAmount + Number(installment.amount || 0),
+      );
+      customer.installments.push({
+        id: installment.id,
+        titleId: installment.titleId,
+        saleDescription: sale.description,
+        description: installment.descriptionSnapshot,
+        installmentNumber: installment.installmentNumber,
+        installmentCount: installment.installmentCount,
+        dueDate: installment.dueDate?.toISOString() || null,
+        amount: roundMoney(Number(installment.amount || 0)),
+        openAmount: roundMoney(Number(installment.openAmount || 0)),
+        paidAmount: roundMoney(Number(installment.paidAmount || 0)),
+        status: installment.status,
+        settlementMethod: installment.settlementMethod || null,
+        settledAt: installment.settledAt?.toISOString() || null,
+        suggestedInterestAmount: settlementSuggestion.suggestedInterestAmount,
+        suggestedPenaltyAmount: settlementSuggestion.suggestedPenaltyAmount,
+        overdueDays: settlementSuggestion.overdueDays,
+        paidInterestAmount: paidWithInterest,
+        paidPenaltyAmount: paidWithPenalty,
+        paidDiscountAmount: paidWithDiscount,
+        lastPaymentDate: lastInstallmentPayment?.toISOString() || null,
+      });
+    }
+
+    return Array.from(customers.values())
+      .map((customer) => ({
+        id: customer.id,
+        customerName: customer.customerName,
+        customerDocument: customer.customerDocument,
+        totalPurchaseAmount: roundMoney(customer.totalPurchaseAmount),
+        openAmount: roundMoney(customer.openAmount),
+        firstPurchaseDate: customer.firstPurchaseDate?.toISOString() || null,
+        lastPaymentDate: customer.lastPaymentDate?.toISOString() || null,
+        overdueAmount: roundMoney(customer.overdueAmount),
+        sales: Array.from(customer.salesMap.values()).sort((left: any, right: any) =>
+          String(left.purchaseDate || "").localeCompare(String(right.purchaseDate || "")),
+        ),
+        installments: customer.installments.sort((left: any, right: any) => {
+          const dueDiff =
+            new Date(left.dueDate || 0).getTime() -
+            new Date(right.dueDate || 0).getTime();
+          if (dueDiff !== 0) return dueDiff;
+          return String(left.id).localeCompare(String(right.id), "pt-BR");
+        }),
+      }))
+      .sort((left, right) => left.customerName.localeCompare(right.customerName, "pt-BR"));
   }
 
   async updateInstallment(
