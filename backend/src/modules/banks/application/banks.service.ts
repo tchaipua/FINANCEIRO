@@ -16,6 +16,7 @@ import {
   GetBankDto,
   GetBankDdaDto,
   GetBankStatementDto,
+  ImportBankStatementOfxDto,
   ListBanksDto,
   ReconcileBankStatementMovementDto,
   ReviewBankStatementMovementDto,
@@ -145,6 +146,26 @@ type StatementRequestedByInput = {
   requestedBy?: string | null;
   cashierUserId?: string | null;
   cashierDisplayName?: string | null;
+};
+
+type ParsedOfxStatementTransaction = {
+  fitId: string | null;
+  trnType: string | null;
+  postedAt: Date;
+  amount: number;
+  memo: string | null;
+  name: string | null;
+  checkNumber: string | null;
+  referenceNumber: string | null;
+  rawBlock: string;
+};
+
+type ParsedOfxStatement = {
+  bankId: string | null;
+  accountId: string | null;
+  accountType: string | null;
+  ledgerBalance: number | null;
+  transactions: ParsedOfxStatementTransaction[];
 };
 
 type PersistedStatementMovement = {
@@ -304,6 +325,199 @@ export class BanksService {
     return createHash("sha1")
       .update([bankAccountId, this.buildStatementMovementBaseKey(transaction), occurrence].join("|"))
       .digest("hex");
+  }
+
+  private decodeOfxText(value?: string | null) {
+    const normalized = String(value || "").trim();
+
+    if (!normalized) {
+      return null;
+    }
+
+    return normalized
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/g, "'");
+  }
+
+  private readOfxTag(block: string, tag: string) {
+    const normalizedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const closedMatch = block.match(
+      new RegExp(`<${normalizedTag}>\\s*([\\s\\S]*?)\\s*</${normalizedTag}>`, "i"),
+    );
+
+    if (closedMatch) {
+      return this.decodeOfxText(closedMatch[1]);
+    }
+
+    const openMatch = block.match(
+      new RegExp(`<${normalizedTag}>\\s*([^\\r\\n<]*)`, "i"),
+    );
+
+    return openMatch ? this.decodeOfxText(openMatch[1]) : null;
+  }
+
+  private readOfxBlocks(content: string, tag: string) {
+    const normalizedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const blocks: string[] = [];
+    const matcher = new RegExp(
+      `<${normalizedTag}>\\s*([\\s\\S]*?)\\s*</${normalizedTag}>`,
+      "gi",
+    );
+    let match: RegExpExecArray | null;
+
+    while ((match = matcher.exec(content)) !== null) {
+      blocks.push(match[1]);
+    }
+
+    return blocks;
+  }
+
+  private parseOfxDate(value?: string | null) {
+    const normalized = String(value || "").trim();
+    const match = normalized.match(
+      /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2}))?/,
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const parsed = new Date(
+      Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4] || "12"),
+        Number(match[5] || "0"),
+        Number(match[6] || "0"),
+      ),
+    );
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private parseOfxAmount(value?: string | null) {
+    const normalized = String(value || "").trim().replace(",", ".");
+
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private normalizeOfxDirection(transaction: ParsedOfxStatementTransaction) {
+    const normalizedType = normalizeText(transaction.trnType);
+
+    if (
+      transaction.amount < 0 ||
+      [
+        "ATM",
+        "CHECK",
+        "DEBIT",
+        "FEE",
+        "PAYMENT",
+        "POS",
+        "SRVCHG",
+        "XFER",
+      ].includes(normalizedType || "")
+    ) {
+      return "DEBIT";
+    }
+
+    return "CREDIT";
+  }
+
+  private buildOfxMovementExternalId(
+    bankAccountId: string,
+    transaction: ParsedOfxStatementTransaction,
+    occurrence: number,
+  ) {
+    const fitId = normalizeText(transaction.fitId);
+
+    if (fitId) {
+      return `OFX:${fitId}`;
+    }
+
+    return createHash("sha1")
+      .update(
+        [
+          "OFX",
+          bankAccountId,
+          transaction.postedAt.toISOString(),
+          roundMoney(Math.abs(transaction.amount)),
+          normalizeText(transaction.memo),
+          normalizeText(transaction.name),
+          normalizeText(transaction.checkNumber),
+          normalizeText(transaction.referenceNumber),
+          occurrence,
+        ].join("|"),
+      )
+      .digest("hex");
+  }
+
+  private parseOfxStatementContent(content: string): ParsedOfxStatement {
+    const normalizedContent = String(content || "").replace(/^\uFEFF/, "").trim();
+
+    if (!normalizedContent) {
+      throw new BadRequestException("Informe o conteúdo do arquivo OFX.");
+    }
+
+    if (normalizedContent.length > 5 * 1024 * 1024) {
+      throw new BadRequestException("Arquivo OFX muito grande para importação.");
+    }
+
+    if (!/<OFX[\s>]/i.test(normalizedContent)) {
+      throw new BadRequestException("Arquivo OFX inválido.");
+    }
+
+    const transactionBlocks = this.readOfxBlocks(normalizedContent, "STMTTRN");
+    if (!transactionBlocks.length) {
+      throw new BadRequestException("Nenhum lançamento STMTTRN encontrado no OFX.");
+    }
+
+    const ledgerBalanceBlock = this.readOfxBlocks(
+      normalizedContent,
+      "LEDGERBAL",
+    )[0];
+    const transactions = transactionBlocks.map((block) => {
+      const postedAt = this.parseOfxDate(this.readOfxTag(block, "DTPOSTED"));
+      const amount = this.parseOfxAmount(this.readOfxTag(block, "TRNAMT"));
+
+      if (!postedAt) {
+        throw new BadRequestException("Arquivo OFX contém lançamento sem data válida.");
+      }
+
+      if (amount === null) {
+        throw new BadRequestException("Arquivo OFX contém lançamento sem valor válido.");
+      }
+
+      return {
+        fitId: this.readOfxTag(block, "FITID"),
+        trnType: this.readOfxTag(block, "TRNTYPE"),
+        postedAt,
+        amount,
+        memo: this.readOfxTag(block, "MEMO"),
+        name: this.readOfxTag(block, "NAME"),
+        checkNumber: this.readOfxTag(block, "CHECKNUM"),
+        referenceNumber: this.readOfxTag(block, "REFNUM"),
+        rawBlock: block.trim(),
+      };
+    });
+
+    return {
+      bankId: this.readOfxTag(normalizedContent, "BANKID"),
+      accountId: this.readOfxTag(normalizedContent, "ACCTID"),
+      accountType: this.readOfxTag(normalizedContent, "ACCTTYPE"),
+      ledgerBalance: ledgerBalanceBlock
+        ? this.parseOfxAmount(this.readOfxTag(ledgerBalanceBlock, "BALAMT"))
+        : null,
+      transactions,
+    };
   }
 
   private buildBankAccountLabel(bank: {
@@ -570,6 +784,134 @@ export class BanksService {
     };
   }
 
+  private mapOfxStatement(
+    bank: {
+      id: string;
+      bankName: string;
+      branchNumber: string;
+      branchDigit?: string | null;
+      accountNumber: string;
+      accountDigit?: string | null;
+    },
+    period: {
+      periodStart: string;
+      periodEnd: string;
+    },
+    payload: ImportBankStatementOfxDto,
+  ): MappedBankStatement {
+    const parsedStatement = this.parseOfxStatementContent(payload.ofxContent);
+    const dateBounds = this.buildStatementDateBounds(period);
+    const bankAccountLabel = this.buildBankAccountLabel(bank);
+    const orderedTransactions = parsedStatement.transactions
+      .filter(
+        (transaction) =>
+          transaction.postedAt >= dateBounds.start &&
+          transaction.postedAt <= dateBounds.end,
+      )
+      .sort(
+        (left, right) => left.postedAt.getTime() - right.postedAt.getTime(),
+      );
+    const occurrenceByBaseKey = new Map<string, number>();
+
+    const movements = orderedTransactions.map((transaction) => {
+      const movementType = this.normalizeOfxDirection(transaction);
+      const amount = roundMoney(Math.abs(transaction.amount));
+      const baseKey = [
+        normalizeText(transaction.fitId),
+        transaction.postedAt.toISOString(),
+        amount,
+        normalizeText(transaction.memo),
+        normalizeText(transaction.name),
+        normalizeText(transaction.checkNumber),
+        normalizeText(transaction.referenceNumber),
+      ].join("|");
+      const occurrence = (occurrenceByBaseKey.get(baseKey) || 0) + 1;
+      occurrenceByBaseKey.set(baseKey, occurrence);
+      const externalId = this.buildOfxMovementExternalId(
+        bank.id,
+        transaction,
+        occurrence,
+      );
+      const description =
+        normalizeText(transaction.memo) ||
+        normalizeText(transaction.name) ||
+        "LANÇAMENTO BANCÁRIO OFX";
+      const detailLines = [
+        transaction.name ? `NOME: ${normalizeText(transaction.name)}` : null,
+        transaction.trnType ? `TIPO OFX: ${normalizeText(transaction.trnType)}` : null,
+        transaction.fitId ? `FITID: ${normalizeText(transaction.fitId)}` : null,
+        transaction.referenceNumber
+          ? `REF: ${normalizeText(transaction.referenceNumber)}`
+          : null,
+      ].filter((line): line is string => Boolean(line));
+
+      return {
+        id: externalId,
+        externalId,
+        occurredAt: transaction.postedAt.toISOString(),
+        description,
+        detailLines,
+        documentNumber:
+          normalizeText(transaction.checkNumber) ||
+          normalizeText(transaction.referenceNumber) ||
+          null,
+        movementType,
+        amount,
+        balanceAfter: null,
+        status: "PENDENTE",
+        rawPayloadJson: JSON.stringify({
+          source: "OFX",
+          fileName: normalizeText(payload.fileName) || null,
+          bankId: normalizeText(parsedStatement.bankId) || null,
+          accountId: normalizeText(parsedStatement.accountId) || null,
+          accountType: normalizeText(parsedStatement.accountType) || null,
+          fitId: normalizeText(transaction.fitId) || null,
+          trnType: normalizeText(transaction.trnType) || null,
+          memo: normalizeText(transaction.memo) || null,
+          name: normalizeText(transaction.name) || null,
+          checkNumber: normalizeText(transaction.checkNumber) || null,
+          referenceNumber: normalizeText(transaction.referenceNumber) || null,
+          descInfComplementar: detailLines.join("\n"),
+          rawBlock: transaction.rawBlock,
+        }),
+      };
+    });
+    this.applyRunningStatementBalances(movements, parsedStatement.ledgerBalance);
+
+    const creditAmount = roundMoney(
+      movements
+        .filter((movement) => movement.movementType === "CREDIT")
+        .reduce((total, movement) => total + movement.amount, 0),
+    );
+    const debitAmount = roundMoney(
+      movements
+        .filter((movement) => movement.movementType === "DEBIT")
+        .reduce((total, movement) => total + movement.amount, 0),
+    );
+
+    return {
+      provider: "OFX",
+      bankAccountId: bank.id,
+      bankAccountLabel,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      currentBalance:
+        typeof parsedStatement.ledgerBalance === "number"
+          ? roundMoney(parsedStatement.ledgerBalance)
+          : null,
+      creditAmount,
+      debitAmount,
+      movementCount: movements.length,
+      months: [],
+      pulledAt: new Date().toISOString(),
+      movements,
+      message:
+        movements.length === 1
+          ? "1 lançamento de extrato bancário encontrado no OFX."
+          : `${movements.length} lançamentos de extrato bancário encontrados no OFX.`,
+    };
+  }
+
   private resolveStatementRequestedBy(query: StatementRequestedByInput) {
     return (
       normalizeText(query.requestedBy) ||
@@ -611,14 +953,16 @@ export class BanksService {
     movementCount: number,
     createdMovementCount: number,
     duplicateMovementCount: number,
+    provider = "SICOOB",
   ) {
+    const sourceDescription = normalizeText(provider) === "OFX" ? "no OFX" : "no Sicoob";
     const foundMessage =
       movementCount === 1
-        ? "1 lançamento de extrato bancário encontrado no Sicoob."
-        : `${movementCount} lançamentos de extrato bancário encontrados no Sicoob.`;
+        ? `1 lançamento de extrato bancário encontrado ${sourceDescription}.`
+        : `${movementCount} lançamentos de extrato bancário encontrados ${sourceDescription}.`;
 
     if (!movementCount) {
-      return "Nenhum lançamento de extrato bancário encontrado no Sicoob para o período informado.";
+      return `Nenhum lançamento de extrato bancário encontrado ${sourceDescription} para o período informado.`;
     }
 
     if (duplicateMovementCount > 0) {
@@ -746,6 +1090,7 @@ export class BanksService {
         mappedStatement.movementCount,
         createdMovementCount,
         duplicateMovementCount,
+        mappedStatement.provider,
       );
       const summary = {
         provider: mappedStatement.provider,
@@ -1671,6 +2016,28 @@ export class BanksService {
 
       throw error;
     }
+  }
+
+  async importOfxStatement(bankId: string, payload: ImportBankStatementOfxDto) {
+    const period = this.parseStatementPeriod(payload.periodStart, payload.periodEnd);
+    const { company, bank } = await this.loadScopedBank(
+      bankId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+
+    if (bank.status !== "ACTIVE" || bank.canceledAt) {
+      throw new BadRequestException("BANCO INATIVO PARA IMPORTAR EXTRATO OFX.");
+    }
+
+    const mappedStatement = this.mapOfxStatement(bank, period, payload);
+    return this.persistSicoobStatement(
+      company,
+      bank,
+      period,
+      mappedStatement,
+      payload,
+    );
   }
 
   async create(payload: SaveBankDto) {

@@ -2642,6 +2642,9 @@ export default function FinanceiroBanksPage() {
             pageSize={bankPageSize}
             currentPage={currentBankPage}
             totalPages={bankTotalPages}
+            recordSummaryVariant="pill"
+            recordSummaryLabel="Registros"
+            typographyVariant="school"
             aggregateSummaries={
               isLastStatementBalanceVisible
                 ? [{ label: 'Saldo total', value: formatCurrency(lastStatementBalanceTotal) }]

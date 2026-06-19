@@ -13,8 +13,14 @@ type GridStandardFooterProps = {
   pageSizeOptions?: number[];
   aggregateSummaries?: Array<{ label: string; value: string }>;
   showRecordSummary?: boolean;
-  onColumnSettings: () => void;
-  onExport: () => void;
+  showStatusFilter?: boolean;
+  recordSummaryVariant?: 'text' | 'pill';
+  recordSummaryLabel?: string;
+  typographyVariant?: 'default' | 'school';
+  showColumnSettings?: boolean;
+  showExport?: boolean;
+  onColumnSettings?: () => void;
+  onExport?: () => void;
   onStatusFilterChange: (value: GridStatusFilterValue) => void;
   onPageSizeChange: (value: number) => void;
   onPageChange: (value: number) => void;
@@ -117,6 +123,12 @@ export default function GridStandardFooter({
   pageSizeOptions = [10, 20, 50, 100],
   aggregateSummaries = [],
   showRecordSummary = true,
+  showStatusFilter = true,
+  recordSummaryVariant = 'text',
+  recordSummaryLabel = 'Total registros',
+  typographyVariant = 'default',
+  showColumnSettings = true,
+  showExport = true,
   onColumnSettings,
   onExport,
   onStatusFilterChange,
@@ -126,41 +138,68 @@ export default function GridStandardFooter({
 }: GridStandardFooterProps) {
   const normalizedTotalPages = Math.max(1, totalPages);
   const normalizedCurrentPage = Math.min(Math.max(1, currentPage), normalizedTotalPages);
+  const formattedTotalRecords = new Intl.NumberFormat('pt-BR').format(
+    Math.max(0, totalRecords),
+  );
+  const usesSchoolTypography = typographyVariant === 'school';
+  const recordSummaryClass = usesSchoolTypography
+    ? 'inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm'
+    : recordSummaryVariant === 'pill'
+      ? 'rounded-full border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-700 shadow-md shadow-slate-200/70'
+      : 'text-sm font-black uppercase tracking-[0.14em] text-slate-700';
+  const aggregateSummaryClass = usesSchoolTypography
+    ? 'inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm'
+    : 'rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600';
+  const selectClass = usesSchoolTypography
+    ? 'h-8 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600 outline-none transition hover:bg-slate-50 focus:border-blue-300 focus:ring-2 focus:ring-blue-100'
+    : 'h-10 rounded-full border border-slate-300 bg-white px-3 text-sm font-black text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100';
+  const pageButtonClass = usesSchoolTypography
+    ? 'h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40'
+    : 'inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40';
+  const pageIndicatorClass = usesSchoolTypography
+    ? 'min-w-20 text-center text-[10px] font-black uppercase tracking-[0.14em] text-slate-500'
+    : 'min-w-16 text-center text-xs font-black uppercase tracking-[0.12em] text-slate-500';
 
   return (
     <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onColumnSettings}
-            title="ALTERAR COLUNAS GRID"
-            aria-label="ALTERAR COLUNAS GRID"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            <ColumnsIcon />
-          </button>
-          <button
-            type="button"
-            onClick={onExport}
-            title="Imprimir ou exportar"
-            aria-label="Imprimir ou exportar"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
-          >
-            <PrintIcon />
-          </button>
-          <StatusSwitches value={statusFilter} onChange={onStatusFilterChange} />
+          {showColumnSettings && onColumnSettings ? (
+            <button
+              type="button"
+              onClick={onColumnSettings}
+              title="ALTERAR COLUNAS GRID"
+              aria-label="ALTERAR COLUNAS GRID"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <ColumnsIcon />
+            </button>
+          ) : null}
+          {showExport && onExport ? (
+            <button
+              type="button"
+              onClick={onExport}
+              title="Imprimir ou exportar"
+              aria-label="Imprimir ou exportar"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+            >
+              <PrintIcon />
+            </button>
+          ) : null}
+          {showStatusFilter ? (
+            <StatusSwitches value={statusFilter} onChange={onStatusFilterChange} />
+          ) : null}
           {showRecordSummary ? (
             <>
-              <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-                Total registros: {totalRecords}
+              <div className={recordSummaryClass}>
+                {recordSummaryLabel}: {formattedTotalRecords}
               </div>
               {aggregateSummaries.map((summary) => (
                 <div
                   key={summary.label}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600"
+                  className={aggregateSummaryClass}
                 >
-                  {summary.label}: <span className="text-slate-900">{summary.value}</span>
+                  {summary.label}: <span className={usesSchoolTypography ? 'ml-1 text-blue-700' : 'text-slate-900'}>{summary.value}</span>
                 </div>
               ))}
             </>
@@ -174,7 +213,7 @@ export default function GridStandardFooter({
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
             title="Registros por página"
             aria-label="Registros por página"
-            className="h-10 rounded-full border border-slate-300 bg-white px-3 text-sm font-black text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            className={selectClass}
           >
             {pageSizeOptions.map((option) => (
               <option key={option} value={option}>
@@ -190,7 +229,7 @@ export default function GridStandardFooter({
               disabled={normalizedCurrentPage <= 1}
               title="Voltar para o início"
               aria-label="Voltar para o início"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={pageButtonClass}
             >
               &lt;&lt;
             </button>
@@ -200,11 +239,11 @@ export default function GridStandardFooter({
               disabled={normalizedCurrentPage <= 1}
               title="Voltar uma página"
               aria-label="Voltar uma página"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={pageButtonClass}
             >
               &lt;
             </button>
-            <span className="min-w-16 text-center text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+            <span className={pageIndicatorClass}>
               {normalizedCurrentPage}/{normalizedTotalPages}
             </span>
             <button
@@ -213,7 +252,7 @@ export default function GridStandardFooter({
               disabled={normalizedCurrentPage >= normalizedTotalPages}
               title="Avançar uma página"
               aria-label="Avançar uma página"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={pageButtonClass}
             >
               &gt;
             </button>
@@ -223,7 +262,7 @@ export default function GridStandardFooter({
               disabled={normalizedCurrentPage >= normalizedTotalPages}
               title="Avançar para o final"
               aria-label="Avançar para o final"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={pageButtonClass}
             >
               &gt;&gt;
             </button>

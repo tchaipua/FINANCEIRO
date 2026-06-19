@@ -4,6 +4,18 @@
 
 Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Financeiro`.
 
+### UIP-2026-06-06-01
+
+- Data: 2026-06-06
+- Padrao: tipografia compacta do rodape paginado de grid
+- Contexto: validacao visual do rodape na tela `PRINCIPAL_FINANCEIRO_BANCOS`, comparando com o padrao aprovado de grid da Escola
+- Alteracao: o `PAT-015.2` passa a registrar o modelo exato do rodape sem faixa azul: linha unica com botoes iconicos, semaforo/status, `Total registros: N` em pill branca baixa, seletor de pagina e navegacao compacta, usando fonte `text-[10px]`, `font-black`, `uppercase` e tracking especifico (`0.12em`/`0.14em`)
+- Componentes/Telas:
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `frontend/src/app/components/grid-standard-footer.tsx`
+  - telas com grid paginado da Escola e do Financeiro
+- Status: aprovado
+
 ### UIP-2026-06-05-01
 
 - Data: 2026-06-05

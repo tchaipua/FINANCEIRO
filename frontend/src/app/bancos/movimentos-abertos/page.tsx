@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson } from '@/app/lib/api';
 import {
@@ -286,6 +287,10 @@ export default function FinanceiroOpenBankMovementsPage() {
   const [lockedBankId, setLockedBankId] = useState('');
   const [search, setSearch] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
+  const [movementPageSize, setMovementPageSize] = useState(10);
+  const [movementPage, setMovementPage] = useState(1);
+  const [movementStatusFilter, setMovementStatusFilter] =
+    useState<GridStatusFilterValue>('ACTIVE');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -323,6 +328,16 @@ export default function FinanceiroOpenBankMovementsPage() {
   const selectedBank = useMemo(
     () => banks.find((item) => item.id === selectedBankId) || null,
     [banks, selectedBankId],
+  );
+  const movementTotalPages = Math.max(1, Math.ceil(movements.length / movementPageSize));
+  const currentMovementPage = Math.min(movementPage, movementTotalPages);
+  const paginatedMovements = useMemo(() => {
+    const startIndex = (currentMovementPage - 1) * movementPageSize;
+    return movements.slice(startIndex, startIndex + movementPageSize);
+  }, [currentMovementPage, movements, movementPageSize]);
+  const totalMovementAmount = useMemo(
+    () => movements.reduce((total, movement) => roundMoney(total + movement.amount), 0),
+    [movements],
   );
   const detailModalAudit = useMemo(() => {
     if (!detailMovement) {
@@ -400,6 +415,10 @@ export default function FinanceiroOpenBankMovementsPage() {
   useEffect(() => {
     void loadPageData();
   }, [loadPageData]);
+
+  useEffect(() => {
+    setMovementPage(1);
+  }, [movements.length, movementPageSize]);
 
   return (
     <div className="space-y-6">
@@ -484,15 +503,6 @@ export default function FinanceiroOpenBankMovementsPage() {
       </section>
 
       <section className={`${cardClass} overflow-hidden`}>
-        <div className="border-b border-slate-100 px-6 py-5">
-          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Grid de movimentos
-          </div>
-          <h2 className="mt-1 text-xl font-black text-slate-900">
-            {isLoading ? 'Carregando...' : `${movements.length} movimento(s) em aberto`}
-          </h2>
-        </div>
-
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
@@ -501,7 +511,6 @@ export default function FinanceiroOpenBankMovementsPage() {
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Histórico</th>
                 <th className="px-4 py-3">Pessoa</th>
-                <th className="px-4 py-3">Banco</th>
                 <th className="px-4 py-3">Forma</th>
                 <th className="px-4 py-3">Valor</th>
                 <th className="px-4 py-3">Parcelas</th>
@@ -510,7 +519,7 @@ export default function FinanceiroOpenBankMovementsPage() {
               </tr>
             </thead>
             <tbody>
-              {movements.map((movement) => (
+              {paginatedMovements.map((movement) => (
                 <tr key={movement.id} className="border-t border-slate-100">
                   <td className="px-4 py-4 font-semibold text-slate-700">
                     {formatDateLabel(movement.occurredAt)}
@@ -528,9 +537,6 @@ export default function FinanceiroOpenBankMovementsPage() {
                   </td>
                   <td className="px-4 py-4 font-semibold text-slate-700">
                     {movement.personName}
-                  </td>
-                  <td className="px-4 py-4 font-semibold text-slate-700">
-                    {movement.bankAccountLabel || selectedBank?.bankName || '---'}
                   </td>
                   <td className="px-4 py-4 font-semibold text-slate-700">
                     {normalizeMethodLabel(movement.paymentMethod)}
@@ -560,7 +566,7 @@ export default function FinanceiroOpenBankMovementsPage() {
 
               {!isLoading && !movements.length ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
                     Nenhum movimento em aberto foi localizado para o banco selecionado.
                   </td>
                 </tr>
@@ -568,6 +574,32 @@ export default function FinanceiroOpenBankMovementsPage() {
             </tbody>
           </table>
         </div>
+
+        <GridStandardFooter
+          statusFilter={movementStatusFilter}
+          totalRecords={movements.length}
+          pageSize={movementPageSize}
+          currentPage={currentMovementPage}
+          totalPages={movementTotalPages}
+          aggregateSummaries={[
+            {
+              label: 'Saldo total',
+              value: formatCurrency(totalMovementAmount),
+            },
+          ]}
+          recordSummaryVariant="pill"
+          recordSummaryLabel="Registros"
+          typographyVariant="school"
+          onColumnSettings={() => undefined}
+          onExport={() => {
+            if (typeof window !== 'undefined') {
+              window.print();
+            }
+          }}
+          onStatusFilterChange={setMovementStatusFilter}
+          onPageSizeChange={setMovementPageSize}
+          onPageChange={setMovementPage}
+        />
       </section>
 
       {detailMovement ? (
@@ -667,20 +699,6 @@ export default function FinanceiroOpenBankMovementsPage() {
           </section>
         </div>
       ) : null}
-
-      <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 px-4 py-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <Link
-            href={`/bancos${preservedQueryString}`}
-            className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            Retornar
-          </Link>
-          <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-            Registros exibidos ({movements.length})
-          </div>
-        </div>
-      </section>
     </div>
   );
 }

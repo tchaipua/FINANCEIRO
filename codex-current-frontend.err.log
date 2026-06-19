@@ -1,0 +1,250 @@
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>
+      <LoadingBoundary name="extrato/" loading={null}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url={"/bancos/..."} tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} ...>
+                <SegmentViewNode type="page" pagePath="bancos/ext...">
+                  <SegmentTrieNode>
+                  <ClientPageRoot Component={function FinanceiroBankStatementPage} serverProvidedParams={{...}}>
+                    <FinanceiroBankStatementPage params={Promise} searchParams={Promise}>
+                      <div className="space-y-6">
+                        <section>
+                        <section className="rounded-3x...">
+                          <form onSubmit={function handlePullStatement} className="grid gap-4...">
+                            <label className="space-y-2">
+                              <span>
++                             <div
++                               className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text..."
++                             >
+-                             <select
+-                               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm fon..."
+-                             >
+                            ...
+                        ...
+                ...
+              ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at FinanceiroBankStatementPage (src/app/bancos/extrato/page.tsx:1509:15)
+  1507 |             </span>
+  1508 |             {lockedBankId ? (
+> 1509 |               <div className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-1...
+       |               ^
+  1510 |                 {selectedBank ? buildBankLabel(selectedBank) : 'BANCO SELECIONADO'}
+  1511 |               </div>
+  1512 |             ) : (
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>
+      <LoadingBoundary name="extrato/" loading={null}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url={"/bancos/..."} tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} ...>
+                <SegmentViewNode type="page" pagePath="bancos/ext...">
+                  <SegmentTrieNode>
+                  <ClientPageRoot Component={function FinanceiroBankStatementPage} serverProvidedParams={{...}}>
+                    <FinanceiroBankStatementPage params={Promise} searchParams={Promise}>
+                      <div className="space-y-6">
+                        <section>
+                        <section className="rounded-3x...">
+                          <form onSubmit={function handlePullStatement} className="grid gap-4...">
+                            <label className="space-y-2">
+                              <span>
++                             <div
++                               className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text..."
++                             >
+-                             <select
+-                               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm fon..."
+-                             >
+                            ...
+                        ...
+                ...
+              ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at FinanceiroBankStatementPage (src/app/bancos/extrato/page.tsx:1512:15)
+  1510 |             </span>
+  1511 |             {lockedBankId ? (
+> 1512 |               <div className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-1...
+       |               ^
+  1513 |                 {selectedBank ? buildBankLabel(selectedBank) : 'BANCO SELECIONADO'}
+  1514 |               </div>
+  1515 |             ) : (
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>
+      <LoadingBoundary name="extrato/" loading={null}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url={"/bancos/..."} tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} ...>
+                <SegmentViewNode type="page" pagePath="bancos/ext...">
+                  <SegmentTrieNode>
+                  <ClientPageRoot Component={function FinanceiroBankStatementPage} serverProvidedParams={{...}}>
+                    <FinanceiroBankStatementPage params={Promise} searchParams={Promise}>
+                      <div className="space-y-6">
+                        <section>
+                        <section className="rounded-3x...">
+                          <form onSubmit={function handlePullStatement} className="grid gap-4...">
+                            <label className="space-y-2">
+                              <span>
++                             <div
++                               className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text..."
++                             >
+-                             <select
+-                               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm fon..."
+-                             >
+                            ...
+                        ...
+                ...
+              ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at FinanceiroBankStatementPage (src/app/bancos/extrato/page.tsx:1529:15)
+  1527 |             </span>
+  1528 |             {lockedBankId ? (
+> 1529 |               <div className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-1...
+       |               ^
+  1530 |                 {selectedBank ? buildBankLabel(selectedBank) : 'BANCO SELECIONADO'}
+  1531 |               </div>
+  1532 |             ) : (
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>
+      <LoadingBoundary name="extrato/" loading={null}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url={"/bancos/..."} tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} ...>
+                <SegmentViewNode type="page" pagePath="bancos/ext...">
+                  <SegmentTrieNode>
+                  <ClientPageRoot Component={function FinanceiroBankStatementPage} serverProvidedParams={{...}}>
+                    <FinanceiroBankStatementPage params={Promise} searchParams={Promise}>
+                      <div className="space-y-6">
+                        <section>
+                        <section className="rounded-3x...">
+                          <form onSubmit={function handlePullStatement} className="grid gap-4...">
+                            <label className="space-y-2">
+                              <span>
++                             <div
++                               className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text..."
++                             >
+-                             <select
+-                               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm fon..."
+-                             >
+                            ...
+                        ...
+                ...
+              ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at FinanceiroBankStatementPage (src/app/bancos/extrato/page.tsx:1529:15)
+  1527 |             </span>
+  1528 |             {lockedBankId ? (
+> 1529 |               <div className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-1...
+       |               ^
+  1530 |                 {selectedBank ? buildBankLabel(selectedBank) : 'BANCO SELECIONADO'}
+  1531 |               </div>
+  1532 |             ) : (
+[browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>
+      <LoadingBoundary name="extrato/" loading={null}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url={"/bancos/..."} tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} ...>
+                <SegmentViewNode type="page" pagePath="bancos/ext...">
+                  <SegmentTrieNode>
+                  <ClientPageRoot Component={function FinanceiroBankStatementPage} serverProvidedParams={{...}}>
+                    <FinanceiroBankStatementPage params={Promise} searchParams={Promise}>
+                      <div className="space-y-6">
+                        <section>
+                        <section className="rounded-3x...">
+                          <form onSubmit={function handlePullStatement} className="grid gap-4...">
+                            <label className="space-y-2">
+                              <span>
++                             <div
++                               className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text..."
++                             >
+-                             <select
+-                               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm fon..."
+-                             >
+                            ...
+                        ...
+                ...
+              ...
+
+    at <unknown> (https://react.dev/link/hydration-mismatch)
+    at div (<anonymous>)
+    at FinanceiroBankStatementPage (src/app/bancos/extrato/page.tsx:1529:15)
+  1527 |             </span>
+  1528 |             {lockedBankId ? (
+> 1529 |               <div className="min-h-[46px] rounded-xl border border-slate-300 bg-slate-1...
+       |               ^
+  1530 |                 {selectedBank ? buildBankLabel(selectedBank) : 'BANCO SELECIONADO'}
+  1531 |               </div>
+  1532 |             ) : (

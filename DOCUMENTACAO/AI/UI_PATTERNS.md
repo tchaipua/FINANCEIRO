@@ -160,6 +160,16 @@ Referencia aprovada:
 - a estrutura aprovada para isso e: card do grid em coluna flexivel, toolbar superior e rodape com `shrink-0`, area de registros com `min-h-0` e `overflow-auto`, e casca hospedeira/iframe sem rolagem vertical externa
 - contar registros sozinho nao caracteriza totalizacao de coluna e nao deve criar faixa azul
 - em grids sem totais agregados, o contador `Total registros: N` deve ficar no rodape, ao lado do semaforo/status e antes dos controles de paginacao
+- modelo e tipografia obrigatorios do rodape paginado sem faixa azul:
+  - estrutura do rodape: linha unica quando houver largura, `border-t`, fundo claro (`bg-slate-50` ou equivalente), `px-4`, `py-3`, grupos com `gap-3` a esquerda e `gap-2` a direita
+  - botao de colunas: iconico, sem texto visivel, `h-10`, `w-10`, `rounded-xl`, borda clara, fundo branco, sombra leve, tooltip/aria-label `ALTERAR COLUNAS GRID`
+  - botao de impressao/exportacao: iconico, sem texto visivel, `h-9` ou `h-10` conforme altura do rodape aprovado, `w-9` ou `w-10`, `rounded-full`, borda clara, fundo branco, sombra leve
+  - semaforo/status: tres chaves compactas na ordem `ATIVOS`, `TODOS/AMBOS`, `INATIVOS`, imediatamente depois da impressao/exportacao
+  - pill `Total registros: N`: `inline-flex`, `h-8`, `items-center`, `rounded-full`, `border-slate-300`, `bg-white`, `px-3`, `text-[10px]`, `font-black`, `uppercase`, `tracking-[0.14em]`, `text-slate-600`, `shadow-sm`
+  - totais auxiliares no rodape, quando aprovados sem faixa azul: mesma pill do contador; valor interno pode usar destaque azul (`text-blue-700`) com `ml-1`
+  - combobox de quantidade por pagina: `h-8`, `rounded-full`, `border-slate-200`, `bg-white`, `px-3`, `text-[10px]`, `font-black`, `uppercase`, `tracking-[0.12em]`, `text-slate-600`; opcoes `10`, `20`, `50`, `100`
+  - botoes de navegacao `<<`, `<`, `>` e `>>`: `h-8`, `min-w-8`, `rounded-full`, `border-slate-200`, `bg-white`, `px-2`, `text-[10px]`, `font-black`, `uppercase`, `tracking-[0.14em]`, `text-slate-600`, com estado disabled em baixa opacidade
+  - indicador `pagina/total`: `min-w-20`, centralizado, `text-[10px]`, `font-black`, `uppercase`, `tracking-[0.14em]`, `text-slate-500`
 - quando o grid tiver totais agregados no final da tabela, a linha final de totais deve ficar no fim do grid, fixa durante a rolagem interna dos registros e alinhada pelas mesmas colunas do grid
 - a linha final de totais aprovada deve usar a mesma cor azul institucional do cabecalho financeiro:
   - fundo `#1d4f91`

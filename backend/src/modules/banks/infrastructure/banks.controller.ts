@@ -6,6 +6,7 @@ import {
   GetBankDto,
   GetBankDdaDto,
   GetBankStatementDto,
+  ImportBankStatementOfxDto,
   ListBanksDto,
   ReconcileBankStatementMovementDto,
   ReviewBankStatementMovementDto,
@@ -65,6 +66,17 @@ export class BanksController {
     @Query() query: GetBankStatementDto,
   ) {
     return this.banksService.getStatement(bankId, query);
+  }
+
+  @Post(":bankId/statement/ofx")
+  @ApiOperation({
+    summary: "Importa arquivo OFX de extrato bancário para a conta informada",
+  })
+  importOfxStatement(
+    @Param("bankId") bankId: string,
+    @Body() payload: ImportBankStatementOfxDto,
+  ) {
+    return this.banksService.importOfxStatement(bankId, payload);
   }
 
   @Post(":bankId/statement/movements/:movementId/reconcile")

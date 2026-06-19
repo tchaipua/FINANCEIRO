@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import GridExportModal from '@/app/components/grid-export-modal';
+import GridStandardFooter from '@/app/components/grid-standard-footer';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
   formatCurrency,
@@ -705,9 +706,12 @@ export default function FinanceiroBankStatementPage() {
   const [statementDebitAmount, setStatementDebitAmount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isPullingStatement, setIsPullingStatement] = useState(false);
+  const [isImportingOfx, setIsImportingOfx] = useState(false);
   const [reconcilingMovementId, setReconcilingMovementId] = useState<string | null>(null);
   const [reviewingMovementId, setReviewingMovementId] = useState<string | null>(null);
   const [bulkReviewStatus, setBulkReviewStatus] = useState<'REVIEWED' | 'NOT_REVIEWED' | null>(null);
+  const [statementPageSize, setStatementPageSize] = useState(10);
+  const [statementPage, setStatementPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [openGridFilter, setOpenGridFilter] = useState<StatementGridFilterKey | null>(null);
@@ -956,6 +960,23 @@ export default function FinanceiroBankStatementPage() {
       })
       .map((item) => item.movement);
   }, [gridFilters, gridSort, selectedBank?.bankName, statementMovements]);
+  const statementTotalPages = Math.max(
+    1,
+    Math.ceil(filteredStatementMovements.length / statementPageSize),
+  );
+  const currentStatementPage = Math.min(statementPage, statementTotalPages);
+  const paginatedStatementMovements = useMemo(
+    () =>
+      filteredStatementMovements.slice(
+        (currentStatementPage - 1) * statementPageSize,
+        currentStatementPage * statementPageSize,
+      ),
+    [currentStatementPage, filteredStatementMovements, statementPageSize],
+  );
+
+  useEffect(() => {
+    setStatementPage(1);
+  }, [filteredStatementMovements.length, statementPageSize]);
 
   const clearStatement = useCallback(() => {
     setStatementMovements([]);
@@ -1115,6 +1136,76 @@ export default function FinanceiroBankStatementPage() {
       );
     } finally {
       setIsPullingStatement(false);
+    }
+  }
+
+  async function handleImportOfxStatement(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setError('Origem financeira não identificada para importar o extrato OFX.');
+      input.value = '';
+      return;
+    }
+
+    if (!selectedBankId) {
+      setError('Selecione o banco para importar o extrato OFX.');
+      input.value = '';
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.ofx')) {
+      setError('Selecione um arquivo no formato OFX.');
+      input.value = '';
+      return;
+    }
+
+    try {
+      setIsImportingOfx(true);
+      setError(null);
+      setStatusMessage(null);
+
+      const ofxContent = await file.text();
+      const statement = await requestJson<BankStatementResponse>(
+        `/banks/${selectedBankId}/statement/ofx`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            sourceBranchCode: runtimeContext.sourceBranchCode,
+            requestedBy:
+              runtimeContext.cashierDisplayName ||
+              runtimeContext.cashierUserId ||
+              'SISTEMA',
+            cashierUserId: runtimeContext.cashierUserId || undefined,
+            cashierDisplayName: runtimeContext.cashierDisplayName || undefined,
+            periodStart,
+            periodEnd,
+            fileName: file.name,
+            ofxContent,
+          }),
+          fallbackMessage: 'Não foi possível importar o extrato OFX.',
+        },
+      );
+
+      applyStatementResponse(statement, true);
+    } catch (currentError) {
+      clearStatement();
+      setError(
+        getFriendlyRequestErrorMessage(
+          currentError,
+          'Não foi possível importar o extrato OFX.',
+        ),
+      );
+    } finally {
+      setIsImportingOfx(false);
+      input.value = '';
     }
   }
 
@@ -1429,7 +1520,7 @@ export default function FinanceiroBankStatementPage() {
       ) : null}
 
       <section className={`${cardClass} p-6`}>
-        <form onSubmit={handlePullStatement} className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr_auto]">
+        <form onSubmit={handlePullStatement} className="grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr_auto_auto]">
           <label className="space-y-2">
             <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
               Banco
@@ -1480,11 +1571,28 @@ export default function FinanceiroBankStatementPage() {
 
           <button
             type="submit"
-            disabled={isPullingStatement}
+            disabled={isPullingStatement || isImportingOfx}
             className="mt-auto rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPullingStatement ? 'Puxando...' : 'Puxar extrato'}
           </button>
+          <label
+            aria-disabled={isPullingStatement || isImportingOfx}
+            className={`mt-auto inline-flex cursor-pointer items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-emerald-700 shadow-sm transition hover:bg-emerald-100 ${
+              isPullingStatement || isImportingOfx
+                ? 'pointer-events-none cursor-not-allowed opacity-70'
+                : ''
+            }`}
+          >
+            {isImportingOfx ? 'Importando...' : 'Importar OFX'}
+            <input
+              type="file"
+              accept=".ofx,application/x-ofx,text/plain"
+              className="hidden"
+              disabled={isPullingStatement || isImportingOfx}
+              onChange={handleImportOfxStatement}
+            />
+          </label>
         </form>
       </section>
 
@@ -1979,7 +2087,7 @@ export default function FinanceiroBankStatementPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredStatementMovements.map((item) => {
+              {paginatedStatementMovements.map((item) => {
                 const isDebit = normalizeMovementType(item.movementType) === 'DEBIT';
                 const statusLabel = item.status || 'PENDENTE';
                 const isPendingStatus = ['PENDENTE', 'PENDING'].includes(
@@ -2112,56 +2220,23 @@ export default function FinanceiroBankStatementPage() {
             </tbody>
           </table>
         </div>
-      </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 px-4 py-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href={`/bancos${preservedQueryString}`}
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              Retornar
-            </Link>
-            <button
-              type="button"
-              onClick={() => setIsColumnConfigOpen(true)}
-              title="ALTERAR COLUNAS GRID"
-              aria-label="ALTERAR COLUNAS GRID"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <rect x="4" y="5" width="16" height="14" rx="2" strokeWidth={2} />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5v14M15 5v14" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsExportModalOpen(true)}
-              aria-label="Imprimir"
-              title="Imprimir"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 9V4h12v5" />
-                <path d="M6 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1" />
-                <path d="M6 14h12v6H6z" />
-                <path d="M17 12h.01" />
-              </svg>
-            </button>
-          </div>
-          <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-            Registros exibidos ({filteredStatementMovements.length})
-          </div>
-        </div>
+        <GridStandardFooter
+          statusFilter="ALL"
+          totalRecords={filteredStatementMovements.length}
+          pageSize={statementPageSize}
+          currentPage={currentStatementPage}
+          totalPages={statementTotalPages}
+          showStatusFilter={false}
+          recordSummaryVariant="pill"
+          recordSummaryLabel="Registros"
+          typographyVariant="school"
+          onColumnSettings={() => setIsColumnConfigOpen(true)}
+          onExport={() => setIsExportModalOpen(true)}
+          onStatusFilterChange={() => undefined}
+          onPageSizeChange={setStatementPageSize}
+          onPageChange={setStatementPage}
+        />
       </section>
 
       <StatementGridConfigModal

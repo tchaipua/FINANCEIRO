@@ -110,6 +110,15 @@ export class GetBankStatementDto {
   periodEnd!: string;
 }
 
+export class ImportBankStatementOfxDto extends GetBankStatementDto {
+  @IsString()
+  ofxContent!: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+}
+
 export class ReconcileBankStatementMovementDto {
   @IsString()
   sourceSystem!: string;
