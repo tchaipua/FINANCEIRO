@@ -369,3 +369,17 @@ Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Fina
   - `DOCUMENTACAO/AI/UI_PATTERNS.md`
   - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
 - Status: aprovado
+
+### UIP-0027
+
+- Data: 2026-06-23
+- Padrao: grid ocupando toda a area util da tela
+- Contexto: na tela `PRINCIPAL_PROFESSORES` da Escola, foi aprovado que telas com grid nao devem deixar faixa vazia abaixo do rodape do grid; o card/listagem deve ocupar toda a altura disponivel da area principal.
+- Alteracao: o `PAT-015.2` passa a registrar que telas com grid devem ocupar toda a area util disponivel, do fim do cabecalho ate o limite inferior visivel, usando ajuste de altura/flex da casca do grid sem redesenhar layout aprovado.
+- Componentes/Telas:
+  - `C:/Sistemas/IA/Escola/frontend/src/app/principal/professores/page.tsx`
+  - `C:/Sistemas/IA/Escola/DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `C:/Sistemas/IA/Escola/DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado

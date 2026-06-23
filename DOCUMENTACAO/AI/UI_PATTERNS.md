@@ -134,6 +134,10 @@ Referencia aprovada:
   - `PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS`
   - `PRINCIPAL_FINANCEIRO_RETORNOS`
   - `PRINCIPAL_FINANCEIRO_PARCELAS`
+  - `PRINCIPAL_PROFESSORES`
+- telas com grid devem ocupar toda a area util disponivel da tela, do fim do cabecalho ate o limite inferior visivel da area principal, sem deixar faixa vazia abaixo do rodape do grid
+- quando houver sobra vertical, a correcao deve ajustar somente a altura/flex da casca do grid, preservando layout, textos, cores, espacos internos, botoes e comportamento ja aprovados
+- a implementacao recomendada e usar casca em coluna flexivel com altura calculada do viewport, `min-h-0`, card do grid com `flex-1`, toolbar/rodape com `shrink-0` e area de registros com `overflow-auto`
 - a barra de rolagem vertical deve ficar dentro do grid; a pagina/tela externa nao deve ganhar uma segunda rolagem para percorrer os registros
 - a rolagem deve mover apenas os registros do corpo da tabela
 - o cabecalho das colunas deve permanecer fixo no topo do grid durante a rolagem dos registros
