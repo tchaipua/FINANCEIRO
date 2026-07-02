@@ -8,46 +8,51 @@ datasource db {
 }
 
 model Company {
-  id                     String                  @id @default(uuid())
-  sourceSystem           String
-  sourceTenantId         String
-  name                   String
-  document               String?
-  status                 String                  @default("ACTIVE")
-  interestRate           Float?
-  interestGracePeriod    Int?
-  penaltyRate            Float?
-  penaltyValue           Float?
-  penaltyGracePeriod     Int?
-  createdAt              DateTime                @default(now())
-  createdBy              String?
-  updatedAt              DateTime                @updatedAt
-  updatedBy              String?
-  canceledAt             DateTime?
-  canceledBy             String?
-  bankAccounts           BankAccount[]
-  fiscalCertificates     FiscalCertificate[]
-  products               Product[]
-  suppliers              Supplier[]
-  parties                Party[]
-  payableInvoiceImports  PayableInvoiceImport[]
-  payableTitles          PayableTitle[]
-  payableInstallments    PayableInstallment[]
-  stockMovements         StockMovement[]
-  productStockBalances   ProductStockBalance[]
-  receivableBatches      ReceivableBatch[]
-  receivableTitles       ReceivableTitle[]
-  receivableInstallments ReceivableInstallment[]
-  bankReturnImports      BankReturnImport[]
-  bankReturnImportItems  BankReturnImportItem[]
-  bankStatementImports   BankStatementImport[]
-  bankStatementMovements BankStatementMovement[]
-  cashSessions           CashSession[]
-  cashMovements          CashMovement[]
-  settlements            InstallmentSettlement[]
+  id                      String                   @id @default(uuid())
+  sourceSystem            String
+  sourceTenantId          String
+  name                    String
+  document                String?
+  status                  String                   @default("ACTIVE")
+  interestRate            Float?
+  interestGracePeriod     Int?
+  penaltyRate             Float?
+  penaltyValue            Float?
+  penaltyGracePeriod      Int?
+  createdAt               DateTime                 @default(now())
+  createdBy               String?
+  updatedAt               DateTime                 @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
+  bankAccounts            BankAccount[]
+  fiscalCertificates      FiscalCertificate[]
+  products                Product[]
+  suppliers               Supplier[]
+  parties                 Party[]
+  payableInvoiceImports   PayableInvoiceImport[]
+  payableTitles           PayableTitle[]
+  payableInstallments     PayableInstallment[]
+  stockMovements          StockMovement[]
+  productStockBalances    ProductStockBalance[]
+  receivableBatches       ReceivableBatch[]
+  receivableTitles        ReceivableTitle[]
+  receivableInstallments  ReceivableInstallment[]
+  bankReturnImports       BankReturnImport[]
+  bankReturnImportItems   BankReturnImportItem[]
+  bankStatementImports    BankStatementImport[]
+  bankStatementMovements  BankStatementMovement[]
+  cashSessions            CashSession[]
+  cashMovements           CashMovement[]
+  settlements             InstallmentSettlement[]
   customerCredits         CustomerCredit[]
   customerCreditMovements CustomerCreditMovement[]
-  branches               CompanyBranch[]
+  branches                CompanyBranch[]
+  sales                   Sale[]
+  saleReturns             SaleReturn[]
+  saleItems               SaleItem[]
+  saleReturnItems         SaleReturnItem[]
+  salePayments            SalePayment[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
@@ -69,6 +74,8 @@ model CompanyBranch {
   stockExpirationControlMode String    @default("BY_PRODUCT")
   stockGridControlMode       String    @default("BY_PRODUCT")
   stockNegativeControlMode   String    @default("BY_PRODUCT")
+  allowSaleUnitPriceEdit     Boolean   @default(true)
+  allowSaleItemDiscount      Boolean   @default(true)
   createdAt                  DateTime  @default(now())
   createdBy                  String?
   updatedAt                  DateTime  @updatedAt
@@ -118,6 +125,8 @@ model Product {
   payableInvoiceImportItems PayableInvoiceImportItem[]
   stockMovements            StockMovement[]
   stockBalances             ProductStockBalance[]
+  saleItems                 SaleItem[]
+  saleReturnItems           SaleReturnItem[]
 
   @@unique([companyId, branchCode, internalCode])
   @@unique([companyId, branchCode, sku])
@@ -271,43 +280,43 @@ model PayableInvoiceImport {
 }
 
 model PayableInvoiceImportItem {
-  id                           String    @id @default(uuid())
-  invoiceImportId              String
-  productId                    String?
-  lineNumber                   Int
-  approvalAction               String?
-  supplierItemCode             String?
-  barcode                      String?
-  description                  String
-  ncmCode                      String?
-  cfopCode                     String?
-  unitCode                     String?
-  quantity                     Float     @default(0)
-  unitPrice                    Float     @default(0)
-  totalPrice                   Float     @default(0)
-  tracksInventory              Boolean   @default(true)
-  draftProductName             String?
-  draftInternalCode            String?
-  draftSku                     String?
-  draftBarcode                 String?
-  draftUnitCode                String?
-  draftProductType             String?
-  draftTracksInventory         Boolean?
-  draftAllowFraction           Boolean?
-  draftUsesLotControl          Boolean?
-  draftUsesExpirationControl   Boolean?
-  draftUsesColorSize           Boolean?
-  draftAllowsNegativeStock     Boolean?
-  draftMinimumStock            Float?
-  draftNotes                   String?
-  productCheckedAt             DateTime?
-  productCheckedBy             String?
-  createdAt                    DateTime  @default(now())
-  createdBy                    String?
-  updatedAt                    DateTime  @updatedAt
-  updatedBy                    String?
-  canceledAt                   DateTime?
-  canceledBy                   String?
+  id                         String    @id @default(uuid())
+  invoiceImportId            String
+  productId                  String?
+  lineNumber                 Int
+  approvalAction             String?
+  supplierItemCode           String?
+  barcode                    String?
+  description                String
+  ncmCode                    String?
+  cfopCode                   String?
+  unitCode                   String?
+  quantity                   Float     @default(0)
+  unitPrice                  Float     @default(0)
+  totalPrice                 Float     @default(0)
+  tracksInventory            Boolean   @default(true)
+  draftProductName           String?
+  draftInternalCode          String?
+  draftSku                   String?
+  draftBarcode               String?
+  draftUnitCode              String?
+  draftProductType           String?
+  draftTracksInventory       Boolean?
+  draftAllowFraction         Boolean?
+  draftUsesLotControl        Boolean?
+  draftUsesExpirationControl Boolean?
+  draftUsesColorSize         Boolean?
+  draftAllowsNegativeStock   Boolean?
+  draftMinimumStock          Float?
+  draftNotes                 String?
+  productCheckedAt           DateTime?
+  productCheckedBy           String?
+  createdAt                  DateTime  @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
 
   invoiceImport  PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
   product        Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -420,8 +429,11 @@ model StockMovement {
   companyId          String
   branchCode         Int       @default(1)
   productId          String
-  sourceImportId     String
-  sourceImportItemId String
+  sourceImportId     String?
+  sourceImportItemId String?
+  sourceType         String    @default("PAYABLE_IMPORT")
+  sourceId           String?
+  sourceItemId       String?
   movementType       String
   quantity           Float     @default(0)
   previousStock      Float     @default(0)
@@ -436,15 +448,218 @@ model StockMovement {
   canceledAt         DateTime?
   canceledBy         String?
 
-  company          Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  product          Product                  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  sourceImport     PayableInvoiceImport     @relation(fields: [sourceImportId], references: [id], onDelete: Restrict)
-  sourceImportItem PayableInvoiceImportItem @relation(fields: [sourceImportItemId], references: [id], onDelete: Restrict)
+  company          Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product          Product                   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceImport     PayableInvoiceImport?     @relation(fields: [sourceImportId], references: [id], onDelete: Restrict)
+  sourceImportItem PayableInvoiceImportItem? @relation(fields: [sourceImportItemId], references: [id], onDelete: Restrict)
 
   @@index([companyId, occurredAt])
   @@index([productId, occurredAt])
   @@index([sourceImportId])
+  @@index([companyId, sourceType, sourceId])
   @@map("stock_movements")
+}
+
+model Sale {
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  sourceSystem             String
+  sourceTenantId           String
+  saleNumber               String
+  saleChannel              String    @default("GENERAL")
+  status                   String    @default("CONFIRMED")
+  customerPartyId          String?
+  customerNameSnapshot     String
+  customerDocumentSnapshot String?
+  sourceEntityType         String?
+  sourceEntityId           String?
+  sourceEntityName         String?
+  subtotalAmount           Float     @default(0)
+  discountAmount           Float     @default(0)
+  totalAmount              Float     @default(0)
+  paidAmount               Float     @default(0)
+  receivableAmount         Float     @default(0)
+  paymentSummary           String?
+  receivableBatchId        String?
+  receivableTitleId        String?
+  notes                    String?
+  confirmedAt              DateTime  @default(now())
+  createdAt                DateTime  @default(now())
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt
+  updatedBy                String?
+  canceledAt               DateTime?
+  canceledBy               String?
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerParty   Party?           @relation(fields: [customerPartyId], references: [id], onDelete: SetNull)
+  receivableTitle ReceivableTitle? @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  items           SaleItem[]
+  payments        SalePayment[]
+  returns         SaleReturn[]
+
+  @@unique([companyId, branchCode, saleNumber])
+  @@index([companyId, branchCode, status, confirmedAt])
+  @@index([companyId, saleChannel, confirmedAt])
+  @@index([companyId, customerPartyId])
+  @@index([receivableTitleId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  saleId                String
+  productId             String
+  lineNumber            Int
+  productNameSnapshot   String
+  productCodeSnapshot   String?
+  unitCodeSnapshot      String
+  quantity              Float
+  unitCost              Float?
+  unitPrice             Float
+  discountAmount        Float     @default(0)
+  totalAmount           Float
+  tracksInventory       Boolean   @default(false)
+  allowFraction         Boolean   @default(false)
+  usesColorSize         Boolean   @default(false)
+  usesLotControl        Boolean   @default(false)
+  usesExpirationControl Boolean   @default(false)
+  allowsNegativeStock   Boolean   @default(false)
+  variantKey            String    @default("GERAL")
+  colorCode             String?
+  colorName             String?
+  sizeCode              String?
+  lotNumber             String?
+  lotExpirationDate     DateTime?
+  previousStock         Float?
+  resultingStock        Float?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  returnItems SaleReturnItem[]
+
+  @@unique([saleId, lineNumber])
+  @@index([companyId, productId, createdAt])
+  @@index([saleId])
+  @@map("sale_items")
+}
+
+model SalePayment {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  saleId                  String
+  paymentMethod           String
+  amount                  Float
+  dueDate                 DateTime?
+  installmentCount        Int?
+  cardInstallmentCount    Int?
+  cashSessionId           String?
+  bankAccountId           String?
+  bankAccountLabel        String?
+  receivableInstallmentId String?
+  status                  String    @default("REGISTERED")
+  notes                   String?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale        Sale         @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, paymentMethod, createdAt])
+  @@index([saleId])
+  @@index([cashSessionId])
+  @@map("sale_payments")
+}
+
+model SaleReturn {
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  saleId                   String
+  returnNumber             String
+  status                   String    @default("CONFIRMED")
+  customerPartyId          String?
+  customerNameSnapshot     String
+  customerDocumentSnapshot String?
+  totalAmount              Float     @default(0)
+  creditId                 String?
+  reason                   String
+  confirmedAt              DateTime  @default(now())
+  createdAt                DateTime  @default(now())
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt
+  updatedBy                String?
+  canceledAt               DateTime?
+  canceledBy               String?
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale    Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  credit  CustomerCredit?  @relation(fields: [creditId], references: [id], onDelete: SetNull)
+  items   SaleReturnItem[]
+
+  @@unique([companyId, branchCode, returnNumber])
+  @@index([companyId, saleId, confirmedAt])
+  @@index([companyId, customerPartyId])
+  @@index([creditId])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  returnId              String
+  saleId                String
+  saleItemId            String
+  productId             String
+  lineNumber            Int
+  productNameSnapshot   String
+  productCodeSnapshot   String?
+  unitCodeSnapshot      String
+  quantity              Float
+  unitPrice             Float
+  totalAmount           Float
+  tracksInventory       Boolean   @default(false)
+  variantKey            String    @default("GERAL")
+  colorCode             String?
+  colorName             String?
+  sizeCode              String?
+  lotNumber             String?
+  lotExpirationDate     DateTime?
+  previousStock         Float?
+  resultingStock        Float?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Restrict)
+  saleItem   SaleItem   @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, productId, createdAt])
+  @@index([returnId])
+  @@index([saleItemId])
+  @@map("sale_return_items")
 }
 
 model BankAccount {
@@ -529,6 +744,7 @@ model Party {
 
   company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   receivableTitles ReceivableTitle[]
+  sales            Sale[]
 
   @@unique([companyId, branchCode, externalEntityType, externalEntityId])
   @@index([companyId, name])
@@ -598,6 +814,7 @@ model ReceivableTitle {
   batch        ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
   payerParty   Party?                  @relation(fields: [payerPartyId], references: [id], onDelete: SetNull)
   installments ReceivableInstallment[]
+  sales        Sale[]
 
   @@unique([companyId, branchCode, businessKey])
   @@index([companyId, sourceEntityType, sourceEntityId])
@@ -699,9 +916,10 @@ model CashSession {
   canceledAt            DateTime?
   canceledBy            String?
 
-  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  movements   CashMovement[]
-  settlements InstallmentSettlement[]
+  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  movements    CashMovement[]
+  settlements  InstallmentSettlement[]
+  salePayments SalePayment[]
 
   @@index([companyId, cashierUserId, status])
   @@index([companyId, openedAt])
@@ -800,6 +1018,7 @@ model CustomerCredit {
 
   company   Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
   movements CustomerCreditMovement[]
+  saleReturns SaleReturn[]
 
   @@index([companyId, status, customerName])
   @@index([companyId, customerDocument])

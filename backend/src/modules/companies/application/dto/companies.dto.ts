@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -173,4 +174,12 @@ export class SaveCompanyBranchDto {
   @IsString()
   @IsIn(["NO", "YES", "BY_PRODUCT"])
   stockNegativeControlMode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  allowSaleUnitPriceEdit?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowSaleItemDiscount?: boolean;
 }

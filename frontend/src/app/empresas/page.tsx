@@ -51,6 +51,8 @@ type CompanyBranchItem = {
   isDefault: boolean;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+  allowSaleUnitPriceEdit?: boolean;
+  allowSaleItemDiscount?: boolean;
 };
 
 type CompanyBranchFormState = {
@@ -59,6 +61,8 @@ type CompanyBranchFormState = {
   name: string;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+  allowSaleUnitPriceEdit: boolean;
+  allowSaleItemDiscount: boolean;
 };
 
 type CompanyGridColumnKey =
@@ -203,6 +207,8 @@ const emptyBranchForm: CompanyBranchFormState = {
   name: '',
   inventoryControlType: 'TRADITIONAL',
   quantityPrecision: 'INTEGER_ONLY',
+  allowSaleUnitPriceEdit: true,
+  allowSaleItemDiscount: true,
 };
 
 function buildBranchForm(branch: CompanyBranchItem): CompanyBranchFormState {
@@ -212,6 +218,8 @@ function buildBranchForm(branch: CompanyBranchItem): CompanyBranchFormState {
     name: branch.name,
     inventoryControlType: branch.inventoryControlType || 'TRADITIONAL',
     quantityPrecision: branch.quantityPrecision || 'INTEGER_ONLY',
+    allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
+    allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
   };
 }
 
@@ -771,7 +779,7 @@ function CompanyBranchSettingsModal({
   onClose: () => void;
   onEdit: (branch: CompanyBranchItem) => void;
   onNew: () => void;
-  onChange: (field: keyof CompanyBranchFormState, value: string) => void;
+  onChange: (field: keyof CompanyBranchFormState, value: string | boolean) => void;
   onSave: () => void;
 }) {
   if (!isOpen || !company) {
@@ -788,7 +796,7 @@ function CompanyBranchSettingsModal({
             </div>
             <h2 className="mt-1 text-2xl font-black text-slate-900">{company.name}</h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
-              Configure como cada filial controla estoque, grade, lote e casas decimais.
+              Configure como cada filial controla estoque, grade, lote e regras comerciais.
             </p>
           </div>
           <button
@@ -844,7 +852,10 @@ function CompanyBranchSettingsModal({
                   </div>
                   <div className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     {getInventoryControlTypeLabel(branch.inventoryControlType)} ·{' '}
-                    {getQuantityPrecisionLabel(branch.quantityPrecision)}
+                    {getQuantityPrecisionLabel(branch.quantityPrecision)} · PREÇO{' '}
+                    {branch.allowSaleUnitPriceEdit === false ? 'BLOQUEADO' : 'EDITÁVEL'} ·
+                    DESCONTO{' '}
+                    {branch.allowSaleItemDiscount === false ? 'BLOQUEADO' : 'LIBERADO'}
                   </div>
                 </button>
               ))}
@@ -908,6 +919,38 @@ function CompanyBranchSettingsModal({
                   <option value="INTEGER_ONLY">SOMENTE NÚMERO INTEIRO</option>
                   <option value="DECIMAL_ALLOWED">ACEITA QUANTIDADE DECIMAL</option>
                   <option value="PRODUCT_DEFINED">AMBOS, DEFINIR NO PRODUTO</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Preço na venda
+                </span>
+                <select
+                  value={form.allowSaleUnitPriceEdit ? 'YES' : 'NO'}
+                  onChange={(event) =>
+                    onChange('allowSaleUnitPriceEdit', event.target.value === 'YES')
+                  }
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                >
+                  <option value="YES">PERMITE ALTERAR O PREÇO</option>
+                  <option value="NO">BLOQUEIA PREÇO DO PRODUTO</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  Desconto por produto
+                </span>
+                <select
+                  value={form.allowSaleItemDiscount ? 'YES' : 'NO'}
+                  onChange={(event) =>
+                    onChange('allowSaleItemDiscount', event.target.value === 'YES')
+                  }
+                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                >
+                  <option value="YES">PERMITE INFORMAR DESCONTO</option>
+                  <option value="NO">NÃO EXIBE DESCONTO NO GRID</option>
                 </select>
               </label>
             </div>
@@ -1295,6 +1338,8 @@ export default function FinanceiroEmpresasPage() {
         name: branchForm.name || undefined,
         inventoryControlType: branchForm.inventoryControlType,
         quantityPrecision: branchForm.quantityPrecision,
+        allowSaleUnitPriceEdit: branchForm.allowSaleUnitPriceEdit,
+        allowSaleItemDiscount: branchForm.allowSaleItemDiscount,
       };
 
       const endpoint = branchForm.id

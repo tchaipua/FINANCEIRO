@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CashSessionsService } from "../application/cash-sessions.service";
 import {
+  CancelCashMovementDto,
   CloseCurrentCashSessionDto,
   CreateCustomerCreditDto,
   CreateCashMovementDto,
@@ -86,6 +87,17 @@ export class CashSessionsController {
   })
   createMovement(@Body() payload: CreateCashMovementDto) {
     return this.cashSessionsService.createMovement(payload);
+  }
+
+  @Post("cash-sessions/movements/:movementId/cancel")
+  @ApiOperation({
+    summary: "Cancela ou estorna um movimento do caixa",
+  })
+  cancelMovement(
+    @Param("movementId") movementId: string,
+    @Body() payload: CancelCashMovementDto,
+  ) {
+    return this.cashSessionsService.cancelMovement(movementId, payload);
   }
 
   @Get("receivables/settlements")

@@ -24,19 +24,28 @@ export type FinanceRuntimeContext = {
   permissions: string[];
 };
 
+export function normalizeFinanceDisplayText(value: string | null | undefined) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  if (!/[\u00c2\u00c3\u0080-\u009f]/.test(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(
+      Uint8Array.from(Array.from(trimmed).map((character) => character.charCodeAt(0) & 255)),
+    );
+  } catch {
+    return trimmed;
+  }
+}
+
 function normalizeQueryValue(value: string | null, uppercase = true) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return null;
 
-  const normalized = /[ÃÂâ]/.test(trimmed)
-    ? (() => {
-        try {
-          return decodeURIComponent(escape(trimmed));
-        } catch {
-          return trimmed;
-        }
-      })()
-    : trimmed;
+  const normalized = normalizeFinanceDisplayText(trimmed) || trimmed;
 
   return uppercase ? normalized.toUpperCase() : normalized;
 }

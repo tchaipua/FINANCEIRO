@@ -10,6 +10,7 @@ import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/format
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
+  normalizeFinanceDisplayText,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 
@@ -56,6 +57,28 @@ type CashMovementModalState = {
   title: string;
   amountInput: string;
   notes: string;
+  feedback?: {
+    type: 'success' | 'error';
+    message: string;
+  } | null;
+};
+
+type CancelMovementModalState = {
+  movement: CashSessionDetail['movements'][number];
+  password: string;
+  reason: string;
+  feedback?: {
+    type: 'success' | 'error';
+    message: string;
+  } | null;
+};
+
+type CloseCashSessionModalState = {
+  password: string;
+  feedback?: {
+    type: 'success' | 'error';
+    message: string;
+  } | null;
 };
 
 type MovementFilter = {
@@ -66,6 +89,8 @@ type MovementFilter = {
 
 const SCREEN_ID = 'FINANCEIRO_CAIXA_DETALHE';
 const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CAIXA_DETALHE';
+const CANCEL_MOVEMENT_POPUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_CAIXA_DETALHE_CANCELAMENTO';
+const CLOSE_CASH_SESSION_POPUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_CAIXA_DETALHE_FECHAR_CAIXA';
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const SCREEN_ORIGIN_TEXT =
   'Origem: Sistema Financeiro - C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\caixa\\[sessionId]\\page.tsx';
@@ -125,15 +150,17 @@ RELACIONAMENTOS:
 MÉTRICAS / CAMPOS EXIBIDOS:
 - Troco inicial: cash_sessions.openingAmount
 - Valor movimentado:
-  openingAmount
-  + recebimento dinheiro
+  recebimento dinheiro
   + recebimento cheque
+  + crédito cliente recebido
   + venda dinheiro
   + venda cheque
+  + créditos gerados/retidos
+  - créditos utilizados
   + entrada dinheiro
   - saída dinheiro
   +/- ajustes caixa
-- Troco final: cálculo local de fechamento previsto
+- Troco final: cash_sessions.expectedClosingAmount
 - Recebimentos por forma: cash_movements.paymentMethod
 - Movimentos: cash_movements.description, direction, amount, occurredAt
 
@@ -234,6 +261,18 @@ function getDirectionLabel(direction?: string | null) {
   return 'INFORMATIVO';
 }
 
+function isOutgoingMovement(direction?: string | null) {
+  return String(direction || '').trim().toUpperCase() === 'OUT';
+}
+
+function getMovementAmountTone(direction?: string | null) {
+  return isOutgoingMovement(direction) ? 'text-rose-700' : 'text-emerald-700';
+}
+
+function getMovementAmountSign(direction?: string | null) {
+  return isOutgoingMovement(direction) ? '-' : '+';
+}
+
 function parseCurrencyInput(value: string) {
   const normalized = String(value || '')
     .replace(/\s+/g, '')
@@ -247,6 +286,113 @@ function parseCurrencyInput(value: string) {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
+function canCancelMovement(
+  movement: CashSessionDetail['movements'][number],
+  canceledMovementIds?: Set<string>,
+) {
+  if (movement.referenceType === 'CASH_MOVEMENT_CANCEL') return false;
+  if (canceledMovementIds?.has(movement.id)) return false;
+  if (movement.referenceType === 'SALE' && movement.referenceId) return true;
+  if (movement.movementType === 'SETTLEMENT' && movement.referenceType === 'INSTALLMENT') return true;
+  return ['ENTRY', 'EXIT', 'ADJUSTMENT', 'CUSTOMER_CREDIT_GENERATED'].includes(
+    String(movement.movementType || ''),
+  );
+}
+
+function getCancelMovementTitle(movement: CashSessionDetail['movements'][number]) {
+  if (movement.referenceType === 'SALE') return 'Cancelar venda';
+  if (movement.movementType === 'SETTLEMENT') return 'Cancelar recebimento';
+  return 'Cancelar movimento';
+}
+
+function getFriendlyCancellationPasswordMessage(message?: string | null) {
+  const normalizedMessage = String(message || '').trim();
+  if (
+    !normalizedMessage ||
+    normalizedMessage.includes('Cannot POST') ||
+    normalizedMessage.includes('/auth/confirm-cash-cancellation-password') ||
+    normalizedMessage.includes('confirm-cash-cancellation-password')
+  ) {
+    return 'Confira a senha do operador ou supervisor.';
+  }
+
+  return normalizedMessage;
+}
+
+function confirmCashCancellationPassword(password: string) {
+  return new Promise<{ authorizedBy?: string; supervisorName?: string | null }>((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.parent) {
+      reject(new Error('Abra esta tela pelo sistema da Escola para validar a senha.'));
+      return;
+    }
+
+    const requestId = `cancel-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', handleMessage);
+      reject(new Error('Tempo esgotado para validação da senha.'));
+    }, 20000);
+
+    function handleMessage(event: MessageEvent) {
+      const payload = event.data as {
+        type?: string;
+        requestId?: string;
+        ok?: boolean;
+        message?: string;
+        authorizedBy?: string;
+        supervisorName?: string | null;
+      } | null;
+
+      if (
+        payload?.type !== 'MSINFOR_CONFIRM_CASH_CANCELLATION_PASSWORD_RESULT' ||
+        payload.requestId !== requestId
+      ) {
+        return;
+      }
+
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', handleMessage);
+
+      if (!payload.ok) {
+        reject(new Error(getFriendlyCancellationPasswordMessage(payload.message)));
+        return;
+      }
+
+      resolve({
+        authorizedBy: payload.authorizedBy,
+        supervisorName: payload.supervisorName || null,
+      });
+    }
+
+    window.addEventListener('message', handleMessage);
+    window.parent.postMessage(
+      {
+        type: 'MSINFOR_CONFIRM_CASH_CANCELLATION_PASSWORD',
+        requestId,
+        password,
+      },
+      '*',
+    );
+  });
+}
+
+function requestHostLogoutAfterCashClose() {
+  if (typeof window === 'undefined' || !window.parent) return;
+
+  window.parent.postMessage(
+    {
+      type: 'MSINFOR_CASH_SESSION_CLOSED_LOGOUT',
+    },
+    '*',
+  );
+}
+
+function wasCloseCashSessionOpenedFromGrid() {
+  return (
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('openCloseCashSession') === '1'
+  );
+}
+
 export default function FinanceiroCashDetailPage() {
   const params = useParams<{ sessionId: string }>();
   const runtimeContext = useFinanceRuntimeContext();
@@ -256,10 +402,22 @@ export default function FinanceiroCashDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingCashMovement, setIsSavingCashMovement] = useState(false);
   const [cashMovementModal, setCashMovementModal] = useState<CashMovementModalState | null>(null);
+  const [cancelMovementModal, setCancelMovementModal] = useState<CancelMovementModalState | null>(null);
+  const [closeCashSessionModal, setCloseCashSessionModal] = useState<CloseCashSessionModalState | null>(null);
+  const [isCancelingMovement, setIsCancelingMovement] = useState(false);
+  const [isClosingCashSession, setIsClosingCashSession] = useState(false);
   const [movementFilter, setMovementFilter] = useState<MovementFilter | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditCopyStatus, setAuditCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [autoCloseCashSessionPopupOpened, setAutoCloseCashSessionPopupOpened] = useState(false);
+  const cashierDisplayName = useMemo(
+    () =>
+      normalizeFinanceDisplayText(session?.cashierDisplayName) ||
+      normalizeFinanceDisplayText(runtimeContext.cashierDisplayName) ||
+      null,
+    [runtimeContext.cashierDisplayName, session?.cashierDisplayName],
+  );
 
   const loadSession = useCallback(async () => {
     if (!sessionId || !runtimeContext.sourceTenantId) {
@@ -292,6 +450,34 @@ export default function FinanceiroCashDetailPage() {
   useEffect(() => {
     void loadSession();
   }, [loadSession]);
+
+  useEffect(() => {
+    if (
+      autoCloseCashSessionPopupOpened ||
+      isLoading ||
+      !wasCloseCashSessionOpenedFromGrid() ||
+      session?.status !== 'OPEN'
+    ) {
+      return;
+    }
+
+    setAutoCloseCashSessionPopupOpened(true);
+    setCloseCashSessionModal({
+      password: '',
+      feedback: null,
+    });
+  }, [autoCloseCashSessionPopupOpened, isLoading, session?.status]);
+
+  function handleCancelCloseCashSessionModal() {
+    if (isClosingCashSession) return;
+
+    if (wasCloseCashSessionOpenedFromGrid()) {
+      window.location.href = `/caixa${preservedQueryString}`;
+      return;
+    }
+
+    setCloseCashSessionModal(null);
+  }
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') {
@@ -419,35 +605,38 @@ export default function FinanceiroCashDetailPage() {
   }, [session]);
 
   const saleCards = useMemo(() => {
+    const movements = session?.movements || [];
     return [
-      { label: 'Dinheiro', value: 0, count: 0, paymentMethod: 'CASH' },
-      { label: 'PIX', value: 0, count: 0, paymentMethod: 'PIX' },
-      { label: 'Cartão Crédito', value: 0, count: 0, paymentMethod: 'CREDIT_CARD' },
-      { label: 'Cartão Débito', value: 0, count: 0, paymentMethod: 'DEBIT_CARD' },
-      { label: 'Cheque', value: 0, count: 0, paymentMethod: 'CHECK' },
-    ];
-  }, []);
+      { label: 'Dinheiro', paymentMethod: 'CASH' },
+      { label: 'PIX', paymentMethod: 'PIX' },
+      { label: 'Cartão Crédito', paymentMethod: 'CREDIT_CARD' },
+      { label: 'Cartão Débito', paymentMethod: 'DEBIT_CARD' },
+      { label: 'Cheque', paymentMethod: 'CHECK' },
+    ].map((item) => {
+      const saleMovements = movements.filter(
+        (movement) =>
+          movement.movementType === 'SALE_RECEIPT' &&
+          movement.paymentMethod === item.paymentMethod,
+      );
+
+      return {
+        ...item,
+        value: saleMovements.reduce((total, movement) => total + Number(movement.amount || 0), 0),
+        count: saleMovements.length,
+      };
+    });
+  }, [session?.movements]);
 
   const totalSaleAmount = useMemo(() => {
     return saleCards.reduce((total, item) => total + Number(item.value || 0), 0);
   }, [saleCards]);
 
-  const saleCashAmount = useMemo(() => {
-    return saleCards.find((item) => item.paymentMethod === 'CASH')?.value || 0;
-  }, [saleCards]);
-
-  const saleCheckAmount = useMemo(() => {
-    return saleCards.find((item) => item.paymentMethod === 'CHECK')?.value || 0;
-  }, [saleCards]);
-
   const movedAmount = useMemo(() => {
     return (
-      Number(session?.openingAmount || 0) +
       cashSummary.cashReceivedAmount +
       cashSummary.checkReceivedAmount +
       cashSummary.customerCreditSettlementAmount +
-      saleCashAmount +
-      saleCheckAmount +
+      totalSaleAmount +
       cashSummary.customerCreditGeneratedAmount -
       cashSummary.customerCreditUsedAmount +
       cashSummary.cashEntryAmount -
@@ -463,9 +652,7 @@ export default function FinanceiroCashDetailPage() {
     cashSummary.customerCreditGeneratedAmount,
     cashSummary.customerCreditSettlementAmount,
     cashSummary.customerCreditUsedAmount,
-    saleCashAmount,
-    saleCheckAmount,
-    session?.openingAmount,
+    totalSaleAmount,
   ]);
 
   const allMovementCount = useMemo(() => {
@@ -545,6 +732,15 @@ export default function FinanceiroCashDetailPage() {
     return movements.filter(movementFilter.predicate);
   }, [movementFilter, session]);
 
+  const canceledMovementIds = useMemo(() => {
+    return new Set(
+      (session?.movements || [])
+        .filter((movement) => movement.referenceType === 'CASH_MOVEMENT_CANCEL')
+        .map((movement) => String(movement.referenceId || ''))
+        .filter(Boolean),
+    );
+  }, [session?.movements]);
+
   const auditInfoText = useMemo(() => {
     return buildAuditInfoText({
       sessionId,
@@ -620,6 +816,7 @@ export default function FinanceiroCashDetailPage() {
       title,
       amountInput: '',
       notes: '',
+      feedback: null,
     });
   }
 
@@ -635,23 +832,27 @@ export default function FinanceiroCashDetailPage() {
     try {
       setIsSavingCashMovement(true);
       setError(null);
-      setSession(
-        await requestJson<CashSessionDetail>('/cash-sessions/current/movements', {
-          method: 'POST',
-          body: JSON.stringify({
-            sourceSystem: runtimeContext.sourceSystem,
-            sourceTenantId: runtimeContext.sourceTenantId,
-            cashierUserId: session.cashierUserId || runtimeContext.cashierUserId,
-            cashierDisplayName: session.cashierDisplayName || runtimeContext.cashierDisplayName,
-            movementType: cashMovementModal.movementType,
-            direction: cashMovementModal.direction,
-            amount: parsedAmount,
-            notes: cashMovementModal.notes.trim() || undefined,
-          }),
-          fallbackMessage: 'Não foi possível lançar o movimento no caixa.',
+      const updatedSession = await requestJson<CashSessionDetail>('/cash-sessions/current/movements', {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceSystem: runtimeContext.sourceSystem,
+          sourceTenantId: runtimeContext.sourceTenantId,
+          cashierUserId: session.cashierUserId || runtimeContext.cashierUserId,
+          movementType: cashMovementModal.movementType,
+          direction: cashMovementModal.direction,
+          amount: parsedAmount,
+          notes: cashMovementModal.notes.trim() || undefined,
         }),
-      );
-      setCashMovementModal(null);
+        fallbackMessage: 'Não foi possível lançar o movimento no caixa.',
+      });
+      setSession(updatedSession);
+      setCashMovementModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'success',
+          message: `${current.title} lançado com sucesso.`,
+        },
+      } : current);
     } catch (currentError) {
       setError(
         getFriendlyRequestErrorMessage(
@@ -661,6 +862,209 @@ export default function FinanceiroCashDetailPage() {
       );
     } finally {
       setIsSavingCashMovement(false);
+    }
+  }
+
+  function handleOpenCancelMovementModal(movement: CashSessionDetail['movements'][number]) {
+    if (!canCancelMovement(movement, canceledMovementIds)) {
+      setError('Este movimento não possui cancelamento disponível nesta tela.');
+      return;
+    }
+
+    setCancelMovementModal({
+      movement,
+      password: '',
+      reason: '',
+      feedback: null,
+    });
+  }
+
+  function handleOpenCloseCashSessionModal() {
+    if (session?.status !== 'OPEN') {
+      setError('Este caixa não está aberto para fechamento.');
+      return;
+    }
+
+    setCloseCashSessionModal({
+      password: '',
+      feedback: null,
+    });
+  }
+
+  async function handleConfirmCloseCashSession() {
+    if (!session || !closeCashSessionModal || isClosingCashSession) return;
+
+    const password = closeCashSessionModal.password.trim();
+    if (!password) {
+      setCloseCashSessionModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: 'Informe a senha do usuário do caixa.',
+        },
+      } : current);
+      return;
+    }
+
+    if (!runtimeContext.embedded) {
+      setCloseCashSessionModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: 'Abra esta tela pelo sistema da Escola para validar a senha.',
+        },
+      } : current);
+      return;
+    }
+
+    try {
+      setIsClosingCashSession(true);
+      setError(null);
+      const authorization = await confirmCashCancellationPassword(password);
+      const requestedBy =
+        authorization.supervisorName ||
+        cashierDisplayName ||
+        session.cashierDisplayName ||
+        runtimeContext.cashierDisplayName ||
+        runtimeContext.cashierUserId ||
+        'OPERADOR';
+
+      await requestJson<CashSessionDetail>('/cash-sessions/close-current', {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceSystem: runtimeContext.sourceSystem,
+          sourceTenantId: runtimeContext.sourceTenantId,
+          cashierUserId: session.cashierUserId || runtimeContext.cashierUserId,
+          declaredClosingAmount: session.expectedClosingAmount,
+          requestedBy,
+          notes: 'FECHAMENTO DE CAIXA PELO DETALHE DO CAIXA',
+        }),
+        fallbackMessage: 'Não foi possível fechar o caixa.',
+      });
+
+      setCloseCashSessionModal((current) => current ? {
+        ...current,
+        password: '',
+        feedback: {
+          type: 'success',
+          message: 'Caixa fechado com sucesso. Você será direcionado para o login.',
+        },
+      } : current);
+      window.setTimeout(() => requestHostLogoutAfterCashClose(), 900);
+    } catch (currentError) {
+      setCloseCashSessionModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: getFriendlyCancellationPasswordMessage(
+            getFriendlyRequestErrorMessage(
+              currentError,
+              'Não foi possível fechar o caixa.',
+            ),
+          ),
+        },
+      } : current);
+    } finally {
+      setIsClosingCashSession(false);
+    }
+  }
+
+  async function handleConfirmCancelMovement() {
+    if (!cancelMovementModal || isCancelingMovement) return;
+
+    const password = cancelMovementModal.password.trim();
+    if (!password) {
+      setCancelMovementModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: 'Informe a senha do operador ou supervisor.',
+        },
+      } : current);
+      return;
+    }
+
+    if (!runtimeContext.embedded) {
+      setCancelMovementModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: 'Abra esta tela pelo sistema da Escola para validar a senha.',
+        },
+      } : current);
+      return;
+    }
+
+    try {
+      setIsCancelingMovement(true);
+      setError(null);
+      const authorization = await confirmCashCancellationPassword(password);
+      const requestedBy =
+        authorization.supervisorName ||
+        cashierDisplayName ||
+        runtimeContext.cashierDisplayName ||
+        runtimeContext.cashierUserId ||
+        'OPERADOR';
+      const reason =
+        cancelMovementModal.reason.trim() ||
+        `${getCancelMovementTitle(cancelMovementModal.movement)} autorizado por ${
+          authorization.authorizedBy || 'OPERADOR'
+        }`;
+
+      if (
+        cancelMovementModal.movement.referenceType === 'SALE' &&
+        cancelMovementModal.movement.referenceId
+      ) {
+        await requestJson(`/sales/${cancelMovementModal.movement.referenceId}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            cashierUserId: session?.cashierUserId || runtimeContext.cashierUserId,
+            requestedBy,
+            reason,
+          }),
+          fallbackMessage: 'Não foi possível cancelar a venda.',
+        });
+      } else {
+        await requestJson(`/cash-sessions/movements/${cancelMovementModal.movement.id}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            cashierUserId: session?.cashierUserId || runtimeContext.cashierUserId,
+            cashierDisplayName: cashierDisplayName || session?.cashierDisplayName || runtimeContext.cashierDisplayName,
+            requestedBy,
+            reason,
+          }),
+          fallbackMessage: 'Não foi possível cancelar o movimento.',
+        });
+      }
+
+      setCancelMovementModal((current) => current ? {
+        ...current,
+        password: '',
+        feedback: {
+          type: 'success',
+          message: 'Cancelamento registrado com sucesso.',
+        },
+      } : current);
+      await loadSession();
+    } catch (currentError) {
+      setCancelMovementModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: getFriendlyCancellationPasswordMessage(
+            getFriendlyRequestErrorMessage(
+              currentError,
+              'Não foi possível cancelar o movimento.',
+            ),
+          ),
+        },
+      } : current);
+    } finally {
+      setIsCancelingMovement(false);
     }
   }
 
@@ -747,7 +1151,7 @@ export default function FinanceiroCashDetailPage() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Operador</div>
             <div className="mt-2 text-base font-black text-slate-900">
-              {isLoading ? 'Carregando...' : session?.cashierDisplayName || '---'}
+              {isLoading ? 'Carregando...' : cashierDisplayName || '---'}
             </div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -789,7 +1193,7 @@ export default function FinanceiroCashDetailPage() {
         <div className={`${cardClass} p-6`}>
           <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Troco final</div>
           <div className="mt-3 text-2xl font-black text-slate-900">
-            {formatCurrency(cashSummary.finalChangeAmount)}
+            {formatCurrency(session?.expectedClosingAmount)}
           </div>
         </div>
       </section>
@@ -833,8 +1237,8 @@ export default function FinanceiroCashDetailPage() {
             type="button"
             onClick={() => handleSetMovementFilter({
               label: 'Vendas',
-              sqlWhere: `cm."movementType" = ${toSqlLiteral('SALE')}`,
-              predicate: () => false,
+              sqlWhere: `cm."movementType" = ${toSqlLiteral('SALE_RECEIPT')}`,
+              predicate: (movement) => movement.movementType === 'SALE_RECEIPT',
             })}
             className={getGroupFilterClass(movementFilter?.label === 'Vendas')}
           >
@@ -850,8 +1254,10 @@ export default function FinanceiroCashDetailPage() {
               type="button"
               onClick={() => handleSetMovementFilter({
                 label: `Vendas ${item.label}`,
-                sqlWhere: `cm."movementType" = ${toSqlLiteral('SALE')} AND cm."paymentMethod" = ${toSqlLiteral(item.paymentMethod)}`,
-                predicate: () => false,
+                sqlWhere: `cm."movementType" = ${toSqlLiteral('SALE_RECEIPT')} AND cm."paymentMethod" = ${toSqlLiteral(item.paymentMethod)}`,
+                predicate: (movement) =>
+                  movement.movementType === 'SALE_RECEIPT' &&
+                  movement.paymentMethod === item.paymentMethod,
               })}
               className={getFilterCardClass(movementFilter?.label === `Vendas ${item.label}`)}
             >
@@ -898,27 +1304,36 @@ export default function FinanceiroCashDetailPage() {
         </div>
 
         {session?.status === 'OPEN' ? (
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleOpenCashMovementModal('ENTRY', 'IN', 'Entrada dinheiro')}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700"
+              >
+                Entrada $
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenCashMovementModal('EXIT', 'OUT', 'Saída dinheiro')}
+                className="rounded-lg bg-rose-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm shadow-rose-600/15 transition hover:bg-rose-700"
+              >
+                Saída $
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenCashMovementModal('ADJUSTMENT', 'IN', 'Ajuste caixa')}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition hover:bg-slate-100"
+              >
+                Ajuste caixa
+              </button>
+            </div>
             <button
               type="button"
-              onClick={() => handleOpenCashMovementModal('ENTRY', 'IN', 'Entrada dinheiro')}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm shadow-emerald-600/15 transition hover:bg-emerald-700"
+              onClick={handleOpenCloseCashSessionModal}
+              className="ml-auto rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm shadow-blue-900/20 transition hover:bg-blue-800"
             >
-              Entrada $
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOpenCashMovementModal('EXIT', 'OUT', 'Saída dinheiro')}
-              className="rounded-lg bg-rose-600 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white shadow-sm shadow-rose-600/15 transition hover:bg-rose-700"
-            >
-              Saída $
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOpenCashMovementModal('ADJUSTMENT', 'IN', 'Ajuste caixa')}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition hover:bg-slate-100"
-            >
-              Ajuste caixa
+              Fechar caixa
             </button>
           </div>
         ) : null}
@@ -945,14 +1360,20 @@ export default function FinanceiroCashDetailPage() {
               <tr>
                 <th className="px-4 py-3">Data</th>
                 <th className="px-4 py-3">Descrição</th>
-                <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Forma</th>
                 <th className="px-4 py-3">Valor</th>
+                <th className="px-4 py-3 text-right">Cancelamento</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMovements.map((movement) => (
-                <tr key={movement.id} className="border-t border-slate-100">
+              {filteredMovements.map((movement, index) => {
+                const rowTone =
+                  index % 2 === 0
+                    ? 'bg-blue-50/80 hover:bg-blue-100/80'
+                    : 'bg-slate-100/80 hover:bg-slate-200/80';
+
+                return (
+                <tr key={movement.id} className={`border-t border-white transition ${rowTone}`}>
                   <td className="px-4 py-4 font-semibold text-slate-700">
                     {formatDateTimeLabel(movement.occurredAt)}
                   </td>
@@ -969,11 +1390,36 @@ export default function FinanceiroCashDetailPage() {
                       {movement.description}
                     </button>
                   </td>
-                  <td className="px-4 py-4">{getDirectionLabel(movement.direction)}</td>
                   <td className="px-4 py-4">{getPaymentMethodLabel(movement.paymentMethod)}</td>
-                  <td className="px-4 py-4 font-black text-slate-900">{formatCurrency(movement.amount)}</td>
+                  <td className={`px-4 py-4 font-black ${getMovementAmountTone(movement.direction)}`}>
+                    <span className="inline-flex items-center gap-2">
+                      <span>{formatCurrency(movement.amount)}</span>
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-black ${
+                        isOutgoingMovement(movement.direction)
+                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                          : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                      }`}>
+                        {getMovementAmountSign(movement.direction)}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    {canCancelMovement(movement, canceledMovementIds) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCancelMovementModal(movement)}
+                        className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-rose-700 transition hover:bg-rose-100"
+                        title={getCancelMovementTitle(movement)}
+                      >
+                        Cancelar
+                      </button>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-300">---</span>
+                    )}
+                  </td>
                 </tr>
-              ))}
+                );
+              })}
 
               {!isLoading && !filteredMovements.length ? (
                 <tr>
@@ -989,17 +1435,31 @@ export default function FinanceiroCashDetailPage() {
 
       {cashMovementModal ? (
         <div className="fixed inset-0 z-[92] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.4)]">
-            <div className="border-b border-slate-100 bg-slate-50 px-6 py-5">
+          <div className="relative w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.4)]">
+            <div className="border-b border-blue-100 bg-blue-700 px-6 py-5 text-white">
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-[11px] font-black uppercase tracking-[0.24em] text-blue-600">Movimento do caixa</div>
-                  <h3 className="mt-1 text-xl font-black text-slate-900">{cashMovementModal.title}</h3>
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white">
+                    {runtimeContext.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={runtimeContext.logoUrl}
+                        alt="Logotipo"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-slate-900">MS</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">Movimento do caixa</div>
+                    <h3 className="mt-1 truncate text-xl font-black text-white">{cashMovementModal.title}</h3>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => !isSavingCashMovement && setCashMovementModal(null)}
-                  className="rounded-full bg-white px-3 py-2 text-sm font-black text-slate-500 shadow-sm hover:text-slate-900"
+                  className="rounded-full bg-white/15 px-3 py-2 text-sm font-black text-white shadow-sm hover:bg-white/25"
                 >
                   ×
                 </button>
@@ -1029,6 +1489,7 @@ export default function FinanceiroCashDetailPage() {
                   inputMode="decimal"
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
                   placeholder="0,00"
+                  autoFocus
                 />
               </label>
 
@@ -1063,6 +1524,429 @@ export default function FinanceiroCashDetailPage() {
                 </button>
               </div>
             </div>
+
+            {cashMovementModal.feedback ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/45 p-5 backdrop-blur-sm">
+                <div className="w-full max-w-sm overflow-hidden rounded-[28px] border border-emerald-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.38)]">
+                  <div className="bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white shadow-md">
+                        {runtimeContext.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={runtimeContext.logoUrl}
+                            alt="Logotipo"
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-sm font-black text-slate-900">MS</span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-100">
+                          Sucesso
+                        </div>
+                        <div className="mt-1 text-xl font-black">
+                          Movimento lançado
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-5 py-5">
+                    <p className="text-sm font-bold leading-6 text-slate-700">
+                      {cashMovementModal.feedback.message}
+                    </p>
+                    <div className="mt-5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setCashMovementModal(null)}
+                        className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {cancelMovementModal ? (
+        <div className="fixed inset-0 z-[93] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.4)]">
+            <div className="border-b border-slate-100 bg-slate-950 px-6 py-5 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white">
+                    {runtimeContext.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={runtimeContext.logoUrl}
+                        alt="Logotipo"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-slate-900">MS</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
+                      Cancelamento financeiro
+                    </div>
+                    <h3 className="mt-1 text-xl font-black">
+                      {getCancelMovementTitle(cancelMovementModal.movement)}
+                    </h3>
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-300">
+                      {cancelMovementModal.movement.description}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !isCancelingMovement && setCancelMovementModal(null)}
+                  className="rounded-full bg-white/10 px-3 py-2 text-sm font-black text-white hover:bg-white/20"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 px-6 py-6">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Valor</div>
+                <div className={`mt-1 text-2xl font-black ${getMovementAmountTone(cancelMovementModal.movement.direction)}`}>
+                  {formatCurrency(cancelMovementModal.movement.amount)}
+                </div>
+              </div>
+
+              <label>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Senha do operador ou supervisor
+                </span>
+                <input
+                  type="password"
+                  value={cancelMovementModal.password}
+                  onChange={(event) => setCancelMovementModal((current) => current ? { ...current, password: event.target.value, feedback: null } : current)}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Motivo
+                </span>
+                <textarea
+                  value={cancelMovementModal.reason}
+                  onChange={(event) => setCancelMovementModal((current) => current ? { ...current, reason: event.target.value, feedback: null } : current)}
+                  className="min-h-24 w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
+                  placeholder="MOTIVO DO CANCELAMENTO"
+                />
+              </label>
+            </div>
+
+            <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <div className="flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancelMovementModal(null)}
+                  disabled={isCancelingMovement}
+                  className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmCancelMovement()}
+                  disabled={isCancelingMovement}
+                  className="rounded-2xl bg-rose-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-rose-600/25 transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {isCancelingMovement ? 'Cancelando...' : 'Confirmar cancelamento'}
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-center gap-2 border-t border-slate-200 pt-3 text-center text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">
+                <span className="min-w-0 truncate">
+                  Tela: {CANCEL_MOVEMENT_POPUP_SCREEN_ID}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTextToClipboard(CANCEL_MOVEMENT_POPUP_SCREEN_ID);
+                    setCancelMovementModal((current) => current ? {
+                      ...current,
+                      feedback: {
+                        type: 'success',
+                        message: 'Nome da tela copiado.',
+                      },
+                    } : current);
+                  }}
+                  className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100"
+                  title="Copiar nome da tela"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+
+            {cancelMovementModal.feedback ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/40 p-5 backdrop-blur-sm">
+                <div className={`w-full max-w-sm overflow-hidden rounded-[26px] border bg-white shadow-[0_24px_70px_rgba(15,23,42,0.35)] ${
+                  cancelMovementModal.feedback.type === 'success'
+                    ? 'border-emerald-200'
+                    : 'border-rose-200'
+                }`}>
+                  <div className={`px-5 py-4 text-white ${
+                    cancelMovementModal.feedback.type === 'success'
+                      ? 'bg-emerald-600'
+                      : 'bg-rose-600'
+                  }`}>
+                    {cancelMovementModal.feedback.type === 'success' ? (
+                      <>
+                        <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-80">
+                          Sucesso
+                        </div>
+                        <div className="mt-1 text-lg font-black">
+                          Operação confirmada
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white">
+                          {runtimeContext.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={runtimeContext.logoUrl}
+                              alt="Logotipo"
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-xs font-black text-slate-900">MS</span>
+                          )}
+                        </div>
+                        <div className="text-lg font-black uppercase tracking-[0.08em]">
+                          SENHA INVÁLIDA !!!
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-5 py-5">
+                    <p className="text-sm font-bold leading-6 text-slate-700">
+                      {cancelMovementModal.feedback.message}
+                    </p>
+                    <div className="mt-5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (cancelMovementModal.feedback?.type === 'success') {
+                            setCancelMovementModal(null);
+                            return;
+                          }
+
+                          setCancelMovementModal((current) => current ? { ...current, feedback: null } : current);
+                        }}
+                        className={`rounded-2xl px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg ${
+                          cancelMovementModal.feedback.type === 'success'
+                            ? 'bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700'
+                            : 'bg-rose-600 shadow-rose-600/20 hover:bg-rose-700'
+                        }`}
+                      >
+                        OK
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {closeCashSessionModal ? (
+        <div className="fixed inset-0 z-[94] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.4)]">
+            <div className="border-b border-blue-100 bg-blue-700 px-6 py-5 text-white">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white">
+                    {runtimeContext.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={runtimeContext.logoUrl}
+                        alt="Logotipo"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-slate-900">MS</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
+                      Fechamento financeiro
+                    </div>
+                    <h3 className="mt-1 text-xl font-black">Fechar caixa</h3>
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-300">
+                      {cashierDisplayName || 'OPERADOR DO CAIXA'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelCloseCashSessionModal}
+                  className="rounded-full bg-white/15 px-3 py-2 text-sm font-black text-white hover:bg-white/25"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 px-6 py-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Troco final</div>
+                  <div className="mt-1 text-2xl font-black text-slate-900">
+                    {formatCurrency(session?.expectedClosingAmount)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Status</div>
+                  <div className="mt-1 text-2xl font-black text-emerald-700">ABERTO</div>
+                </div>
+              </div>
+
+              <label>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Senha do usuário do caixa
+                </span>
+                <input
+                  type="password"
+                  value={closeCashSessionModal.password}
+                  onChange={(event) => setCloseCashSessionModal((current) => current ? { ...current, password: event.target.value, feedback: null } : current)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void handleConfirmCloseCashSession();
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
+                  autoFocus
+                />
+              </label>
+            </div>
+
+            <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <div className="flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCancelCloseCashSessionModal}
+                  disabled={isClosingCashSession}
+                  className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmCloseCashSession()}
+                  disabled={isClosingCashSession}
+                  className="rounded-2xl bg-blue-700 px-6 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-900/25 transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {isClosingCashSession ? 'Fechando...' : 'Confirmar fechamento'}
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-center gap-2 border-t border-slate-200 pt-3 text-center text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">
+                <span className="min-w-0 truncate">
+                  Tela: {CLOSE_CASH_SESSION_POPUP_SCREEN_ID}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTextToClipboard(CLOSE_CASH_SESSION_POPUP_SCREEN_ID);
+                    setCloseCashSessionModal((current) => current ? {
+                      ...current,
+                      feedback: {
+                        type: 'success',
+                        message: 'Nome da tela copiado.',
+                      },
+                    } : current);
+                  }}
+                  className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100"
+                  title="Copiar nome da tela"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+
+            {closeCashSessionModal.feedback ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/40 p-5 backdrop-blur-sm">
+                <div className={`w-full max-w-sm overflow-hidden rounded-[26px] border bg-white shadow-[0_24px_70px_rgba(15,23,42,0.35)] ${
+                  closeCashSessionModal.feedback.type === 'success'
+                    ? 'border-emerald-200'
+                    : 'border-rose-200'
+                }`}>
+                  <div className={`px-5 py-4 text-white ${
+                    closeCashSessionModal.feedback.type === 'success'
+                      ? 'bg-emerald-600'
+                      : 'bg-rose-600'
+                  }`}>
+                    {closeCashSessionModal.feedback.type === 'success' ? (
+                      <>
+                        <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-80">
+                          Sucesso
+                        </div>
+                        <div className="mt-1 text-lg font-black">
+                          Caixa fechado
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white">
+                          {runtimeContext.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={runtimeContext.logoUrl}
+                              alt="Logotipo"
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-xs font-black text-slate-900">MS</span>
+                          )}
+                        </div>
+                        <div className="text-lg font-black uppercase tracking-[0.08em]">
+                          ATENÇÃO !!!
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-5 py-5">
+                    <p className="text-sm font-bold leading-6 text-slate-700">
+                      {closeCashSessionModal.feedback.message}
+                    </p>
+                    <div className="mt-5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (closeCashSessionModal.feedback?.type === 'success') {
+                            requestHostLogoutAfterCashClose();
+                            return;
+                          }
+
+                          setCloseCashSessionModal((current) => current ? { ...current, feedback: null } : current);
+                        }}
+                        className={`rounded-2xl px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg ${
+                          closeCashSessionModal.feedback.type === 'success'
+                            ? 'bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700'
+                            : 'bg-rose-600 shadow-rose-600/20 hover:bg-rose-700'
+                        }`}
+                      >
+                        OK
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

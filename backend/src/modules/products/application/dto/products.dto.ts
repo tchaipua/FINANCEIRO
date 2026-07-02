@@ -40,6 +40,12 @@ export class ListProductsDto {
   sourceTenantId!: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsOptional()
   @IsString()
   status?: string;
 

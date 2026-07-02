@@ -44,6 +44,12 @@ type BranchInventoryConfig = {
   quantityPrecision: string;
 };
 
+const PRODUCT_CODE_LABELS = {
+  internalCode: "código interno",
+  sku: "SKU",
+  barcode: "código de barras",
+} as const;
+
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -63,6 +69,20 @@ export class ProductsService {
 
   private normalizeBoolean(value: boolean | undefined, fallback: boolean) {
     return typeof value === "boolean" ? value : fallback;
+  }
+
+  private normalizeInternalCode(value?: string | null) {
+    const trimmed = String(value || "").trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    if (!/^\d+$/.test(trimmed)) {
+      throw new BadRequestException("O código interno deve conter somente números.");
+    }
+
+    return trimmed;
   }
 
   private currentBranchCode() {
@@ -227,7 +247,7 @@ export class ProductsService {
 
     return {
       name: normalizedName,
-      internalCode: normalizeText(payload.internalCode),
+      internalCode: this.normalizeInternalCode(payload.internalCode),
       sku: normalizeText(payload.sku),
       barcode: normalizeDigits(payload.barcode) || normalizeText(payload.barcode),
       unitCode: normalizeText(payload.unitCode) || "UN",
@@ -353,6 +373,7 @@ export class ProductsService {
     const sourceImport = movement.sourceImport;
     const product = movement.product;
     const movementType = normalizeText(movement.movementType) || "MOVEMENT";
+    const sourceType = normalizeText(movement.sourceType);
 
     return {
       id: movement.id,
@@ -372,9 +393,18 @@ export class ProductsService {
         movement.unitCost === null || movement.unitCost === undefined
           ? null
           : roundMoney(movement.unitCost),
-      sourceType: sourceImport ? "NF-E" : "SISTEMA",
+      sourceType:
+        sourceType === "SALE"
+          ? "VENDA"
+          : sourceType === "SALE_CANCEL"
+          ? "CANCELAMENTO DE VENDA"
+          : sourceImport
+          ? "NF-E"
+          : "SISTEMA",
       sourceDocument:
-        sourceImport?.invoiceNumber
+        sourceType === "SALE" || sourceType === "SALE_CANCEL"
+          ? `VENDA ${movement.sourceId || ""}`.trim()
+          : sourceImport?.invoiceNumber
           ? `NF-E ${sourceImport.invoiceNumber}${sourceImport.series ? `/${sourceImport.series}` : ""}`
           : null,
       sourceAccessKey: sourceImport?.accessKey || null,
@@ -477,23 +507,44 @@ export class ProductsService {
     payload: NormalizedProductPayload,
     excludedProductId?: string,
   ) {
-    const duplicateFilters: Array<
-      | { internalCode: string }
-      | { sku: string }
-      | { barcode: string }
-    > = [];
+    const codeEntries = [
+      {
+        field: "internalCode" as const,
+        label: PRODUCT_CODE_LABELS.internalCode,
+        value: payload.internalCode,
+      },
+      {
+        field: "sku" as const,
+        label: PRODUCT_CODE_LABELS.sku,
+        value: payload.sku,
+      },
+      {
+        field: "barcode" as const,
+        label: PRODUCT_CODE_LABELS.barcode,
+        value: payload.barcode,
+      },
+    ].filter((entry): entry is typeof entry & { value: string } =>
+      Boolean(entry.value),
+    );
+    const usedValues = new Map<string, string>();
 
-    if (payload.internalCode) {
-      duplicateFilters.push({ internalCode: payload.internalCode });
+    for (const entry of codeEntries) {
+      const usedFieldLabel = usedValues.get(entry.value);
+
+      if (usedFieldLabel) {
+        throw new BadRequestException(
+          `O valor ${entry.value} não pode ser usado em ${entry.label} porque já foi informado em ${usedFieldLabel}.`,
+        );
+      }
+
+      usedValues.set(entry.value, entry.label);
     }
 
-    if (payload.sku) {
-      duplicateFilters.push({ sku: payload.sku });
-    }
-
-    if (payload.barcode) {
-      duplicateFilters.push({ barcode: payload.barcode });
-    }
+    const duplicateFilters = Array.from(usedValues.keys()).flatMap((value) => [
+      { internalCode: value },
+      { sku: value },
+      { barcode: value },
+    ]);
 
     if (!duplicateFilters.length) {
       return;
@@ -517,23 +568,37 @@ export class ProductsService {
       return;
     }
 
-    const duplicateField =
-      payload.internalCode &&
-      duplicatedProduct.internalCode === payload.internalCode
-        ? "código interno"
-        : payload.sku && duplicatedProduct.sku === payload.sku
-          ? "SKU"
-          : "código de barras";
+    const existingCodes = [
+      {
+        label: PRODUCT_CODE_LABELS.internalCode,
+        value: duplicatedProduct.internalCode,
+      },
+      {
+        label: PRODUCT_CODE_LABELS.sku,
+        value: duplicatedProduct.sku,
+      },
+      {
+        label: PRODUCT_CODE_LABELS.barcode,
+        value: duplicatedProduct.barcode,
+      },
+    ];
+    const duplicateInput = codeEntries.find((input) =>
+      existingCodes.some((existing) => existing.value === input.value),
+    );
+    const duplicateExisting = existingCodes.find(
+      (existing) => existing.value === duplicateInput?.value,
+    );
+    const duplicateMessage = duplicateInput
+      ? `O valor ${duplicateInput.value} informado em ${duplicateInput.label} já está usado como ${duplicateExisting?.label || "código"} em outro produto.`
+      : "Já existe um produto com o mesmo código.";
 
     if (duplicatedProduct.status === "INACTIVE") {
       throw new BadRequestException(
-        `Já existe um produto inativo com o mesmo ${duplicateField}. Reative o cadastro existente.`,
+        `${duplicateMessage} Reative o cadastro inativo existente.`,
       );
     }
 
-    throw new BadRequestException(
-      `Já existe um produto com o mesmo ${duplicateField}.`,
-    );
+    throw new BadRequestException(duplicateMessage);
   }
 
   async list(query: ListProductsDto) {
@@ -689,6 +754,9 @@ export class ProductsService {
                     },
                   },
                 },
+                { sourceType: { contains: normalizedSearch } },
+                { sourceId: { contains: normalizedSearch } },
+                { sourceItemId: { contains: normalizedSearch } },
               ],
             }
           : {}),

@@ -8,6 +8,7 @@ import { BanksModule } from "./modules/banks/banks.module";
 import { ProductsModule } from "./modules/products/products.module";
 import { PayablesModule } from "./modules/payables/payables.module";
 import { FiscalCertificatesModule } from "./modules/fiscal-certificates/fiscal-certificates.module";
+import { SalesModule } from "./modules/sales/sales.module";
 import { FinanceContextMiddleware } from "./common/finance-context.middleware";
 
 @Module({
@@ -21,6 +22,7 @@ import { FinanceContextMiddleware } from "./common/finance-context.middleware";
     ProductsModule,
     PayablesModule,
     FiscalCertificatesModule,
+    SalesModule,
   ],
 })
 export class AppModule implements NestModule {

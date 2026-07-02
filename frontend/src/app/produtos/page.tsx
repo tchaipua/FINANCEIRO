@@ -1589,8 +1589,12 @@ export default function FinanceiroProdutosPage() {
                       <input
                         value={formState.internalCode}
                         onChange={(event) =>
-                          setFormState((current) => ({ ...current, internalCode: event.target.value }))
+                          setFormState((current) => ({
+                            ...current,
+                            internalCode: event.target.value.replace(/\D+/g, ''),
+                          }))
                         }
+                        inputMode="numeric"
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
                       />
                     </label>

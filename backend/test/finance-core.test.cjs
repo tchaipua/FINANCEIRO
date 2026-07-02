@@ -28,10 +28,19 @@ const {
   CompaniesService,
 } = require("../dist/modules/companies/application/companies.service.js");
 const {
+  ProductsService,
+} = require("../dist/modules/products/application/products.service.js");
+const {
+  SalesService,
+} = require("../dist/modules/sales/application/sales.service.js");
+const {
   evaluateBankReturnForInstallment,
 } = require("../dist/modules/receivables/application/bank-return.utils.js");
 
 async function resetDatabase(prisma) {
+  await prisma.salePayment.deleteMany();
+  await prisma.saleItem.deleteMany();
+  await prisma.sale.deleteMany();
   await prisma.stockMovement.deleteMany();
   await prisma.payableInstallment.deleteMany();
   await prisma.payableTitle.deleteMany();
@@ -48,6 +57,8 @@ async function resetDatabase(prisma) {
   await prisma.bankReturnImport.deleteMany();
   await prisma.installmentSettlement.deleteMany();
   await prisma.cashMovement.deleteMany();
+  await prisma.customerCreditMovement.deleteMany();
+  await prisma.customerCredit.deleteMany();
   await prisma.receivableInstallment.deleteMany();
   await prisma.receivableTitle.deleteMany();
   await prisma.receivableBatch.deleteMany();
@@ -105,6 +116,8 @@ async function main() {
     const cashSessionsService = new CashSessionsService(prisma);
     const banksService = new BanksService(prisma);
     const companiesService = new CompaniesService(prisma);
+    const productsService = new ProductsService(prisma);
+    const salesService = new SalesService(prisma);
 
     const createdBank = await banksService.create({
       requestedBy: "CODEX",
@@ -533,6 +546,7 @@ async function main() {
         cashierUserId: "USR_CAIXA_001",
         cashierDisplayName: "CAIXA TESTE",
         paymentMethod: "PIX",
+        bankAccountId: boletoBank.id,
         receivedAt: "2026-05-10T10:00:00.000Z",
         notes: "RECEBIMENTO PIX",
       },
@@ -555,6 +569,289 @@ async function main() {
     assert.equal(currentSession.receivedByPaymentMethod.creditCard, 0);
     assert.equal(currentSession.receivedByPaymentMethod.debitCard, 0);
     assert.equal(currentSession.receivedByPaymentMethod.check, 0);
+
+    const salesCompany = await prisma.company.findFirst({
+      where: {
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+      },
+    });
+
+    assert.ok(salesCompany);
+
+    await prisma.companyBranch.upsert({
+      where: {
+        companyId_branchCode: {
+          companyId: salesCompany.id,
+          branchCode: 1,
+        },
+      },
+      create: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        name: "FILIAL TESTE",
+        isActive: true,
+        isDefault: true,
+        inventoryControlType: "COLOR_SIZE",
+        quantityPrecision: "INTEGER_ONLY",
+        stockControlMode: "BY_PRODUCT",
+        stockIntegerQuantityMode: "BY_PRODUCT",
+        stockLotControlMode: "BY_PRODUCT",
+        stockExpirationControlMode: "BY_PRODUCT",
+        stockGridControlMode: "BY_PRODUCT",
+        stockNegativeControlMode: "BY_PRODUCT",
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+      update: {
+        inventoryControlType: "COLOR_SIZE",
+        stockControlMode: "BY_PRODUCT",
+        stockGridControlMode: "BY_PRODUCT",
+        stockNegativeControlMode: "BY_PRODUCT",
+        updatedBy: "CODEX",
+      },
+    });
+
+    const productWithCodes = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "PRODUTO TESTE CODIGOS",
+      internalCode: "9001",
+      sku: "SKU-CROSS-001",
+      barcode: "789000000001",
+      unitCode: "UN",
+      productType: "GOODS",
+      tracksInventory: true,
+      allowFraction: false,
+      usesColorSize: false,
+      usesLotControl: false,
+      usesExpirationControl: false,
+      allowsNegativeStock: false,
+      currentStock: 5,
+      minimumStock: 1,
+      salePrice: 15,
+    });
+
+    assert.equal(productWithCodes.internalCode, "9001");
+
+    await assert.rejects(
+      () =>
+        productsService.create({
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          name: "PRODUTO TESTE CODIGO NAO NUMERICO",
+          internalCode: "INT-CROSS-002",
+          sku: "SKU-CROSS-003",
+          barcode: "789000000004",
+          unitCode: "UN",
+          productType: "GOODS",
+          tracksInventory: true,
+          currentStock: 1,
+          salePrice: 20,
+        }),
+      /código interno deve conter somente números/,
+    );
+
+    await assert.rejects(
+      () =>
+        productsService.create({
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          name: "PRODUTO TESTE CODIGO CRUZADO",
+          internalCode: "789000000001",
+          sku: "SKU-CROSS-002",
+          barcode: "789000000002",
+          unitCode: "UN",
+          productType: "GOODS",
+          tracksInventory: true,
+          currentStock: 1,
+          salePrice: 20,
+        }),
+      /já está usado como código de barras/,
+    );
+
+    await assert.rejects(
+      () =>
+        productsService.create({
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          name: "PRODUTO TESTE CODIGO REPETIDO NO CADASTRO",
+          internalCode: "9002",
+          sku: "9002",
+          barcode: "789000000003",
+          unitCode: "UN",
+          productType: "GOODS",
+          tracksInventory: true,
+          currentStock: 1,
+          salePrice: 20,
+        }),
+      /já foi informado em código interno/,
+    );
+
+    const genericProduct = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "PRODUTO GENERICO",
+      internalCode: "1",
+      unitCode: "UN",
+      productType: "GENERIC",
+      tracksInventory: false,
+      allowFraction: false,
+      currentStock: 0,
+      minimumStock: 0,
+      purchasePrice: 0,
+      salePrice: 1,
+    });
+
+    const genericSale = await salesService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+      saleChannel: "TEST",
+      cashierUserId: "USR_CAIXA_001",
+      cashierDisplayName: "CAIXA TESTE",
+      items: [
+        {
+          productId: genericProduct.id,
+          description: "TAXA AVULSA TESTE",
+          quantity: 1,
+          unitCost: 12.3,
+          unitPrice: 35.5,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: "CASH",
+          amount: 35.5,
+        },
+      ],
+    });
+
+    const genericSaleItem = await prisma.saleItem.findFirst({
+      where: {
+        saleId: genericSale.id,
+      },
+    });
+
+    assert.equal(genericSale.totalAmount, 35.5);
+    assert.equal(genericSaleItem.productNameSnapshot, "TAXA AVULSA TESTE");
+    assert.equal(genericSaleItem.unitCost, 12.3);
+
+    const gridProduct = await prisma.product.create({
+      data: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        name: "CAMISETA TESTE GRADE",
+        unitCode: "UN",
+        productType: "GOODS",
+        tracksInventory: true,
+        allowFraction: false,
+        usesColorSize: true,
+        usesLotControl: false,
+        usesExpirationControl: false,
+        allowsNegativeStock: false,
+        currentStock: 10,
+        minimumStock: 0,
+        salePrice: 10,
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+    });
+
+    await prisma.productStockBalance.create({
+      data: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        productId: gridProduct.id,
+        variantKey: "COR:AMARELO|NUM:10|LOTE:GERAL",
+        colorCode: "AMARELO",
+        colorName: "AMARELO",
+        sizeCode: "10",
+        quantity: 2,
+        reservedQuantity: 0,
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        salesService.create({
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          sourceBranchCode: 1,
+          saleChannel: "TEST",
+          cashierUserId: "USR_CAIXA_001",
+          cashierDisplayName: "CAIXA TESTE",
+          items: [
+            {
+              productId: gridProduct.id,
+              quantity: 1,
+              unitPrice: 10,
+              colorCode: "AZUL",
+              colorName: "AZUL",
+              sizeCode: "10",
+            },
+          ],
+          payments: [
+            {
+              paymentMethod: "CASH",
+              amount: 10,
+            },
+          ],
+        }),
+      /Saldo atual desta variação\/lote: 0/,
+    );
+
+    const approvedGridSale = await salesService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+      saleChannel: "TEST",
+      cashierUserId: "USR_CAIXA_001",
+      cashierDisplayName: "CAIXA TESTE",
+      items: [
+        {
+          productId: gridProduct.id,
+          quantity: 1,
+          unitPrice: 10,
+          colorCode: "AMARELO",
+          colorName: "AMARELO",
+          sizeCode: "10",
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: "CASH",
+          amount: 10,
+        },
+      ],
+    });
+
+    assert.equal(approvedGridSale.totalAmount, 10);
+
+    const gridBalanceAfterSale = await prisma.productStockBalance.findFirst({
+      where: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        productId: gridProduct.id,
+        variantKey: "COR:AMARELO|NUM:10|LOTE:GERAL",
+      },
+    });
+    const gridProductAfterSale = await prisma.product.findUnique({
+      where: { id: gridProduct.id },
+    });
+
+    assert.equal(gridBalanceAfterSale.quantity, 1);
+    assert.equal(gridProductAfterSale.currentStock, 9);
 
     const paidUnpreparedSettlement =
       await cashSessionsService.settleManualInstallment(thirdInstallment.id, {

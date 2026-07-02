@@ -16,6 +16,7 @@ import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
+  normalizeFinanceDisplayText,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
@@ -68,7 +69,7 @@ const DEFAULT_FILTERS: CashSessionFilters = {
 
 const CASH_SESSION_GRID_COLUMNS: GridColumnDefinition<CashSessionItem, CashSessionGridColumnKey>[] = [
   { key: 'companyName', label: 'Empresa', getValue: (item) => item.companyName || '---' },
-  { key: 'cashierDisplayName', label: 'Operador', getValue: (item) => item.cashierDisplayName || '---' },
+  { key: 'cashierDisplayName', label: 'Operador', getValue: (item) => formatCashierDisplayName(item.cashierDisplayName) },
   { key: 'status', label: 'Situação', getValue: (item) => normalizeSessionStatus(item.status) },
   { key: 'openedAt', label: 'Abertura', getValue: (item) => formatDateTimeLabel(item.openedAt) },
   { key: 'closedAt', label: 'Fechamento', getValue: (item) => formatDateTimeLabel(item.closedAt) },
@@ -99,6 +100,25 @@ function formatDateTimeLabel(value?: string | null) {
 
 function normalizeSessionStatus(value?: string | null) {
   return String(value || '').trim().toUpperCase() === 'OPEN' ? 'ABERTO' : 'FECHADO';
+}
+
+function formatCashierDisplayName(value?: string | null) {
+  return normalizeFinanceDisplayText(value) || String(value || '').trim() || '---';
+}
+
+function getSessionOpenedAtTime(session: CashSessionItem) {
+  const parsed = new Date(session.openedAt).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function sortCashSessionsByRecentOpening(sessionsToSort: CashSessionItem[]) {
+  return [...sessionsToSort].sort(
+    (left, right) => getSessionOpenedAtTime(right) - getSessionOpenedAtTime(left),
+  );
+}
+
+function buildCloseCashSessionDetailHref(sessionId: string, queryString: string) {
+  return `/caixa/${sessionId}${queryString}${queryString ? '&' : '?'}openCloseCashSession=1`;
 }
 
 type CashAuditParams = {
@@ -487,7 +507,6 @@ export default function FinanceiroCashPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [sessions, setSessions] = useState<CashSessionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftFilters, setDraftFilters] = useState<CashSessionFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<CashSessionFilters>(DEFAULT_FILTERS);
@@ -523,7 +542,7 @@ export default function FinanceiroCashPage() {
 
       const haystack = [
         item.companyName,
-        item.cashierDisplayName,
+        formatCashierDisplayName(item.cashierDisplayName),
         item.sourceSystem,
         item.sourceTenantId,
       ]
@@ -630,7 +649,7 @@ export default function FinanceiroCashPage() {
         }
       }
 
-      setSessions(loadedSessions);
+      setSessions(sortCashSessionsByRecentOpening(loadedSessions));
     } catch (currentError) {
       setSessions([]);
       setError(
@@ -681,47 +700,6 @@ export default function FinanceiroCashPage() {
       }),
     );
   }, [columnOrder, hiddenColumns, runtimeContext.sourceTenantId]);
-
-  async function handleCloseSession(session: CashSessionItem) {
-    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId || !session.cashierUserId) {
-      setError('Não foi possível identificar a escola e o operador para fechar o caixa.');
-      return;
-    }
-
-    try {
-      setClosingSessionId(session.id);
-      setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/cash-sessions/close-current`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sourceSystem: runtimeContext.sourceSystem,
-          sourceTenantId: runtimeContext.sourceTenantId,
-          cashierUserId: session.cashierUserId,
-          declaredClosingAmount: session.expectedClosingAmount,
-        }),
-      });
-
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(payload?.message || 'Não foi possível fechar o caixa.');
-      }
-
-      await loadSessions();
-    } catch (currentError) {
-      setError(
-        getFriendlyRequestErrorMessage(
-          currentError,
-          'Não foi possível fechar o caixa.',
-        ),
-      );
-    } finally {
-      setClosingSessionId(null);
-    }
-  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -841,7 +819,7 @@ export default function FinanceiroCashPage() {
                           </div>
                         </div>
                       ) : column.key === 'cashierDisplayName' ? (
-                        <div className="font-semibold text-slate-700">{item.cashierDisplayName}</div>
+                        <div className="font-semibold text-slate-700">{formatCashierDisplayName(item.cashierDisplayName)}</div>
                       ) : column.key === 'status' ? (
                         <span
                           className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
@@ -884,11 +862,15 @@ export default function FinanceiroCashPage() {
                       {item.status === 'OPEN' ? (
                         <button
                           type="button"
-                          disabled={closingSessionId === item.id}
-                          onClick={() => void handleCloseSession(item)}
-                          className="rounded-xl bg-slate-800 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-900 disabled:opacity-60"
+                          onClick={() => {
+                            window.location.href = buildCloseCashSessionDetailHref(
+                              item.id,
+                              preservedQueryString,
+                            );
+                          }}
+                          className="rounded-xl bg-emerald-600 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-700"
                         >
-                          {closingSessionId === item.id ? 'Fechando...' : 'Fechar'}
+                          Fechar
                         </button>
                       ) : (
                         <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">

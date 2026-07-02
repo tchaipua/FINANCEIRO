@@ -50,6 +50,7 @@ Query string esperada:
 
 - `sourceSystem`
 - `sourceTenantId`
+- `sourceBranchCode` opcional; quando informado, o backend aplica o escopo da filial atual
 - `status` opcional: `ACTIVE | INACTIVE | ALL`
 - `search` opcional
 
@@ -96,6 +97,10 @@ Campos de estoque aceitos no produto:
 
 Regras:
 
+- `internalCode` e numerico e deve conter somente digitos
+- produto com `internalCode = 1` e reservado como produto generico para venda avulsa; na venda exige descricao, custo e preco de venda informados no item
+- `internalCode`, `sku` e `barcode` nao podem repetir valor entre si no mesmo produto
+- um valor usado em `internalCode`, `sku` ou `barcode` de um produto nao pode ser reutilizado em nenhum desses tres campos de outro produto da mesma empresa
 - filial `TRADITIONAL` ignora `usesColorSize` e `usesLotControl`
 - filial `COLOR_SIZE` permite `usesColorSize` por produto
 - filial `LOT` permite `usesLotControl` por produto
@@ -126,13 +131,152 @@ Regras:
 - nao alterar saldo e nao criar registros
 - correcoes futuras devem ocorrer por novas movimentacoes de ajuste/estorno
 
+## Sales
+
+### GET `/sales`
+
+Uso:
+
+- listar vendas confirmadas da empresa financeira do tenant informado
+- filtrar por canal de venda, situacao e busca textual
+
+Query string esperada:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `sourceBranchCode` opcional
+- `saleChannel` opcional: `GENERAL | SCHOOL_STORE | CANTEEN | SERVICE | ALL`
+- `status` opcional
+- `search` opcional
+
+### GET `/sales/:saleId`
+
+Uso:
+
+- carregar detalhes da venda, itens e pagamentos
+
+### POST `/sales`
+
+Uso:
+
+- confirmar venda de produtos com validacao de estoque, caixa e contas a receber
+- gerar `sales`, `sale_items` e `sale_payments`
+- gerar `stock_movements` de saida para produtos com controle de estoque
+- registrar `cash_movements` para pagamentos imediatos
+- gerar `receivable_titles` e `receivable_installments` quando houver boleto, prazo ou parcelado
+
+Formas de pagamento aceitas:
+
+- `CASH`
+- `PIX`
+- `DEBIT_CARD`
+- `CREDIT_CARD`
+- `BOLETO`
+- `TERM`
+- `INSTALLMENT`
+
+Regras:
+
+- pagamentos imediatos exigem caixa aberto para o operador
+- boleto, prazo e parcelado exigem cliente/pagador informado
+- soma dos pagamentos deve bater com o total da venda
+- filial com quantidade inteira rejeita quantidade fracionada
+- produto com cor/numero exige cor e numero na venda
+- produto com lote exige lote na venda
+- produto generico (`internalCode = 1`) usa a descricao enviada no item como snapshot do item vendido e grava `unitCost`
+- estoque negativo so e permitido quando a regra efetiva da filial/produto permitir
+- filial com `allowSaleUnitPriceEdit = false` rejeita preco unitario diferente do produto, exceto produto generico
+- filial com `allowSaleItemDiscount = false` rejeita desconto por item
+- venda confirmada nao apaga historico; cancelamento futuro deve gerar estorno operacional
+
+### POST `/sales/:saleId/cancel`
+
+Uso:
+
+- cancelar uma venda confirmada sem apagar historico fisico
+- cancelar movimentos de caixa vinculados a venda
+- devolver produtos ao estoque com nova movimentacao `SALE_CANCEL`
+- cancelar recebiveis gerados pela venda quando existirem
+
+Regras:
+
+- exige `sourceSystem` e `sourceTenantId`
+- registra `canceledAt/canceledBy` nos registros originais
+- o historico de estoque recebe nova entrada de retorno, preservando a saida original
+- quando houver recebiveis/baixas vinculadas, os registros financeiros ficam cancelados logicamente para preservar trilha
+
+Body resumido:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "tenant_uuid",
+  "cashierUserId": "user_123",
+  "requestedBy": "CAIXA 01",
+  "reason": "CANCELAMENTO AUTORIZADO"
+}
+```
+
+### GET `/sales/:saleId/return-context`
+
+Uso:
+
+- carregar uma venda confirmada com os itens e as quantidades ainda disponíveis para devolução
+- alimentar a tela `PRINCIPAL_FINANCEIRO_DEVOLUCAO_MERCADORIAS`
+
+Query string esperada:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `sourceBranchCode` opcional
+
+Resposta:
+
+- dados da venda
+- itens da venda com `returnedQuantity` e `availableReturnQuantity`
+
+### POST `/sales/:saleId/returns`
+
+Uso:
+
+- registrar devolução parcial ou total de mercadorias de uma venda confirmada
+- devolver os produtos ao estoque com movimento `SALE_RETURN`
+- gerar crédito do cliente para uso futuro em baixa de parcelas
+
+Regras:
+
+- não cancela a venda original
+- exige motivo da devolução
+- bloqueia quantidade maior que a quantidade vendida ainda disponível para devolução
+- produto com controle de estoque volta ao saldo por filial/variação e gera `stock_movements.movementType = ENTRY`
+- crédito gerado usa `customer_credits.sourceType = SALE_RETURN`
+- não lança dinheiro no caixa, pois crédito de devolução não é entrada nova de caixa
+
+Body resumido:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "tenant_uuid",
+  "sourceBranchCode": 1,
+  "requestedBy": "OPERADOR",
+  "reason": "DEVOLUÇÃO AUTORIZADA",
+  "items": [
+    {
+      "saleItemId": "uuid_do_item_da_venda",
+      "quantity": 1
+    }
+  ]
+}
+```
+
 ## Company branches
 
 ### GET `/companies/:id/branches`
 
 Uso:
 
-- listar filiais e seus parametros de estoque
+- listar filiais e seus parametros de estoque e venda
 
 ### POST `/companies/:id/branches`
 
@@ -147,7 +291,9 @@ Body resumido:
   "branchCode": 2,
   "name": "FILIAL CENTRO",
   "inventoryControlType": "COLOR_SIZE",
-  "quantityPrecision": "PRODUCT_DEFINED"
+  "quantityPrecision": "PRODUCT_DEFINED",
+  "allowSaleUnitPriceEdit": true,
+  "allowSaleItemDiscount": true
 }
 ```
 
@@ -155,7 +301,7 @@ Body resumido:
 
 Uso:
 
-- atualizar nome, tipo de controle de estoque e regra de quantidade da filial
+- atualizar nome, regras de estoque, regra de quantidade e parametros comerciais da filial
 
 ## Fiscal Certificates
 
@@ -444,3 +590,32 @@ Uso:
 Regra obrigatoria:
 
 - o fechamento devolve o resumo esperado do caixa com base em abertura e recebimentos em dinheiro
+
+### POST `/cash-sessions/movements/:movementId/cancel`
+
+Uso:
+
+- cancelar movimento manual de caixa ou estornar baixa/recebimento exibido no detalhe do caixa
+
+Regras:
+
+- exige `sourceSystem` e `sourceTenantId`
+- venda deve ser cancelada pelo endpoint `/sales/:saleId/cancel`
+- recebimento de parcela chama a regra de estorno de baixa, reabrindo saldo do cliente
+- movimento manual de entrada/saida/ajuste permanece ativo e gera novo lançamento oposto vinculado ao original por `referenceType = CASH_MOVEMENT_CANCEL`
+- entrada manual cancelada gera uma saida manual de cancelamento
+- saida manual cancelada gera uma entrada manual de cancelamento
+- ajuste manual cancelado gera ajuste inverso
+- o fechamento esperado do caixa e ajustado pelo lançamento oposto, preservando a trilha dos dois movimentos
+
+Body resumido:
+
+```json
+{
+  "sourceSystem": "ESCOLA",
+  "sourceTenantId": "tenant_uuid",
+  "cashierUserId": "user_123",
+  "requestedBy": "SUPERVISOR",
+  "reason": "LANÇAMENTO INCORRETO"
+}
+```

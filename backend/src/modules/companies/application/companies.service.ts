@@ -416,6 +416,8 @@ export class CompaniesService {
         inventoryControlType,
         quantityPrecision,
         ...stockModes,
+        allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
+        allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
         createdBy: payload.requestedBy || null,
         updatedBy: payload.requestedBy || null,
       },
@@ -468,6 +470,10 @@ export class CompaniesService {
         inventoryControlType,
         quantityPrecision,
         ...stockModes,
+        allowSaleUnitPriceEdit:
+          payload.allowSaleUnitPriceEdit ?? branch.allowSaleUnitPriceEdit ?? true,
+        allowSaleItemDiscount:
+          payload.allowSaleItemDiscount ?? branch.allowSaleItemDiscount ?? true,
         updatedBy: payload.requestedBy || null,
       },
     });

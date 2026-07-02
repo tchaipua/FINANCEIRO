@@ -247,6 +247,8 @@ Campos de parametrizacao:
 
 - `inventoryControlType`: `TRADITIONAL`, `COLOR_SIZE` ou `LOT`
 - `quantityPrecision`: `INTEGER_ONLY`, `DECIMAL_ALLOWED` ou `PRODUCT_DEFINED`
+- `allowSaleUnitPriceEdit`: define se a venda pode alterar o preco unitario do produto
+- `allowSaleItemDiscount`: define se a venda pode informar desconto por produto
 
 Regras:
 
@@ -256,6 +258,8 @@ Regras:
 - `INTEGER_ONLY`: quantidades devem ser inteiras e a tela nao precisa destacar decimais
 - `DECIMAL_ALLOWED`: a filial aceita quantidade fracionada
 - `PRODUCT_DEFINED`: cada produto define se aceita quantidade fracionada
+- quando `allowSaleUnitPriceEdit = false`, a venda deve usar o preco cadastrado do produto; produto generico (`internalCode = 1`) continua aceitando preco informado
+- quando `allowSaleItemDiscount = false`, a tela de vendas nao exibe desconto unitario e o backend rejeita desconto por item
 
 ### `products`
 
@@ -293,3 +297,26 @@ Regras:
 - a tela de historico apenas lista o resultado gerado por fluxos operacionais do estoque
 - correcoes devem ser feitas por nova movimentacao de ajuste ou estorno, nunca por edicao fisica do historico
 - cada registro deve guardar produto, filial, tipo de movimento, quantidade, saldo anterior, saldo resultante, origem/documento quando houver, usuario e data
+
+### `sale_items`
+
+Tabela dos itens confirmados em vendas.
+
+Regras:
+
+- `productNameSnapshot` guarda o nome usado na venda; para produto generico (`products.internalCode = 1`), recebe a descricao informada pelo operador
+- `unitCost` guarda o custo unitario informado ou herdado do produto, quando houver
+- `unitPrice` guarda o preco de venda unitario confirmado
+
+### `sale_returns` e `sale_return_items`
+
+Tabelas de devolucao de mercadorias vinculadas a uma venda confirmada.
+
+Regras:
+
+- devolucao nao cancela a venda original
+- `sale_returns` guarda o documento da devolucao, motivo, cliente snapshot, valor total e credito gerado
+- `sale_return_items` guarda os itens devolvidos e a quantidade parcial ou total por item da venda
+- a soma devolvida por `saleItemId` nunca pode ultrapassar a quantidade vendida
+- produtos com controle de estoque geram entrada em `stock_movements` com `sourceType = SALE_RETURN`
+- a devolucao gera credito em `customer_credits` com `sourceType = SALE_RETURN`, sem movimento de caixa

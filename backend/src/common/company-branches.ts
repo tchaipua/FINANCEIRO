@@ -51,6 +51,8 @@ export async function ensureDefaultCompanyBranch(
       stockExpirationControlMode: "NO",
       stockGridControlMode: "NO",
       stockNegativeControlMode: "NO",
+      allowSaleUnitPriceEdit: true,
+      allowSaleItemDiscount: true,
       createdBy: userId || undefined,
       updatedBy: userId || undefined,
     },
@@ -127,6 +129,8 @@ export function mapCompanyBranchSummary(branch: {
   stockExpirationControlMode?: string;
   stockGridControlMode?: string;
   stockNegativeControlMode?: string;
+  allowSaleUnitPriceEdit?: boolean | null;
+  allowSaleItemDiscount?: boolean | null;
 }) {
   return {
     id: branch.id,
@@ -149,5 +153,7 @@ export function mapCompanyBranchSummary(branch: {
     stockNegativeControlMode: normalizeStockParameterMode(
       branch.stockNegativeControlMode,
     ),
+    allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
+    allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
   };
 }

@@ -17,6 +17,10 @@
 - soft delete nos dados de negocio
 - endpoints de importacao com idempotencia
 - logs suficientes para rastrear integracoes
+- alterar somente a tela, fluxo, endpoint ou regra explicitamente solicitada no prompt atual
+- nao alterar utilitarios compartilhados, componentes compartilhados ou telas nao solicitadas quando houver caminho local e seguro
+- se uma correcao exigir mudanca compartilhada inevitavel, aplicar a menor mudanca possivel e validar os fluxos consumidores conhecidos antes de finalizar
+- nao fazer melhoria preventiva, refatoracao oportunista ou padronizacao fora do escopo solicitado
 
 ## Regras de nomenclatura
 
@@ -35,6 +39,8 @@
 - Todo novo popup/modal criado deve nascer por padrao com logotipo institucional no cabecalho, nome tecnico exclusivo e bloco de auditoria visual no rodape.
 - Quando o popup/modal tambem exibir foto, avatar ou icone do registro, esse elemento nao substitui o logotipo institucional; ambos devem ficar separados no cabecalho.
 - O nome tecnico de popup/modal deve ser exclusivo, estavel e nao pode ser reaproveitado por outro fluxo visual.
+- Em popups operacionais, o nome tecnico exclusivo deve ficar visivel no rodape do proprio popup.
+- Mensagens de validacao, senha invalida, erro operacional e sucesso disparadas dentro de um popup devem aparecer dentro do proprio popup, em alerta visual moderno, sem depender de alert nativo do navegador ou mensagem solta fora da tela modal.
 - O nome tecnico deve seguir o contexto em que a tela aparece. Em telas embutidas em uma vertical, usar o identificador da tela principal da vertical quando aplicavel, como `PRINCIPAL_FINANCEIRO_CAIXA_DETALHE`.
 - Em telas do `Financeiro` abertas dentro de outra vertical, como a `Escola`, a navegacao lateral, o cabecalho institucional e a moldura principal devem continuar sendo da vertical consumidora.
 - Nesses casos, a tela interna do `Financeiro` deve renderizar somente o conteudo funcional da area central, sem abrir em modo pagina cheia por padrao.

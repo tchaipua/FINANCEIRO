@@ -16,6 +16,7 @@ import {
   resolveFinancialRuleSettings,
 } from "../../../common/manual-settlement.utils";
 import {
+  CancelCashMovementDto,
   CloseCurrentCashSessionDto,
   CreateCustomerCreditDto,
   CreateCashMovementDto,
@@ -921,6 +922,275 @@ export class CashSessionsService {
     });
 
     return this.mapCashSession(session);
+  }
+
+  async cancelMovement(movementId: string, payload: CancelCashMovementDto) {
+    const normalizedMovementId = String(movementId || "").trim();
+    if (!normalizedMovementId) {
+      throw new BadRequestException("Movimento inválido para cancelamento.");
+    }
+
+    const company = await this.resolveCompany(
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+
+    const movement = await this.prisma.cashMovement.findFirst({
+      where: {
+        id: normalizedMovementId,
+        companyId: company.id,
+        canceledAt: null,
+      },
+      include: {
+        cashSession: true,
+      },
+    });
+
+    if (!movement || movement.cashSession?.canceledAt) {
+      throw new NotFoundException("MOVIMENTO NÃO ENCONTRADO OU JÁ CANCELADO.");
+    }
+
+    if (movement.movementType === "SALE_RECEIPT" && movement.referenceType === "SALE") {
+      throw new BadRequestException(
+        "Para cancelar este movimento, cancele a venda vinculada.",
+      );
+    }
+
+    if (movement.movementType === "SETTLEMENT" && movement.referenceType === "INSTALLMENT") {
+      const movementPaymentMethod = normalizeText(movement.paymentMethod);
+      if (!movementPaymentMethod) {
+        throw new BadRequestException("Movimento sem forma de recebimento para estorno.");
+      }
+
+      const settlement = await this.prisma.installmentSettlement.findFirst({
+        where: {
+          companyId: company.id,
+          cashSessionId: movement.cashSessionId,
+          installmentId: String(movement.referenceId || ""),
+          paymentMethod: movementPaymentMethod,
+          receivedAmount: movement.amount,
+          canceledAt: null,
+          ...(movement.bankMovementGroupId
+            ? { bankMovementGroupId: movement.bankMovementGroupId }
+            : {}),
+        },
+        orderBy: [{ settledAt: "desc" }, { createdAt: "desc" }],
+      });
+
+      if (!settlement) {
+        throw new NotFoundException("BAIXA VINCULADA AO MOVIMENTO NÃO ENCONTRADA.");
+      }
+
+      return this.reverseSettlementGroup(settlement.settlementGroupId || settlement.id, {
+        requestedBy: payload.requestedBy,
+        sourceSystem: payload.sourceSystem,
+        sourceTenantId: payload.sourceTenantId,
+        cashierUserId: payload.cashierUserId || movement.cashSession.cashierUserId,
+        cashierDisplayName:
+          payload.cashierDisplayName || movement.cashSession.cashierDisplayName,
+        reason: payload.reason,
+        notes: payload.notes,
+      });
+    }
+
+    const reverseByManualType: Record<
+      string,
+      { movementType: string; direction: string; description: string }
+    > = {
+      ENTRY: {
+        movementType: "EXIT",
+        direction: "OUT",
+        description: "CANCELAMENTO DE ENTRADA MANUAL",
+      },
+      EXIT: {
+        movementType: "ENTRY",
+        direction: "IN",
+        description: "CANCELAMENTO DE SAÍDA MANUAL",
+      },
+      ADJUSTMENT: {
+        movementType: "ADJUSTMENT",
+        direction: movement.direction === "OUT" ? "IN" : "OUT",
+        description: "CANCELAMENTO DE AJUSTE MANUAL",
+      },
+    };
+    const manualReverseConfig = reverseByManualType[String(movement.movementType || "")];
+
+    if (manualReverseConfig) {
+      if (movement.referenceType === "CASH_MOVEMENT_CANCEL") {
+        throw new BadRequestException(
+          "Este movimento já é um lançamento de cancelamento.",
+        );
+      }
+
+      const existingCancellation = await this.prisma.cashMovement.findFirst({
+        where: {
+          companyId: company.id,
+          cashSessionId: movement.cashSessionId,
+          referenceType: "CASH_MOVEMENT_CANCEL",
+          referenceId: movement.id,
+          canceledAt: null,
+        },
+      });
+
+      if (existingCancellation) {
+        throw new BadRequestException(
+          "Este movimento já possui lançamento de cancelamento.",
+        );
+      }
+
+      const canceledAt = new Date();
+      const canceledBy =
+        normalizeText(payload.requestedBy) ||
+        normalizeText(payload.cashierUserId) ||
+        "OPERADOR";
+      const amount = roundMoney(Number(movement.amount || 0));
+      const expectedClosingDelta =
+        manualReverseConfig.direction === "OUT" ? -amount : amount;
+      const reason = normalizeText(payload.reason || payload.notes);
+
+      const session = await this.prisma.$transaction(async (tx: any) => {
+        const cancellationDescription = reason
+          ? `${manualReverseConfig.description} - ${reason}`
+          : manualReverseConfig.description;
+
+        await tx.cashMovement.create({
+          data: {
+            companyId: company.id,
+            cashSessionId: movement.cashSessionId,
+            movementType: manualReverseConfig.movementType,
+            direction: manualReverseConfig.direction,
+            paymentMethod: "CASH",
+            amount,
+            description: cancellationDescription,
+            occurredAt: canceledAt,
+            referenceType: "CASH_MOVEMENT_CANCEL",
+            referenceId: movement.id,
+            createdBy: canceledBy,
+            updatedBy: canceledBy,
+          },
+        });
+
+        await tx.cashSession.update({
+          where: { id: movement.cashSessionId },
+          data: {
+            expectedClosingAmount: {
+              increment: expectedClosingDelta,
+            },
+            updatedBy: canceledBy,
+          },
+        });
+
+        return tx.cashSession.findUnique({
+          where: { id: movement.cashSessionId },
+          include: {
+            movements: {
+              where: { canceledAt: null },
+              orderBy: [{ occurredAt: "asc" }],
+            },
+            settlements: {
+              where: { canceledAt: null },
+            },
+          },
+        });
+      });
+
+      return {
+        ...this.mapCashSession(session),
+        canceledMovementId: movement.id,
+        message: "Lançamento de cancelamento registrado com sucesso.",
+      };
+    }
+
+    const cancelableManualTypes = ["CUSTOMER_CREDIT_GENERATED"];
+
+    if (!cancelableManualTypes.includes(String(movement.movementType || ""))) {
+      throw new BadRequestException(
+        "Este tipo de movimento não pode ser cancelado por esta tela.",
+      );
+    }
+
+    const canceledAt = new Date();
+    const canceledBy =
+      normalizeText(payload.requestedBy) ||
+      normalizeText(payload.cashierUserId) ||
+      "OPERADOR";
+    const amount = roundMoney(Number(movement.amount || 0));
+    const expectedClosingDelta = movement.direction === "OUT" ? amount : -amount;
+
+    const session = await this.prisma.$transaction(async (tx: any) => {
+      await tx.cashMovement.update({
+        where: { id: movement.id },
+        data: {
+          canceledAt,
+          canceledBy,
+          updatedBy: canceledBy,
+        },
+      });
+
+      if (
+        movement.movementType === "CUSTOMER_CREDIT_GENERATED" &&
+        movement.referenceType === "CUSTOMER_CREDIT" &&
+        movement.referenceId
+      ) {
+        await tx.customerCredit.updateMany({
+          where: {
+            id: movement.referenceId,
+            companyId: company.id,
+            canceledAt: null,
+          },
+          data: {
+            status: "CANCELED",
+            availableAmount: 0,
+            canceledAt,
+            canceledBy,
+            updatedBy: canceledBy,
+          },
+        });
+
+        await tx.customerCreditMovement.updateMany({
+          where: {
+            companyId: company.id,
+            referenceType: "CUSTOMER_CREDIT",
+            referenceId: movement.referenceId,
+            canceledAt: null,
+          },
+          data: {
+            canceledAt,
+            canceledBy,
+            updatedBy: canceledBy,
+          },
+        });
+      }
+
+      await tx.cashSession.update({
+        where: { id: movement.cashSessionId },
+        data: {
+          expectedClosingAmount: {
+            increment: expectedClosingDelta,
+          },
+          updatedBy: canceledBy,
+        },
+      });
+
+      return tx.cashSession.findUnique({
+        where: { id: movement.cashSessionId },
+        include: {
+          movements: {
+            where: { canceledAt: null },
+            orderBy: [{ occurredAt: "asc" }],
+          },
+          settlements: {
+            where: { canceledAt: null },
+          },
+        },
+      });
+    });
+
+    return {
+      ...this.mapCashSession(session),
+      canceledMovementId: movement.id,
+      message: "Movimento cancelado com sucesso.",
+    };
   }
 
   async settleInstallment(
