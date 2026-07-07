@@ -55,6 +55,11 @@ const IMMEDIATE_PAYMENT_METHODS = ["CASH", "PIX", "DEBIT_CARD", "CREDIT_CARD"];
 const DEFERRED_PAYMENT_METHODS = ["BOLETO", "TERM", "INSTALLMENT"];
 const GENERIC_PRODUCT_INTERNAL_CODE = "1";
 
+function getRegisteredPersonId(value?: string | null) {
+  const normalized = normalizeText(value);
+  return normalized?.toUpperCase().startsWith("PERSON:") ? normalized : "";
+}
+
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: "DINHEIRO",
   PIX: "PIX",
@@ -97,6 +102,51 @@ function parseDateOnlyAsLocalDate(value: string | undefined, label: string, endO
   }
 
   return parsed;
+}
+
+function hasRepeatedDigits(value: string) {
+  return /^(\d)\1+$/.test(value);
+}
+
+function isValidCpf(document: string) {
+  if (!/^\d{11}$/.test(document) || hasRepeatedDigits(document)) return false;
+
+  const digits = document.split("").map(Number);
+  const firstCheck = digits
+    .slice(0, 9)
+    .reduce((sum, digit, index) => sum + digit * (10 - index), 0);
+  const firstRemainder = (firstCheck * 10) % 11;
+  const firstDigit = firstRemainder === 10 ? 0 : firstRemainder;
+  if (firstDigit !== digits[9]) return false;
+
+  const secondCheck = digits
+    .slice(0, 10)
+    .reduce((sum, digit, index) => sum + digit * (11 - index), 0);
+  const secondRemainder = (secondCheck * 10) % 11;
+  const secondDigit = secondRemainder === 10 ? 0 : secondRemainder;
+  return secondDigit === digits[10];
+}
+
+function isValidCnpj(document: string) {
+  if (!/^\d{14}$/.test(document) || hasRepeatedDigits(document)) return false;
+
+  const digits = document.split("").map(Number);
+  const calculateDigit = (base: number[], weights: number[]) => {
+    const sum = base.reduce((total, digit, index) => total + digit * weights[index], 0);
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const firstDigit = calculateDigit(digits.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const secondDigit = calculateDigit(digits.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+
+  return firstDigit === digits[12] && secondDigit === digits[13];
+}
+
+function isValidBrazilianDocument(value?: string | null) {
+  const document = normalizeDigits(value);
+  if (!document) return false;
+  return document.length === 11 ? isValidCpf(document) : isValidCnpj(document);
 }
 
 @Injectable()
@@ -430,11 +480,13 @@ export class SalesService {
     }
 
     const document = normalizeDigits(customer?.document);
+    const registeredPersonId = getRegisteredPersonId(customer?.registeredPersonId);
     const externalEntityType =
-      normalizeText(customer?.externalEntityType) ||
+      (registeredPersonId ? "PERSON" : normalizeText(customer?.externalEntityType)) ||
       normalizeText(payload.sourceEntityType) ||
       "CUSTOMER";
     const externalEntityId =
+      registeredPersonId ||
       normalizeText(customer?.externalEntityId) ||
       document ||
       normalizeText(payload.sourceEntityId) ||
@@ -628,6 +680,12 @@ export class SalesService {
       sourceTenantId: query.sourceTenantId,
     });
     const normalizedSearch = normalizeText(query.search);
+    const normalizedSearchDigits = normalizeDigits(query.search);
+    const normalizedSaleNumber = normalizeText(query.saleNumber);
+    const normalizedProductSearch = normalizeText(query.productSearch);
+    const normalizedProductSearchDigits = normalizeDigits(query.productSearch);
+    const normalizedCustomerSearch = normalizeText(query.customerSearch);
+    const normalizedCustomerSearchDigits = normalizeDigits(query.customerSearch);
     const normalizedStatus = normalizeText(query.status);
     const normalizedSaleChannel = normalizeText(query.saleChannel);
     const dateFrom = query.dateFrom
@@ -636,12 +694,57 @@ export class SalesService {
     const dateTo = query.dateTo
       ? parseDateOnlyAsLocalDate(query.dateTo, "data final", true)
       : null;
+    const listFilters: any[] = [];
+
+    if (normalizedSearch) {
+      listFilters.push({
+        OR: [
+          { saleNumber: { contains: normalizedSearch } },
+          { customerNameSnapshot: { contains: normalizedSearch } },
+          { customerDocumentSnapshot: { contains: normalizedSearchDigits || normalizedSearch } },
+          { sourceEntityName: { contains: normalizedSearch } },
+        ],
+      });
+    }
+
+    if (normalizedSaleNumber) {
+      listFilters.push({
+        saleNumber: { contains: normalizedSaleNumber },
+      });
+    }
+
+    if (normalizedProductSearch) {
+      listFilters.push({
+        items: {
+          some: {
+            canceledAt: null,
+            OR: [
+              { productNameSnapshot: { contains: normalizedProductSearch } },
+              { productCodeSnapshot: { contains: normalizedProductSearch } },
+              ...(normalizedProductSearchDigits && normalizedProductSearchDigits !== normalizedProductSearch
+                ? [{ productCodeSnapshot: { contains: normalizedProductSearchDigits } }]
+                : []),
+            ],
+          },
+        },
+      });
+    }
+
+    if (normalizedCustomerSearch) {
+      listFilters.push({
+        OR: [
+          { customerNameSnapshot: { contains: normalizedCustomerSearch } },
+          { customerDocumentSnapshot: { contains: normalizedCustomerSearchDigits || normalizedCustomerSearch } },
+          { sourceEntityName: { contains: normalizedCustomerSearch } },
+        ],
+      });
+    }
 
     const sales = await this.prisma.sale.findMany({
       where: {
         companyId: company.id,
         canceledAt: null,
-        ...(dateFrom || dateTo
+        ...(!normalizedSaleNumber && (dateFrom || dateTo)
           ? {
               confirmedAt: {
                 ...(dateFrom ? { gte: dateFrom } : {}),
@@ -655,16 +758,7 @@ export class SalesService {
         ...(normalizedSaleChannel && normalizedSaleChannel !== "ALL"
           ? { saleChannel: normalizedSaleChannel }
           : {}),
-        ...(normalizedSearch
-          ? {
-              OR: [
-                { saleNumber: { contains: normalizedSearch } },
-                { customerNameSnapshot: { contains: normalizedSearch } },
-                { customerDocumentSnapshot: { contains: normalizeDigits(query.search) || normalizedSearch } },
-                { sourceEntityName: { contains: normalizedSearch } },
-              ],
-            }
-          : {}),
+        ...(listFilters.length ? { AND: listFilters } : {}),
       },
       include: {
         company: { select: { name: true } },
@@ -765,6 +859,9 @@ export class SalesService {
     );
     const hasDeferredPayment = normalizedPayments.some((payment) =>
       this.isDeferredPayment(payment.paymentMethod),
+    );
+    const hasBoletoPayment = normalizedPayments.some(
+      (payment) => payment.paymentMethod === "BOLETO" && payment.amount > 0,
     );
     const openCashSession = hasImmediatePayment
       ? await this.loadOpenCashSession(company.id, payload.cashierUserId)
@@ -980,6 +1077,12 @@ export class SalesService {
           "Informe o cliente/pagador para vendas a prazo, boleto ou parceladas.",
         );
       }
+    }
+
+    if (hasBoletoPayment && !getRegisteredPersonId(payload.customer?.registeredPersonId)) {
+      throw new BadRequestException(
+        "Para vendas em boleto, selecione o cliente no cadastro de pessoas.",
+      );
     }
 
     const deferredInstallments = this.expandDeferredPayments(normalizedPayments);
@@ -1546,6 +1649,50 @@ export class SalesService {
       throw new BadRequestException("A devolução precisa gerar valor maior que zero.");
     }
 
+    const returnCustomerName = normalizeText(payload.customer?.name);
+    const returnCustomerDocument = normalizeDigits(payload.customer?.document);
+    const hasReturnCustomerPayload = Boolean(returnCustomerName || returnCustomerDocument);
+    const saleCustomerName = normalizeText(sale.customerNameSnapshot);
+    const saleCustomerDocument = normalizeDigits(sale.customerDocumentSnapshot);
+    const saleHasCustomerForCredit = Boolean(
+      saleCustomerName && isValidBrazilianDocument(saleCustomerDocument),
+    );
+
+    if (hasReturnCustomerPayload) {
+      if (!returnCustomerName || !isValidBrazilianDocument(returnCustomerDocument)) {
+        throw new BadRequestException(
+          "Informe nome e CPF/CNPJ válido do cliente para gerar o crédito da devolução.",
+        );
+      }
+    } else if (!saleHasCustomerForCredit) {
+      throw new BadRequestException(
+        "Esta venda não possui cliente identificado. Informe nome e CPF/CNPJ do cliente para gerar o crédito da devolução.",
+      );
+    }
+
+    const creditCustomer = hasReturnCustomerPayload
+      ? {
+          partyId: null as string | null,
+          name: returnCustomerName!,
+          document: returnCustomerDocument!,
+          externalEntityType:
+            normalizeText(payload.customer?.externalEntityType) || "CUSTOMER",
+          externalEntityId:
+            normalizeText(payload.customer?.externalEntityId) ||
+            returnCustomerDocument!,
+          email: normalizeEmail(payload.customer?.email),
+          phone: normalizePhone(payload.customer?.phone),
+        }
+      : {
+          partyId: sale.customerPartyId || null,
+          name: saleCustomerName!,
+          document: saleCustomerDocument!,
+          externalEntityType: null,
+          externalEntityId: null,
+          email: null,
+          phone: null,
+        };
+
     const returnNumber = this.buildReturnNumber(sale.branchCode);
 
     const result = await this.prisma.$transaction(async (tx: any) => {
@@ -1569,15 +1716,49 @@ export class SalesService {
         }
       }
 
+      const returnCustomerParty = hasReturnCustomerPayload
+        ? await tx.party.upsert({
+            where: {
+              companyId_branchCode_externalEntityType_externalEntityId: {
+                companyId: company.id,
+                branchCode: sale.branchCode,
+                externalEntityType: creditCustomer.externalEntityType!,
+                externalEntityId: creditCustomer.externalEntityId!,
+              },
+            },
+            create: {
+              companyId: company.id,
+              branchCode: sale.branchCode,
+              externalEntityType: creditCustomer.externalEntityType!,
+              externalEntityId: creditCustomer.externalEntityId!,
+              name: creditCustomer.name,
+              document: creditCustomer.document,
+              email: creditCustomer.email,
+              phone: creditCustomer.phone,
+              createdBy: requestedBy,
+              updatedBy: requestedBy,
+            },
+            update: {
+              name: creditCustomer.name,
+              document: creditCustomer.document,
+              email: creditCustomer.email,
+              phone: creditCustomer.phone,
+              updatedBy: requestedBy,
+            },
+          })
+        : null;
+      const customerPartyId =
+        returnCustomerParty?.id || creditCustomer.partyId || null;
+
       const createdReturn = await tx.saleReturn.create({
         data: {
           companyId: company.id,
           branchCode: sale.branchCode,
           saleId: sale.id,
           returnNumber,
-          customerPartyId: sale.customerPartyId || null,
-          customerNameSnapshot: sale.customerNameSnapshot,
-          customerDocumentSnapshot: sale.customerDocumentSnapshot,
+          customerPartyId,
+          customerNameSnapshot: creditCustomer.name,
+          customerDocumentSnapshot: creditCustomer.document,
           totalAmount,
           reason,
           confirmedAt,
@@ -1590,9 +1771,9 @@ export class SalesService {
         data: {
           companyId: company.id,
           branchCode: sale.branchCode,
-          partyId: sale.customerPartyId || null,
-          customerName: sale.customerNameSnapshot,
-          customerDocument: sale.customerDocumentSnapshot,
+          partyId: customerPartyId,
+          customerName: creditCustomer.name,
+          customerDocument: creditCustomer.document,
           originalAmount: totalAmount,
           availableAmount: totalAmount,
           sourceType: "SALE_RETURN",

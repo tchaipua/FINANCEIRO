@@ -132,11 +132,14 @@ type CustomerState = {
   email: string;
   phone: string;
   referenceName: string;
+  registeredPersonId: string;
+  registeredPersonSourceType: string;
 };
 
 type PersonLookupResult = {
   id: string;
   name: string;
+  registeredPersonId?: string | null;
   document?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -168,6 +171,13 @@ type GenericProductDraft = {
 };
 
 type CheckoutTab = 'payment' | 'customer';
+
+type SaleActionMenuItem = {
+  label: string;
+  href: string | null;
+  icon: string;
+  disabledTitle?: string;
+};
 
 const SCREEN_ID = 'FINANCEIRO_VENDAS_PDV_GERAL';
 const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS';
@@ -237,6 +247,11 @@ const PAYMENT_METHODS: Array<{
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function appendNavigationParam(href: string, key: string, value: string) {
+  const separator = href.includes('?') ? '&' : '?';
+  return `${href}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
 }
 
 function parseDecimal(value: string | number | null | undefined) {
@@ -452,8 +467,11 @@ function findExactProductMatch(products: ProductItem[], term: string) {
         .filter(Boolean)
         .some((code) => String(code).trim().toUpperCase() === normalizedTerm),
     ) ||
-    products.find(
-      (product) => digitTerm && String(product.barcode || '').trim() === digitTerm,
+    products.find((product) =>
+      digitTerm &&
+      [product.internalCode, product.sku, product.barcode]
+        .filter(Boolean)
+        .some((code) => String(code).replace(/\D+/g, '') === digitTerm),
     ) ||
     null
   );
@@ -573,6 +591,18 @@ function createDefaultPayment(totalAmount: number): PaymentRow {
   };
 }
 
+function createCustomerState(): CustomerState {
+  return {
+    name: '',
+    document: '',
+    email: '',
+    phone: '',
+    referenceName: '',
+    registeredPersonId: '',
+    registeredPersonSourceType: '',
+  };
+}
+
 function createQuickCashSaleState(totalAmount = 0): QuickCashSaleState {
   return {
     amountPaid: formatNumberInput(totalAmount),
@@ -587,6 +617,11 @@ function createQuickCashSaleState(totalAmount = 0): QuickCashSaleState {
     futureDelivery: false,
     feedback: null,
   };
+}
+
+function getRegisteredPersonId(value?: string | null) {
+  const normalized = String(value || '').trim();
+  return normalized.toUpperCase().startsWith('PERSON:') ? normalized : '';
 }
 
 function buildSalePayload(params: {
@@ -609,6 +644,10 @@ function buildSalePayload(params: {
     notes,
     allowSaleItemDiscount,
   } = params;
+  const registeredPersonId = getRegisteredPersonId(customer.registeredPersonId);
+  const registeredPersonSourceType = registeredPersonId
+    ? (customer.registeredPersonSourceType.trim() || 'PESSOA')
+    : '';
 
   return {
     sourceSystem: runtimeContext.sourceSystem,
@@ -616,16 +655,18 @@ function buildSalePayload(params: {
     sourceBranchCode: runtimeContext.sourceBranchCode,
     companyName: runtimeContext.companyName || undefined,
     saleChannel,
-    sourceEntityType: customer.referenceName ? 'REFERENCE' : undefined,
-    sourceEntityId: customer.document || undefined,
+    sourceEntityType: registeredPersonId ? 'PERSON' : customer.referenceName ? 'REFERENCE' : undefined,
+    sourceEntityId: registeredPersonId || customer.document || undefined,
     sourceEntityName: customer.referenceName || undefined,
     requestedBy: runtimeContext.cashierUserId || undefined,
     cashierUserId: runtimeContext.cashierUserId || undefined,
     cashierDisplayName: runtimeContext.cashierDisplayName || undefined,
     customer: customer.name
       ? {
-          externalEntityType: 'CUSTOMER',
-          externalEntityId: customer.document || customer.name,
+          externalEntityType: registeredPersonId ? 'PERSON' : 'CUSTOMER',
+          externalEntityId: registeredPersonId || customer.document || customer.name,
+          registeredPersonId: registeredPersonId || undefined,
+          registeredPersonSourceType: registeredPersonSourceType || undefined,
           name: customer.name,
           document: customer.document || undefined,
           email: customer.email || undefined,
@@ -723,6 +764,7 @@ export default function SalesPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const productSearchInputRef = useRef<HTMLInputElement | null>(null);
   const paymentAmountInputRef = useRef<HTMLInputElement | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [branchSaleConfig, setBranchSaleConfig] = useState<SaleBranchConfig>(
     DEFAULT_SALE_BRANCH_CONFIG,
@@ -745,16 +787,13 @@ export default function SalesPage() {
   const [notes, setNotes] = useState('');
   const [currentCashSession, setCurrentCashSession] = useState<CashSessionResponse | null>(null);
   const [isLoadingCashSession, setIsLoadingCashSession] = useState(false);
-  const [customer, setCustomer] = useState<CustomerState>({
-    name: '',
-    document: '',
-    email: '',
-    phone: '',
-    referenceName: '',
-  });
+  const [customer, setCustomer] = useState<CustomerState>(() => createCustomerState());
+  const [customerPersonResults, setCustomerPersonResults] = useState<PersonLookupResult[]>([]);
+  const [isSearchingCustomerPeople, setIsSearchingCustomerPeople] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successSale, setSuccessSale] = useState<CreatedSale | null>(null);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
 
   const screenId = runtimeContext.embedded ? EMBEDDED_SCREEN_ID : SCREEN_ID;
 
@@ -783,6 +822,30 @@ export default function SalesPage() {
     productLookupOpen,
     quickCashSale,
   ]);
+
+  useEffect(() => {
+    if (!actionMenuOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!actionMenuRef.current?.contains(event.target as Node)) {
+        setActionMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setActionMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [actionMenuOpen]);
 
   const canLoadContext = Boolean(runtimeContext.sourceSystem && runtimeContext.sourceTenantId);
   const cashierUserId = runtimeContext.cashierUserId || 'USUARIO';
@@ -814,6 +877,49 @@ export default function SalesPage() {
     : cashSessionDetailHref
       ? 'ABRIR DETALHE DO CAIXA'
       : 'NENHUM CAIXA ABERTO PARA ESTE OPERADOR';
+  const cashSessionEntryHref = cashSessionDetailHref
+    ? appendNavigationParam(cashSessionDetailHref, 'openCashMovement', 'entry')
+    : null;
+  const cashSessionExitHref = cashSessionDetailHref
+    ? appendNavigationParam(cashSessionDetailHref, 'openCashMovement', 'exit')
+    : null;
+  const saleActionMenuItems = useMemo<SaleActionMenuItem[]>(
+    () => [
+      {
+        label: 'Devolução Mercadorias',
+        href: `/vendas/devolucao-mercadorias${preservedNavigationQueryString}`,
+        icon: '↩',
+      },
+      {
+        label: 'Saída Dinheiro Caixa',
+        href: cashSessionExitHref,
+        icon: '-',
+        disabledTitle: cashSessionButtonTitle,
+      },
+      {
+        label: 'Entrada Dinheiro Caixa',
+        href: cashSessionEntryHref,
+        icon: '+',
+        disabledTitle: cashSessionButtonTitle,
+      },
+      {
+        label: 'Recebimento Clientes',
+        href: `/recebiveis/recebimentos-por-cliente${preservedNavigationQueryString}`,
+        icon: '$',
+      },
+      {
+        label: 'Consultar Vendas do Período',
+        href: `/vendas/periodo${preservedNavigationQueryString}`,
+        icon: '≡',
+      },
+    ],
+    [
+      cashSessionButtonTitle,
+      cashSessionEntryHref,
+      cashSessionExitHref,
+      preservedNavigationQueryString,
+    ],
+  );
   const footerBottomClass = runtimeContext.embedded ? 'bottom-0' : 'bottom-2';
   const pageBottomPaddingClass = runtimeContext.embedded ? 'pb-20 lg:pb-16' : 'pb-40 lg:pb-28';
 
@@ -909,20 +1015,28 @@ export default function SalesPage() {
 
   const productLookupResults = useMemo(() => {
     const search = productLookupSearch.trim().toUpperCase();
+    const searchDigits = productLookupSearch.replace(/\D+/g, '');
     if (!search) return products.slice(0, 80);
 
     return products
-      .filter((product) =>
-        [
+      .filter((product) => {
+        const searchableValues = [
           product.name,
           product.internalCode || '',
           product.sku || '',
           product.barcode || '',
-        ]
-          .join(' ')
-          .toUpperCase()
-          .includes(search),
-      )
+        ];
+
+        return (
+          searchableValues.join(' ').toUpperCase().includes(search) ||
+          Boolean(
+            searchDigits &&
+              searchableValues
+                .map((value) => String(value).replace(/\D+/g, ''))
+                .some((value) => value.includes(searchDigits)),
+          )
+        );
+      })
       .slice(0, 80);
   }, [productLookupSearch, products]);
 
@@ -966,6 +1080,13 @@ export default function SalesPage() {
       return amountByMethod;
     }, new Map<PaymentMethod, number>());
   }, [paymentRows]);
+  const hasBoletoPayment = useMemo(
+    () => paymentRows.some((payment) => payment.paymentMethod === 'BOLETO' && parseDecimal(payment.amount) > 0),
+    [paymentRows],
+  );
+  const hasCustomerIdentification = Boolean(customer.name.trim() || customer.document.trim());
+  const hasRegisteredCustomer = Boolean(getRegisteredPersonId(customer.registeredPersonId));
+  const customerIdentificationLabel = customer.name.trim() || 'Identificar cliente';
 
   const auditSql = useMemo(
     () =>
@@ -1137,8 +1258,11 @@ export default function SalesPage() {
     setErrorMessage('');
   }, []);
 
-  const executeProductSearchCommand = useCallback(() => {
-    const term = productSearchCommand.term.trim();
+  const executeProductSearchCommand = useCallback((rawCommand?: string) => {
+    const command = rawCommand === undefined
+      ? productSearchCommand
+      : parseProductSearchCommand(rawCommand);
+    const term = command.term.trim();
     if (term.toUpperCase() === 'VV') {
       if (!cartItems.length) {
         setErrorMessage('Inclua ao menos um produto antes de finalizar a venda à vista.');
@@ -1160,20 +1284,20 @@ export default function SalesPage() {
     }
 
     if (!term || term === '0') {
-      openProductLookup(productSearchCommand.quantity, term);
+      openProductLookup(command.quantity, term);
       return;
     }
 
     const exactProduct = findExactProductMatch(products, term);
 
     if (exactProduct) {
-      addProductToCart(exactProduct, productSearchCommand.quantity);
+      addProductToCart(exactProduct, command.quantity);
       setProductSearch('');
       focusProductSearchInput();
       return;
     }
 
-    openProductLookup(productSearchCommand.quantity, term);
+    openProductLookup(command.quantity, term);
   }, [
     addProductToCart,
     cartItems.length,
@@ -1188,7 +1312,7 @@ export default function SalesPage() {
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
-      executeProductSearchCommand();
+      executeProductSearchCommand(event.currentTarget.value);
     },
     [executeProductSearchCommand],
   );
@@ -1320,13 +1444,9 @@ export default function SalesPage() {
     setPaymentAmountModal(null);
     setSaleDiscount('');
     setNotes('');
-    setCustomer({
-      name: '',
-      document: '',
-      email: '',
-      phone: '',
-      referenceName: '',
-    });
+    setCustomer(createCustomerState());
+    setCustomerPersonResults([]);
+    setIsSearchingCustomerPeople(false);
   }, [saleDraftStorageKey]);
 
   const clearWholeSale = useCallback(() => {
@@ -1367,21 +1487,28 @@ export default function SalesPage() {
           window.removeEventListener('message', handleResult);
 
           const results = Array.isArray(payload.results)
-            ? payload.results.map((item: any, index: number) => ({
-                id: [
-                  item.id,
-                  item.document || item.cpf || item.cnpj,
-                  item.email,
-                  item.phone || item.whatsapp || item.cellphone1,
-                  item.sourceType || item.role,
-                  index,
-                ].filter(Boolean).join(':') || generateId('person'),
-                name: String(item.name || ''),
-                document: item.document || item.cpf || item.cnpj || null,
-                email: item.email || null,
-                phone: item.phone || item.whatsapp || item.cellphone1 || null,
-                sourceType: item.sourceType || item.role || null,
-              })).filter((item: PersonLookupResult) => item.name)
+            ? payload.results.map((item: any, index: number) => {
+                const registeredPersonId = String(
+                  item.registeredPersonId || item.personId || item.id || '',
+                ).trim();
+
+                return {
+                  id: [
+                    registeredPersonId,
+                    item.document || item.cpf || item.cnpj,
+                    item.email,
+                    item.phone || item.whatsapp || item.cellphone1,
+                    item.sourceType || item.role,
+                    index,
+                  ].filter(Boolean).join(':') || generateId('person'),
+                  name: String(item.name || ''),
+                  registeredPersonId: registeredPersonId || null,
+                  document: item.document || item.cpf || item.cnpj || null,
+                  email: item.email || null,
+                  phone: item.phone || item.whatsapp || item.cellphone1 || null,
+                  sourceType: item.sourceType || item.role || null,
+                };
+              }).filter((item: PersonLookupResult) => item.name)
             : [];
 
           resolve(results.slice(0, 12));
@@ -1401,6 +1528,69 @@ export default function SalesPage() {
     },
     [runtimeContext.sourceSystem],
   );
+
+  const updateCustomerTypedField = useCallback((
+    field: keyof Pick<CustomerState, 'name' | 'document' | 'email' | 'phone'>,
+    value: string,
+  ) => {
+    setCustomer((current) => ({
+      ...current,
+      [field]: value,
+      registeredPersonId: '',
+      registeredPersonSourceType: '',
+    }));
+  }, []);
+
+  const performCustomerPeopleSearch = useCallback(async (rawSearch?: string) => {
+    const search = (
+      rawSearch ||
+      customer.name ||
+      customer.document ||
+      customer.email ||
+      customer.phone
+    ).trim();
+    if (search.length < 2) {
+      setCustomerPersonResults([]);
+      setCheckoutFeedback({
+        type: 'error',
+        title: 'PESQUISA VAZIA !!!',
+        message: 'Informe o cliente, CPF/CNPJ, telefone ou e-mail antes de pesquisar no cadastro.',
+      });
+      return;
+    }
+
+    setIsSearchingCustomerPeople(true);
+    setCustomerPersonResults([]);
+
+    const results = await searchExternalPeople(search);
+
+    setIsSearchingCustomerPeople(false);
+    setCustomerPersonResults(results);
+  }, [customer.document, customer.email, customer.name, customer.phone, searchExternalPeople]);
+
+  const selectCustomerPerson = useCallback((person: PersonLookupResult) => {
+    const registeredPersonId = getRegisteredPersonId(person.registeredPersonId);
+    if (!registeredPersonId) {
+      setCheckoutFeedback({
+        type: 'error',
+        title: 'CADASTRO INVÁLIDO !!!',
+        message: 'Selecione uma pessoa cadastrada para finalizar venda em boleto.',
+      });
+      return;
+    }
+
+    setCustomer((current) => ({
+      ...current,
+      name: person.name,
+      document: person.document || '',
+      email: person.email || '',
+      phone: person.phone || '',
+      registeredPersonId,
+      registeredPersonSourceType: person.sourceType || 'PESSOA',
+    }));
+    setCustomerPersonResults([]);
+    setCheckoutFeedback(null);
+  }, []);
 
   const performQuickCashPeopleSearch = useCallback(async (rawSearch: string) => {
     const search = rawSearch.trim();
@@ -1581,11 +1771,11 @@ export default function SalesPage() {
 
     const changeAmount = Math.max(0, amountPaid - cartTotals.total);
     const quickCustomer: CustomerState = {
+      ...createCustomerState(),
       name: quickCashSale.customerName.trim() || (quickCashSale.document.trim() ? 'CONSUMIDOR' : ''),
       document: quickCashSale.document,
       email: quickCashSale.customerEmail,
       phone: quickCashSale.customerPhone,
-      referenceName: '',
     };
     const quickNotes = [
       notes,
@@ -1745,6 +1935,17 @@ export default function SalesPage() {
         return;
       }
 
+      if (hasBoletoPayment && !getRegisteredPersonId(customer.registeredPersonId)) {
+        setCheckoutFeedback({
+          type: 'error',
+          title: 'CLIENTE CADASTRADO OBRIGATÓRIO !!!',
+          message: 'Para finalizar venda em boleto, selecione o cliente no cadastro de pessoas.',
+        });
+        setCheckoutOpen(true);
+        setCheckoutTab('customer');
+        return;
+      }
+
       setIsSubmitting(true);
       setErrorMessage('');
       setSuccessSale(null);
@@ -1791,6 +1992,7 @@ export default function SalesPage() {
       cartItems,
       clearSale,
       customer,
+      hasBoletoPayment,
       loadData,
       notes,
       paymentRows,
@@ -1819,7 +2021,7 @@ export default function SalesPage() {
               />
               <button
                 type="button"
-                onClick={executeProductSearchCommand}
+                onClick={() => executeProductSearchCommand(productSearchInputRef.current?.value ?? productSearch)}
                 className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] text-blue-700 transition hover:bg-blue-100"
               >
                 Pesquisar
@@ -2064,20 +2266,65 @@ export default function SalesPage() {
         </div>
       </section>
 
-      <section className={`fixed inset-x-3 z-40 sm:inset-x-4 ${footerBottomClass}`}>
+      <section className={`fixed inset-x-3 z-50 sm:inset-x-4 ${footerBottomClass}`}>
         <div className="mx-auto max-w-[1540px] rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-2xl shadow-slate-950/20 backdrop-blur">
-          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-[200px_minmax(140px,1fr)_minmax(140px,1fr)_minmax(240px,0.95fr)_58px]">
-            <button
-              type="button"
-              disabled={!cartItems.length}
-              onClick={() => {
-                setCheckoutTab('payment');
-                setCheckoutOpen(true);
-              }}
-              className="flex min-h-10 w-full items-center justify-center rounded-xl bg-emerald-600 px-3 py-1.5 text-center text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-            >
-              Finalizar venda
-            </button>
+          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-[252px_minmax(140px,1fr)_minmax(140px,1fr)_minmax(240px,0.95fr)_58px]">
+            <div ref={actionMenuRef} className="relative flex min-w-0 gap-1.5">
+              <button
+                type="button"
+                disabled={!cartItems.length}
+                onClick={() => {
+                  setCheckoutTab('payment');
+                  setCheckoutOpen(true);
+                }}
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl bg-emerald-600 px-3 py-1.5 text-center text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+              >
+                Finalizar venda
+              </button>
+              <button
+                type="button"
+                onClick={() => setActionMenuOpen((current) => !current)}
+                aria-label="Abrir opções da venda"
+                aria-expanded={actionMenuOpen}
+                title="Opções da venda"
+                className="flex min-h-10 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-blue-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+              >
+                <span className="fa fa-bars text-lg font-black leading-none" aria-hidden="true">☰</span>
+              </button>
+
+              {actionMenuOpen ? (
+                <div className="absolute bottom-full left-0 z-50 mb-2 w-[280px] overflow-hidden rounded-md border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-950/20">
+                  {saleActionMenuItems.map((item) =>
+                    item.href ? (
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        onClick={() => setActionMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-[12px] font-black text-blue-700 transition hover:bg-blue-50"
+                      >
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center text-sm font-black" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    ) : (
+                      <button
+                        key={item.label}
+                        type="button"
+                        disabled
+                        title={item.disabledTitle}
+                        className="flex w-full cursor-not-allowed items-center gap-2 px-3 py-2 text-left text-[12px] font-black text-slate-400"
+                      >
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center text-sm font-black" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              ) : null}
+            </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
               <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">Subtotal</div>
@@ -2490,7 +2737,7 @@ export default function SalesPage() {
                     : 'text-slate-500 hover:bg-white hover:text-slate-800'
                 }`}
               >
-                2° Cliente
+                2° Identificar cliente
               </button>
             </div>
 
@@ -2498,18 +2745,55 @@ export default function SalesPage() {
               {checkoutTab === 'customer' ? (
               <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Cliente</div>
-                <h2 className="text-base font-black text-slate-900">Pagador e referência</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-black text-slate-900">Pagador e referência</h2>
+                  <button
+                    type="button"
+                    onClick={() => void performCustomerPeopleSearch()}
+                    className="rounded-lg bg-blue-700 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-white shadow-sm shadow-blue-900/15 transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    disabled={isSearchingCustomerPeople}
+                  >
+                    {isSearchingCustomerPeople ? 'Buscando...' : 'Pesquisar no cadastro'}
+                  </button>
+                </div>
                 <div className="mt-2 grid gap-1.5">
+                  {customerPersonResults.length ? (
+                    <div className="max-h-28 space-y-1 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
+                      {customerPersonResults.map((person, index) => (
+                        <button
+                          type="button"
+                          key={`${person.id}:${index}`}
+                          onClick={() => selectCustomerPerson(person)}
+                          className="w-full rounded-lg border border-transparent bg-white px-2 py-1.5 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                        >
+                          <div className="truncate text-[11px] font-black uppercase text-slate-900">{person.name}</div>
+                          <div className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            {[person.document, person.phone, person.email, person.sourceType].filter(Boolean).join(' · ') || 'CADASTRO'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {hasBoletoPayment && !hasRegisteredCustomer ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-amber-700">
+                      BOLETO EXIGE CLIENTE DO CADASTRO DE PESSOAS
+                    </div>
+                  ) : null}
+                  {hasRegisteredCustomer ? (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-emerald-700">
+                      PESSOA CADASTRADA: {customer.registeredPersonSourceType || 'PESSOA'}
+                    </div>
+                  ) : null}
                   <input
                     className={compactInputClass}
                     value={customer.name}
-                    onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))}
+                    onChange={(event) => updateCustomerTypedField('name', event.target.value)}
                     placeholder="Cliente / pagador"
                   />
                   <input
                     className={compactInputClass}
                     value={customer.document}
-                    onChange={(event) => setCustomer((current) => ({ ...current, document: event.target.value }))}
+                    onChange={(event) => updateCustomerTypedField('document', event.target.value)}
                     placeholder="CPF/CNPJ"
                   />
                   <input
@@ -2522,13 +2806,13 @@ export default function SalesPage() {
                     <input
                       className={compactInputClass}
                       value={customer.phone}
-                      onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))}
+                      onChange={(event) => updateCustomerTypedField('phone', event.target.value)}
                       placeholder="Telefone"
                     />
                     <input
                       className={compactInputClass}
                       value={customer.email}
-                      onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
+                      onChange={(event) => updateCustomerTypedField('email', event.target.value)}
                       placeholder="E-mail"
                     />
                   </div>
@@ -2543,13 +2827,27 @@ export default function SalesPage() {
                     <div className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Pagamento</div>
                     <h2 className="text-base font-black text-slate-900">Forma de pagamento</h2>
                   </div>
-                  <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${
-                    Math.abs(cartTotals.paymentTotal - cartTotals.total) <= 0.01
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-rose-200 bg-rose-50 text-rose-700'
-                  }`}>
-                    {formatCurrency(cartTotals.paymentTotal)}
-                  </span>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutTab('customer')}
+                      className={`max-w-56 truncate rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${
+                        hasCustomerIdentification
+                          ? 'border-blue-200 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                      }`}
+                      title="Identificar cliente"
+                    >
+                      {customerIdentificationLabel}
+                    </button>
+                    <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${
+                      Math.abs(cartTotals.paymentTotal - cartTotals.total) <= 0.01
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-rose-200 bg-rose-50 text-rose-700'
+                    }`}>
+                      {formatCurrency(cartTotals.paymentTotal)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-2 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 sm:grid-cols-3">

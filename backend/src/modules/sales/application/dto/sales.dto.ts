@@ -20,6 +20,14 @@ export class SaleCustomerDto {
   @IsString()
   externalEntityId?: string;
 
+  @IsOptional()
+  @IsString()
+  registeredPersonId?: string;
+
+  @IsOptional()
+  @IsString()
+  registeredPersonSourceType?: string;
+
   @IsString()
   name!: string;
 
@@ -238,6 +246,18 @@ export class ListSalesDto {
 
   @IsOptional()
   @IsString()
+  saleNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  productSearch?: string;
+
+  @IsOptional()
+  @IsString()
+  customerSearch?: string;
+
+  @IsOptional()
+  @IsString()
   cashierUserId?: string;
 
   @IsOptional()
@@ -288,6 +308,11 @@ export class CreateSaleReturnDto {
 
   @IsString()
   reason!: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SaleCustomerDto)
+  customer?: SaleCustomerDto;
 
   @IsArray()
   @ArrayMinSize(1)

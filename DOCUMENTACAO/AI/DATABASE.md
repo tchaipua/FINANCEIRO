@@ -320,3 +320,4 @@ Regras:
 - a soma devolvida por `saleItemId` nunca pode ultrapassar a quantidade vendida
 - produtos com controle de estoque geram entrada em `stock_movements` com `sourceType = SALE_RETURN`
 - a devolucao gera credito em `customer_credits` com `sourceType = SALE_RETURN`, sem movimento de caixa
+- quando a venda original nao possui documento valido do cliente, a devolucao deve receber identificacao do cliente para que `sale_returns` e `customer_credits` guardem nome/documento do titular do credito

@@ -60,8 +60,14 @@ function resolveSchoolFinancePath(pathname: string) {
   }
   if (pathname.startsWith('/recebiveis/lotes')) return '/principal/financeiro/lotes';
   if (pathname.startsWith('/recebiveis/retornos')) return '/principal/financeiro/retornos';
+  if (pathname.startsWith('/recebiveis/recebimentos-por-cliente')) {
+    return '/principal/financeiro/recebimentos-por-cliente';
+  }
   if (pathname.startsWith('/recebiveis/parcelas')) return '/principal/financeiro/parcelas';
   if (pathname.startsWith('/caixa')) return '/principal/financeiro/caixa';
+  if (pathname.startsWith('/vendas/devolucao-mercadorias')) {
+    return '/principal/financeiro/devolucao-mercadorias';
+  }
   if (pathname.startsWith('/vendas/periodo')) return '/principal/financeiro/vendas-periodo';
   if (pathname.startsWith('/vendas')) return '/principal/financeiro/vendas';
 

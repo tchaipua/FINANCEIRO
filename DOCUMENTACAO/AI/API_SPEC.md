@@ -148,6 +148,9 @@ Query string esperada:
 - `saleChannel` opcional: `GENERAL | SCHOOL_STORE | CANTEEN | SERVICE | ALL`
 - `status` opcional
 - `search` opcional
+- `saleNumber` opcional: busca direta pelo número/documento da venda; quando informado, não depende do período selecionado
+- `productSearch` opcional: busca por nome ou código do produto vendido
+- `customerSearch` opcional: busca por nome ou CPF/CNPJ do cliente quando existir snapshot na venda
 
 ### GET `/sales/:saleId`
 
@@ -251,6 +254,7 @@ Regras:
 - produto com controle de estoque volta ao saldo por filial/variação e gera `stock_movements.movementType = ENTRY`
 - crédito gerado usa `customer_credits.sourceType = SALE_RETURN`
 - não lança dinheiro no caixa, pois crédito de devolução não é entrada nova de caixa
+- quando a venda original não possui CPF/CNPJ de cliente válido, a devolução deve receber `customer.name` e `customer.document` válidos para gerar o crédito identificado
 
 Body resumido:
 
@@ -261,6 +265,10 @@ Body resumido:
   "sourceBranchCode": 1,
   "requestedBy": "OPERADOR",
   "reason": "DEVOLUÇÃO AUTORIZADA",
+  "customer": {
+    "name": "CLIENTE DEVOLUÇÃO",
+    "document": "52998224725"
+  },
   "items": [
     {
       "saleItemId": "uuid_do_item_da_venda",

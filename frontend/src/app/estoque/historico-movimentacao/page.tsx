@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson } from '@/app/lib/api';
@@ -19,8 +20,12 @@ import {
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 const SCREEN_ID = 'FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO';
+const PRODUCT_FILTER_POPUP_SCREEN_ID =
+  'FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO_FILTRO_PRODUTO';
 const ORIGIN_TEXT =
   'Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\historico-movimentacao\\page.tsx';
+const PRODUCT_FILTER_POPUP_ORIGIN_TEXT =
+  'Origem: Sistema Financeiro - popup local em C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\historico-movimentacao\\page.tsx';
 
 type StockMovementItem = {
   id: string;
@@ -42,6 +47,15 @@ type StockMovementItem = {
   notes?: string | null;
   occurredAt: string;
   createdBy?: string | null;
+};
+
+type ProductFilterItem = {
+  id: string;
+  name: string;
+  internalCode?: string | null;
+  barcode?: string | null;
+  unitCode?: string | null;
+  status?: string | null;
 };
 
 type MovementTypeFilter = 'ALL' | 'ENTRY' | 'EXIT';
@@ -116,6 +130,8 @@ type StockMovementAuditParams = {
   sourceTenantId?: string | null;
   sourceBranchCode?: number | null;
   search: string;
+  selectedProductId?: string | null;
+  selectedProductName?: string | null;
   movementType: MovementTypeFilter;
   displayedRowsCount: number;
 };
@@ -129,6 +145,7 @@ function buildStockMovementAuditSql(params: StockMovementAuditParams) {
 -- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
 -- :sourceBranchCode = ${toSqlLiteral(params.sourceBranchCode ?? '')}
 -- :search = ${toSqlLiteral(search)}
+-- :productId = ${toSqlLiteral(params.selectedProductId || '')}
 -- :movementType = ${toSqlLiteral(movementType)}
 
 SELECT
@@ -150,6 +167,7 @@ WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
   AND SM.branchCode = ${toSqlLiteral(params.sourceBranchCode ?? '')}
   AND SM.canceledAt IS NULL
   AND (${toSqlLiteral(movementType)} = 'ALL' OR SM.movementType = ${toSqlLiteral(movementType)})
+  AND (${toSqlLiteral(params.selectedProductId || '')} = '' OR SM.productId = ${toSqlLiteral(params.selectedProductId || '')})
   AND (
     ${toSqlLiteral(search)} = ''
     OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search)}) || '%'
@@ -185,6 +203,7 @@ FILTROS APLICADOS AGORA:
 - sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
 - filial origem (:sourceBranchCode): ${formatAuditValue(params.sourceBranchCode, '1')}
 - busca digitada (:search): ${formatAuditValue(search)}
+- produto selecionado (:productId): ${formatAuditValue(params.selectedProductName || params.selectedProductId)}
 - tipo de movimento (:movementType): ${movementType}
 - registros exibidos apos os filtros: ${params.displayedRowsCount}
 - ordenacao atual: movimentacao DESC, criacao DESC
@@ -462,14 +481,154 @@ function MovementGridConfigModal({
   );
 }
 
+function ProductFilterModal({
+  isOpen,
+  products,
+  search,
+  isLoading,
+  errorMessage,
+  runtimeContext,
+  onSearchChange,
+  onSelect,
+  onClear,
+  onClose,
+}: {
+  isOpen: boolean;
+  products: ProductFilterItem[];
+  search: string;
+  isLoading: boolean;
+  errorMessage: string | null;
+  runtimeContext: ReturnType<typeof useFinanceRuntimeContext>;
+  onSearchChange: (value: string) => void;
+  onSelect: (product: ProductFilterItem) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <AuditedPopupShell
+      isOpen={isOpen}
+      screenId={PRODUCT_FILTER_POPUP_SCREEN_ID}
+      title="Escolher produto"
+      eyebrow="Filtro do histórico"
+      description="Selecione um único produto para filtrar as movimentações de estoque."
+      brandingName={runtimeContext.companyName}
+      logoUrl={runtimeContext.logoUrl}
+      originText={PRODUCT_FILTER_POPUP_ORIGIN_TEXT}
+      auditText={`--- LOGICA DO POPUP ---
+Este popup lista produtos da empresa/filial atual para escolher um unico produto como filtro do historico de movimentacao.
+
+TABELAS PRINCIPAIS:
+- products (PR) - cadastro financeiro generico de produtos
+- stock_movements (SM) - movimentos filtrados pelo produto selecionado na tela principal
+
+FILTROS APLICADOS:
+- sourceSystem: ${formatAuditValue(runtimeContext.sourceSystem)}
+- sourceTenantId: ${formatTenantAuditValue(runtimeContext.sourceTenantId)}
+- sourceBranchCode: ${formatAuditValue(runtimeContext.sourceBranchCode, '1')}
+- busca do popup: ${formatAuditValue(search.trim().toUpperCase())}`}
+      sqlText={`SELECT
+  PR.id,
+  PR.name,
+  PR.internalCode,
+  PR.barcode,
+  PR.unitCode
+FROM products PR
+JOIN companies CO ON CO.id = PR.companyId
+WHERE CO.sourceSystem = ${toSqlLiteral(runtimeContext.sourceSystem || '')}
+  AND CO.sourceTenantId = ${toSqlLiteral(runtimeContext.sourceTenantId || '')}
+  AND PR.canceledAt IS NULL
+  AND (
+    ${toSqlLiteral(search.trim().toUpperCase())} = ''
+    OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(search.trim().toUpperCase())}) || '%'
+    OR UPPER(COALESCE(PR.internalCode, '')) LIKE '%' || UPPER(${toSqlLiteral(search.trim().toUpperCase())}) || '%'
+    OR UPPER(COALESCE(PR.barcode, '')) LIKE '%' || UPPER(${toSqlLiteral(search.trim().toUpperCase())}) || '%'
+  )
+ORDER BY PR.name ASC;`}
+      onClose={onClose}
+      panelClassName="max-w-5xl"
+      bodyClassName="p-5"
+      footerActions={
+        <button
+          type="button"
+          onClick={onClear}
+          className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+        >
+          Limpar produto
+        </button>
+      }
+    >
+      <div className="grid gap-4">
+        <input
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Pesquisar produto por nome, código ou código de barras"
+          className={FINANCE_GRID_PAGE_LAYOUT.input}
+        />
+
+        {errorMessage ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="max-h-[48vh] overflow-y-auto rounded-2xl border border-slate-200">
+          {isLoading ? (
+            <div className="px-5 py-8 text-center text-sm font-black uppercase tracking-[0.14em] text-slate-500">
+              Carregando produtos...
+            </div>
+          ) : null}
+
+          {!isLoading && !products.length ? (
+            <div className="px-5 py-8 text-center text-sm font-semibold text-slate-500">
+              Nenhum produto localizado para os filtros informados.
+            </div>
+          ) : null}
+
+          {products.map((product) => (
+            <button
+              key={product.id}
+              type="button"
+              onClick={() => onSelect(product)}
+              className="flex w-full items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 text-left transition last:border-b-0 hover:bg-emerald-50"
+            >
+              <div>
+                <div className="font-black uppercase tracking-[0.08em] text-slate-900">
+                  {product.name}
+                </div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {[product.internalCode, product.barcode, product.unitCode]
+                    .filter(Boolean)
+                    .join(' | ') || 'SEM CODIGO'}
+                </div>
+              </div>
+              <span className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white shadow-sm">
+                Selecionar
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </AuditedPopupShell>
+  );
+}
+
 export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [movements, setMovements] = useState<StockMovementItem[]>([]);
+  const [products, setProducts] = useState<ProductFilterItem[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<ProductFilterItem | null>(null);
   const [movementTypeFilter, setMovementTypeFilter] = useState<MovementTypeFilter>('ALL');
+  const [selectedMovementId, setSelectedMovementId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isProductLoading, setIsProductLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [productErrorMessage, setProductErrorMessage] = useState<string | null>(null);
   const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
@@ -516,6 +675,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
         `/products/stock-movements${buildFinanceApiQueryString(runtimeContext, {
           search: appliedSearch,
           movementType: movementTypeFilter,
+          productId: selectedProduct?.id || null,
           sourceBranchCode: runtimeContext.sourceBranchCode,
         })}`,
       );
@@ -527,11 +687,47 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [appliedSearch, movementTypeFilter, runtimeContext]);
+  }, [appliedSearch, movementTypeFilter, runtimeContext, selectedProduct?.id]);
+
+  const loadProducts = useCallback(async () => {
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId || !isProductModalOpen) {
+      setProducts([]);
+      return;
+    }
+
+    setIsProductLoading(true);
+    setProductErrorMessage(null);
+
+    try {
+      const data = await getJson<ProductFilterItem[]>(
+        `/products${buildFinanceApiQueryString(runtimeContext, {
+          search: productSearch.trim(),
+          status: 'ACTIVE',
+          sourceBranchCode: runtimeContext.sourceBranchCode,
+        })}`,
+      );
+      setProducts(data);
+    } catch (error) {
+      setProductErrorMessage(
+        getFriendlyRequestErrorMessage(error, 'Não foi possível carregar os produtos.'),
+      );
+    } finally {
+      setIsProductLoading(false);
+    }
+  }, [isProductModalOpen, productSearch, runtimeContext]);
 
   useEffect(() => {
     void loadMovements();
   }, [loadMovements]);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedMovementId(null);
+  }, [appliedSearch, movementTypeFilter, selectedProduct?.id]);
 
   const activeColumns = useMemo(
     () =>
@@ -552,6 +748,8 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       sourceTenantId: runtimeContext.sourceTenantId,
       sourceBranchCode: runtimeContext.sourceBranchCode,
       search: appliedSearch,
+      selectedProductId: selectedProduct?.id,
+      selectedProductName: selectedProduct?.name,
       movementType: movementTypeFilter,
       displayedRowsCount: movements.length,
     };
@@ -567,19 +765,39 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
     runtimeContext.sourceBranchCode,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
+    selectedProduct?.id,
+    selectedProduct?.name,
   ]);
 
-  const showClearSearchButton = Boolean(searchInput.trim() || appliedSearch.trim());
+  const showClearSearchButton = Boolean(
+    searchInput.trim() || appliedSearch.trim() || selectedProduct,
+  );
+  const totalPages = Math.max(1, Math.ceil(movements.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedMovements = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return movements.slice(start, start + pageSize);
+  }, [movements, pageSize, safeCurrentPage]);
+
+  useEffect(() => {
+    if (currentPage !== safeCurrentPage) {
+      setCurrentPage(safeCurrentPage);
+    }
+  }, [currentPage, safeCurrentPage]);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.min(Math.max(1, page), totalPages));
+  };
 
   return (
-    <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
+    <div className="flex h-[calc(100vh-1.5rem)] min-h-0 flex-col gap-4">
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
             setAppliedSearch(searchInput.trim());
           }}
-          className="grid gap-4 xl:grid-cols-[1fr_auto_auto]"
+          className="grid gap-4 xl:grid-cols-[1fr_auto_auto_auto]"
         >
           <input
             value={searchInput}
@@ -592,12 +810,21 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
             Pesquisar
           </button>
 
+          <button
+            type="button"
+            onClick={() => setIsProductModalOpen(true)}
+            className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-sm transition hover:bg-emerald-700"
+          >
+            Produto
+          </button>
+
           {showClearSearchButton ? (
             <button
               type="button"
               onClick={() => {
                 setSearchInput('');
                 setAppliedSearch('');
+                setSelectedProduct(null);
               }}
               className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
             >
@@ -608,6 +835,12 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
           )}
         </form>
 
+        {selectedProduct ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-emerald-800">
+            Produto filtrado: {selectedProduct.name}
+          </div>
+        ) : null}
+
         {errorMessage ? (
           <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
             {errorMessage}
@@ -615,8 +848,8 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
         ) : null}
       </section>
 
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
-        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex min-h-0 flex-1 flex-col overflow-hidden`}>
+        <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-6 py-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
@@ -632,9 +865,9 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-white">
+            <thead className="sticky top-0 z-20 bg-white shadow-[0_1px_0_rgba(148,163,184,0.35)]">
               <tr>
                 {activeColumns.map((column) => (
                   <th
@@ -660,60 +893,74 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
                 </tr>
               ) : null}
 
-              {movements.map((movement) => (
-                <tr key={movement.id} className="hover:bg-slate-50/70">
-                  {activeColumns.map((column) => {
-                    if (column.key === 'product') {
+              {paginatedMovements.map((movement, rowIndex) => {
+                const isSelected = selectedMovementId === movement.id;
+                const zebraClass = rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-200/70';
+
+                return (
+                  <tr
+                    key={movement.id}
+                    aria-selected={isSelected}
+                    onClick={() => setSelectedMovementId(movement.id)}
+                    className={`cursor-pointer transition ${
+                      isSelected
+                        ? 'bg-blue-100 outline outline-2 -outline-offset-2 outline-blue-400'
+                        : `${zebraClass} hover:bg-slate-300/70`
+                    }`}
+                  >
+                    {activeColumns.map((column) => {
+                      if (column.key === 'product') {
+                        return (
+                          <td key={column.key} className="px-4 py-4 align-top">
+                            <div className="font-black uppercase tracking-[0.08em] text-slate-900">
+                              {movement.productName}
+                            </div>
+                            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              {movement.productInternalCode || movement.productBarcode || '---'}
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      if (column.key === 'movementType') {
+                        const isEntry = movement.movementType === 'ENTRY';
+                        const isExit = movement.movementType === 'EXIT';
+                        return (
+                          <td key={column.key} className="px-4 py-4 align-top">
+                            <span
+                              className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
+                                isEntry
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : isExit
+                                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                                    : 'border-amber-200 bg-amber-50 text-amber-700'
+                              }`}
+                            >
+                              {movement.movementTypeLabel}
+                            </span>
+                          </td>
+                        );
+                      }
+
                       return (
-                        <td key={column.key} className="px-4 py-4 align-top">
-                          <div className="font-black uppercase tracking-[0.08em] text-slate-900">
-                            {movement.productName}
-                          </div>
-                          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            {movement.productInternalCode || movement.productBarcode || '---'}
-                          </div>
+                        <td
+                          key={column.key}
+                          className={`px-4 py-4 align-top text-sm font-semibold text-slate-700 ${
+                            column.align === 'right' ? 'text-right' : 'text-left'
+                          }`}
+                        >
+                          {column.getValue(movement)}
                         </td>
                       );
-                    }
-
-                    if (column.key === 'movementType') {
-                      const isEntry = movement.movementType === 'ENTRY';
-                      const isExit = movement.movementType === 'EXIT';
-                      return (
-                        <td key={column.key} className="px-4 py-4 align-top">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${
-                              isEntry
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : isExit
-                                  ? 'border-rose-200 bg-rose-50 text-rose-700'
-                                  : 'border-amber-200 bg-amber-50 text-amber-700'
-                            }`}
-                          >
-                            {movement.movementTypeLabel}
-                          </span>
-                        </td>
-                      );
-                    }
-
-                    return (
-                      <td
-                        key={column.key}
-                        className={`px-4 py-4 align-top text-sm font-semibold text-slate-700 ${
-                          column.align === 'right' ? 'text-right' : 'text-left'
-                        }`}
-                      >
-                        {column.getValue(movement)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
-        <div className="grid gap-4 border-t border-slate-200 px-6 py-4 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
+        <div className="grid shrink-0 gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -789,10 +1036,69 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
             })}
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="text-right text-sm font-black uppercase tracking-[0.14em] text-slate-700">
-              Registros exibidos ({movements.length})
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm">
+              Total registros: <span className="ml-1 text-blue-700">{movements.length}</span>
             </div>
+            <select
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-600 outline-none"
+              aria-label="Quantidade por página"
+              title="Quantidade por página"
+            >
+              {[10, 20, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => goToPage(1)}
+              disabled={safeCurrentPage <= 1}
+              className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 disabled:opacity-40"
+              aria-label="Primeira página"
+              title="Primeira página"
+            >
+              &lt;&lt;
+            </button>
+            <button
+              type="button"
+              onClick={() => goToPage(safeCurrentPage - 1)}
+              disabled={safeCurrentPage <= 1}
+              className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 disabled:opacity-40"
+              aria-label="Página anterior"
+              title="Página anterior"
+            >
+              &lt;
+            </button>
+            <div className="min-w-20 text-center text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+              {safeCurrentPage}/{totalPages}
+            </div>
+            <button
+              type="button"
+              onClick={() => goToPage(safeCurrentPage + 1)}
+              disabled={safeCurrentPage >= totalPages}
+              className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 disabled:opacity-40"
+              aria-label="Próxima página"
+              title="Próxima página"
+            >
+              &gt;
+            </button>
+            <button
+              type="button"
+              onClick={() => goToPage(totalPages)}
+              disabled={safeCurrentPage >= totalPages}
+              className="h-8 min-w-8 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 disabled:opacity-40"
+              aria-label="Última página"
+              title="Última página"
+            >
+              &gt;&gt;
+            </button>
             {!runtimeContext.embedded ? (
               <ScreenNameCopy
                 screenId={SCREEN_ID}
@@ -816,6 +1122,26 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
           writeStoredGridConfig(getMovementGridStorageKey(runtimeContext.sourceTenantId), order, hidden);
         }}
         onClose={() => setIsColumnConfigOpen(false)}
+      />
+
+      <ProductFilterModal
+        isOpen={isProductModalOpen}
+        products={products}
+        search={productSearch}
+        isLoading={isProductLoading}
+        errorMessage={productErrorMessage}
+        runtimeContext={runtimeContext}
+        onSearchChange={setProductSearch}
+        onSelect={(product) => {
+          setSelectedProduct(product);
+          setIsProductModalOpen(false);
+        }}
+        onClear={() => {
+          setSelectedProduct(null);
+          setProductSearch('');
+          setIsProductModalOpen(false);
+        }}
+        onClose={() => setIsProductModalOpen(false)}
       />
 
       <GridExportModal

@@ -495,6 +495,41 @@ function getSefazRetryAt(certificate: FiscalCertificateItem) {
   return new Date(lastSyncDate.getTime() + 60 * 60 * 1000);
 }
 
+function normalizeSefazMessage(message?: string | null) {
+  return String(message || '')
+    .replace(/\bRejeicao\b/gi, 'Rejeição')
+    .replace(/\bsolicitacoes\b/gi, 'solicitações')
+    .replace(/\bapos\b/gi, 'após')
+    .replace(/\bultNSU\b/g, 'ultNSU')
+    .trim();
+}
+
+function formatSefazNsu(value?: string | null) {
+  const normalized = String(value || '').trim();
+  return normalized || 'NÃO INFORMADO';
+}
+
+function buildSefazConsumptionBlockedMessage(
+  certificate: FiscalCertificateItem,
+  retryAt: Date,
+) {
+  const lastSyncAt = certificate.lastSyncAt
+    ? buildDateTimeLabel(new Date(certificate.lastSyncAt))
+    : 'DATA NÃO INFORMADA';
+  const status = certificate.lastSyncStatus || '656';
+  const sefazMessage =
+    normalizeSefazMessage(certificate.lastSyncMessage) ||
+    'Rejeição: Consumo Indevido. Deve ser utilizado o ultNSU nas solicitações subsequentes. Tente após 1 hora.';
+
+  return `A SEFAZ bloqueou temporariamente novas consultas para este certificado por consumo indevido.
+
+Última sincronização: ${lastSyncAt} • status ${status} • ${sefazMessage}
+
+Último NSU: ${formatSefazNsu(certificate.lastNsu)} • Máximo NSU: ${formatSefazNsu(certificate.lastMaxNsu)}
+
+Para evitar renovar o bloqueio, esta tentativa foi interrompida antes de consultar a SEFAZ. Tente novamente a partir de ${buildDateTimeLabel(retryAt)}.`;
+}
+
 function SefazSyncProgressModal({
   state,
   logoUrl,
@@ -574,7 +609,7 @@ function SefazSyncProgressModal({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-600">
+          <div className="whitespace-pre-line rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold leading-6 text-slate-600">
             {state.message}
           </div>
 
@@ -2017,8 +2052,7 @@ export default function FinanceiroImportacaoNotasPage() {
           certificateAlias: certificate.aliasName,
           searchedDateLabel: buildTodaySearchLabel(),
           foundNotes: 0,
-          message:
-            'A SEFAZ pediu aguardo de 1 hora antes da próxima consulta. Esta tentativa foi bloqueada localmente para evitar consumo indevido.',
+          message: buildSefazConsumptionBlockedMessage(certificate, retryAt),
           mode: historical ? 'historical' : 'standard',
           retryAtLabel: buildDateTimeLabel(retryAt),
         });
@@ -2073,10 +2107,16 @@ export default function FinanceiroImportacaoNotasPage() {
         setSefazSyncModal((current) => ({
           ...current,
           isOpen: true,
-          phase: 'success',
+          phase: response.statusCode === '656' ? 'warning' : 'success',
           foundNotes: response.importedNotes + response.duplicateNotes,
           message:
-            response.importedNotes > 0
+            response.statusCode === '656'
+              ? `A SEFAZ bloqueou temporariamente novas consultas para este certificado por consumo indevido.
+
+Status ${response.statusCode} • ${normalizeSefazMessage(response.statusMessage || response.message)}
+
+Aguarde a janela indicada antes de tentar novamente.`
+              : response.importedNotes > 0
               ? `${response.message} Importação concluída com sucesso.`
               : response.message,
           retryAtLabel:
@@ -2920,6 +2960,10 @@ export default function FinanceiroImportacaoNotasPage() {
                               Última sincronização: {formatDateLabel(certificate.lastSyncAt || null)}
                               {certificate.lastSyncStatus ? ` • status ${certificate.lastSyncStatus}` : ''}
                               {certificate.lastSyncMessage ? ` • ${certificate.lastSyncMessage}` : ''}
+                            </span>
+                            <span>
+                              NSU: {formatSefazNsu(certificate.lastNsu)}
+                              {certificate.lastMaxNsu ? ` / máx. ${formatSefazNsu(certificate.lastMaxNsu)}` : ''}
                             </span>
                           </div>
                         </div>

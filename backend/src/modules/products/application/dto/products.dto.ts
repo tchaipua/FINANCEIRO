@@ -90,6 +90,10 @@ export class ListStockMovementsDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)

@@ -56,6 +56,7 @@ type CashMovementModalState = {
   direction: 'IN' | 'OUT';
   title: string;
   amountInput: string;
+  confirmAmountInput: string;
   notes: string;
   feedback?: {
     type: 'success' | 'error';
@@ -286,6 +287,10 @@ function parseCurrencyInput(value: string) {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
+function isSameCurrencyAmount(firstAmount: number, secondAmount: number) {
+  return Math.round(firstAmount * 100) === Math.round(secondAmount * 100);
+}
+
 function canCancelMovement(
   movement: CashSessionDetail['movements'][number],
   canceledMovementIds?: Set<string>,
@@ -393,6 +398,32 @@ function wasCloseCashSessionOpenedFromGrid() {
   );
 }
 
+function getRequestedCashMovementFromUrl() {
+  if (typeof window === 'undefined') return null;
+
+  const requestedMovement = String(
+    new URLSearchParams(window.location.search).get('openCashMovement') || '',
+  ).toLowerCase();
+
+  if (requestedMovement === 'entry') {
+    return {
+      movementType: 'ENTRY' as const,
+      direction: 'IN' as const,
+      title: 'Entrada dinheiro',
+    };
+  }
+
+  if (requestedMovement === 'exit') {
+    return {
+      movementType: 'EXIT' as const,
+      direction: 'OUT' as const,
+      title: 'Saída dinheiro',
+    };
+  }
+
+  return null;
+}
+
 export default function FinanceiroCashDetailPage() {
   const params = useParams<{ sessionId: string }>();
   const runtimeContext = useFinanceRuntimeContext();
@@ -402,6 +433,7 @@ export default function FinanceiroCashDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingCashMovement, setIsSavingCashMovement] = useState(false);
   const [cashMovementModal, setCashMovementModal] = useState<CashMovementModalState | null>(null);
+  const [cashMovementConfirmation, setCashMovementConfirmation] = useState<{ amount: number } | null>(null);
   const [cancelMovementModal, setCancelMovementModal] = useState<CancelMovementModalState | null>(null);
   const [closeCashSessionModal, setCloseCashSessionModal] = useState<CloseCashSessionModalState | null>(null);
   const [isCancelingMovement, setIsCancelingMovement] = useState(false);
@@ -411,6 +443,7 @@ export default function FinanceiroCashDetailPage() {
   const [auditCopyStatus, setAuditCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [autoCloseCashSessionPopupOpened, setAutoCloseCashSessionPopupOpened] = useState(false);
+  const [autoCashMovementPopupOpened, setAutoCashMovementPopupOpened] = useState(false);
   const cashierDisplayName = useMemo(
     () =>
       normalizeFinanceDisplayText(session?.cashierDisplayName) ||
@@ -815,23 +848,79 @@ export default function FinanceiroCashDetailPage() {
       direction,
       title,
       amountInput: '',
+      confirmAmountInput: '',
       notes: '',
       feedback: null,
     });
+    setCashMovementConfirmation(null);
   }
 
-  async function handleSaveCashMovement() {
+  useEffect(() => {
+    if (autoCashMovementPopupOpened || !session || isLoading) return;
+
+    const requestedMovement = getRequestedCashMovementFromUrl();
+    if (!requestedMovement) return;
+
+    setAutoCashMovementPopupOpened(true);
+    handleOpenCashMovementModal(
+      requestedMovement.movementType,
+      requestedMovement.direction,
+      requestedMovement.title,
+    );
+  }, [autoCashMovementPopupOpened, isLoading, session]);
+
+  function showCashMovementFeedback(type: 'success' | 'error', message: string) {
+    setError(null);
+    setCashMovementConfirmation(null);
+    setCashMovementModal((current) => current ? {
+      ...current,
+      feedback: {
+        type,
+        message,
+      },
+    } : current);
+  }
+
+  function handleRequestSaveCashMovement() {
     if (!session || !cashMovementModal || isSavingCashMovement) return;
 
     const parsedAmount = parseCurrencyInput(cashMovementModal.amountInput);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setError('Informe um valor maior que zero para o movimento do caixa.');
+      showCashMovementFeedback('error', 'Informe um valor maior que zero para o movimento do caixa.');
       return;
     }
+
+    if (cashMovementModal.movementType !== 'ADJUSTMENT') {
+      const parsedConfirmAmount = parseCurrencyInput(cashMovementModal.confirmAmountInput);
+      if (!Number.isFinite(parsedConfirmAmount) || parsedConfirmAmount <= 0) {
+        showCashMovementFeedback('error', 'Confirme o valor do movimento antes de continuar.');
+        return;
+      }
+
+      if (!isSameCurrencyAmount(parsedAmount, parsedConfirmAmount)) {
+        showCashMovementFeedback(
+          'error',
+          'O valor informado e o valor de confirmação precisam ser iguais.',
+        );
+        return;
+      }
+
+      setError(null);
+      setCashMovementModal((current) => current ? { ...current, feedback: null } : current);
+      setCashMovementConfirmation({ amount: parsedAmount });
+      return;
+    }
+
+    void handleSaveCashMovement(parsedAmount);
+  }
+
+  async function handleSaveCashMovement(parsedAmount: number) {
+    if (!session || !cashMovementModal || isSavingCashMovement) return;
 
     try {
       setIsSavingCashMovement(true);
       setError(null);
+      setCashMovementConfirmation(null);
       const updatedSession = await requestJson<CashSessionDetail>('/cash-sessions/current/movements', {
         method: 'POST',
         body: JSON.stringify({
@@ -846,15 +935,10 @@ export default function FinanceiroCashDetailPage() {
         fallbackMessage: 'Não foi possível lançar o movimento no caixa.',
       });
       setSession(updatedSession);
-      setCashMovementModal((current) => current ? {
-        ...current,
-        feedback: {
-          type: 'success',
-          message: `${current.title} lançado com sucesso.`,
-        },
-      } : current);
+      showCashMovementFeedback('success', `${cashMovementModal.title} lançado com sucesso.`);
     } catch (currentError) {
-      setError(
+      showCashMovementFeedback(
+        'error',
         getFriendlyRequestErrorMessage(
           currentError,
           'Não foi possível lançar o movimento no caixa.',
@@ -863,6 +947,11 @@ export default function FinanceiroCashDetailPage() {
     } finally {
       setIsSavingCashMovement(false);
     }
+  }
+
+  function handleConfirmSaveCashMovement() {
+    if (!cashMovementConfirmation) return;
+    void handleSaveCashMovement(cashMovementConfirmation.amount);
   }
 
   function handleOpenCancelMovementModal(movement: CashSessionDetail['movements'][number]) {
@@ -1458,7 +1547,11 @@ export default function FinanceiroCashDetailPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => !isSavingCashMovement && setCashMovementModal(null)}
+                  onClick={() => {
+                    if (isSavingCashMovement) return;
+                    setCashMovementConfirmation(null);
+                    setCashMovementModal(null);
+                  }}
                   className="rounded-full bg-white/15 px-3 py-2 text-sm font-black text-white shadow-sm hover:bg-white/25"
                 >
                   ×
@@ -1485,7 +1578,10 @@ export default function FinanceiroCashDetailPage() {
                 <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Valor</span>
                 <input
                   value={cashMovementModal.amountInput}
-                  onChange={(event) => setCashMovementModal((current) => current ? { ...current, amountInput: event.target.value } : current)}
+                  onChange={(event) => {
+                    setCashMovementConfirmation(null);
+                    setCashMovementModal((current) => current ? { ...current, amountInput: event.target.value, feedback: null } : current);
+                  }}
                   inputMode="decimal"
                   className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
                   placeholder="0,00"
@@ -1493,11 +1589,27 @@ export default function FinanceiroCashDetailPage() {
                 />
               </label>
 
+              {cashMovementModal.movementType !== 'ADJUSTMENT' ? (
+                <label>
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Confirmar valor</span>
+                  <input
+                    value={cashMovementModal.confirmAmountInput}
+                    onChange={(event) => {
+                      setCashMovementConfirmation(null);
+                      setCashMovementModal((current) => current ? { ...current, confirmAmountInput: event.target.value, feedback: null } : current);
+                    }}
+                    inputMode="decimal"
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
+                    placeholder="0,00"
+                  />
+                </label>
+              ) : null}
+
               <label>
                 <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Observação</span>
                 <textarea
                   value={cashMovementModal.notes}
-                  onChange={(event) => setCashMovementModal((current) => current ? { ...current, notes: event.target.value } : current)}
+                  onChange={(event) => setCashMovementModal((current) => current ? { ...current, notes: event.target.value, feedback: null } : current)}
                   className="min-h-28 w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white"
                   placeholder="OBSERVAÇÃO DO LANÇAMENTO"
                 />
@@ -1508,7 +1620,10 @@ export default function FinanceiroCashDetailPage() {
               <div className="flex flex-wrap justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setCashMovementModal(null)}
+                  onClick={() => {
+                    setCashMovementConfirmation(null);
+                    setCashMovementModal(null);
+                  }}
                   disabled={isSavingCashMovement}
                   className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"
                 >
@@ -1516,19 +1631,72 @@ export default function FinanceiroCashDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleSaveCashMovement()}
+                  onClick={handleRequestSaveCashMovement}
                   disabled={isSavingCashMovement}
                   className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
                 >
-                  {isSavingCashMovement ? 'Salvando...' : 'Salvar movimento'}
+                  {isSavingCashMovement
+                    ? 'Salvando...'
+                    : cashMovementModal.movementType === 'ADJUSTMENT'
+                      ? 'Salvar movimento'
+                      : 'Confirmar movimento'}
                 </button>
               </div>
             </div>
 
+            {cashMovementConfirmation ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/45 p-5 backdrop-blur-sm">
+                <div className="w-full max-w-sm overflow-hidden rounded-[28px] border border-blue-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.38)]">
+                  <div className="bg-blue-700 px-5 py-5 text-white">
+                    <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-100">
+                      Confirmar valor
+                    </div>
+                    <div className="mt-1 text-xl font-black">
+                      {cashMovementModal.title}
+                    </div>
+                  </div>
+                  <div className="px-5 py-5">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                        Valor do movimento
+                      </div>
+                      <div className={`mt-1 text-3xl font-black ${getMovementAmountTone(cashMovementModal.direction)}`}>
+                        {formatCurrency(cashMovementConfirmation.amount)}
+                      </div>
+                    </div>
+                    <div className="mt-5 flex flex-wrap justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCashMovementConfirmation(null)}
+                        disabled={isSavingCashMovement}
+                        className="rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-slate-600 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"
+                      >
+                        Voltar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmSaveCashMovement}
+                        disabled={isSavingCashMovement}
+                        className="rounded-2xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
+                      >
+                        {isSavingCashMovement ? 'Salvando...' : 'Confirmar valor'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {cashMovementModal.feedback ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/45 p-5 backdrop-blur-sm">
-                <div className="w-full max-w-sm overflow-hidden rounded-[28px] border border-emerald-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.38)]">
-                  <div className="bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-5 text-white">
+                <div className={`w-full max-w-sm overflow-hidden rounded-[28px] border bg-white shadow-[0_24px_70px_rgba(15,23,42,0.38)] ${
+                  cashMovementModal.feedback.type === 'success' ? 'border-emerald-200' : 'border-rose-200'
+                }`}>
+                  <div className={`px-5 py-5 text-white ${
+                    cashMovementModal.feedback.type === 'success'
+                      ? 'bg-gradient-to-r from-emerald-600 to-cyan-600'
+                      : 'bg-gradient-to-r from-rose-600 to-red-600'
+                  }`}>
                     <div className="flex items-center gap-3">
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white shadow-md">
                         {runtimeContext.logoUrl ? (
@@ -1543,11 +1711,13 @@ export default function FinanceiroCashDetailPage() {
                         )}
                       </div>
                       <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-100">
-                          Sucesso
+                        <div className={`text-[10px] font-black uppercase tracking-[0.24em] ${
+                          cashMovementModal.feedback.type === 'success' ? 'text-emerald-100' : 'text-rose-100'
+                        }`}>
+                          {cashMovementModal.feedback.type === 'success' ? 'Sucesso' : 'Atenção'}
                         </div>
                         <div className="mt-1 text-xl font-black">
-                          Movimento lançado
+                          {cashMovementModal.feedback.type === 'success' ? 'Movimento lançado' : 'Confira os valores'}
                         </div>
                       </div>
                     </div>
@@ -1559,10 +1729,21 @@ export default function FinanceiroCashDetailPage() {
                     <div className="mt-5 flex justify-end">
                       <button
                         type="button"
-                        onClick={() => setCashMovementModal(null)}
-                        className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
+                        onClick={() => {
+                          if (cashMovementModal.feedback?.type === 'success') {
+                            setCashMovementModal(null);
+                            return;
+                          }
+
+                          setCashMovementModal((current) => current ? { ...current, feedback: null } : current);
+                        }}
+                        className={`rounded-2xl px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg transition ${
+                          cashMovementModal.feedback.type === 'success'
+                            ? 'bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700'
+                            : 'bg-rose-600 shadow-rose-600/20 hover:bg-rose-700'
+                        }`}
                       >
-                        Fechar
+                        {cashMovementModal.feedback.type === 'success' ? 'Fechar' : 'Voltar'}
                       </button>
                     </div>
                   </div>

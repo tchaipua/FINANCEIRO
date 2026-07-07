@@ -698,6 +698,7 @@ export class ProductsService {
     const normalizedSearch = normalizeText(query.search);
     const normalizedDigits = normalizeDigits(query.search);
     const normalizedMovementType = normalizeText(query.movementType);
+    const normalizedProductId = String(query.productId || "").trim();
     const requestedBranchCode =
       Number.isInteger(query.sourceBranchCode) && Number(query.sourceBranchCode) >= 0
         ? Number(query.sourceBranchCode)
@@ -711,6 +712,7 @@ export class ProductsService {
         ...(normalizedMovementType && normalizedMovementType !== "ALL"
           ? { movementType: normalizedMovementType }
           : {}),
+        ...(normalizedProductId ? { productId: normalizedProductId } : {}),
         ...(normalizedSearch
           ? {
               OR: [

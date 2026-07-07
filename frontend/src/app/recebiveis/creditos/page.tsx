@@ -42,6 +42,7 @@ type CreditGridColumnKey =
   | 'customerDocument'
   | 'originalAmount'
   | 'availableAmount'
+  | 'sourceType'
   | 'status'
   | 'createdAt'
   | 'createdBy'
@@ -76,6 +77,7 @@ const CREDIT_GRID_COLUMNS: GridColumnDefinition<CustomerCreditItem, CreditGridCo
   { key: 'customerDocument', label: 'Documento', getValue: (item) => item.customerDocument || '---' },
   { key: 'originalAmount', label: 'Gerado', getValue: (item) => formatCurrency(item.originalAmount), align: 'right' },
   { key: 'availableAmount', label: 'Disponível', getValue: (item) => formatCurrency(item.availableAmount), align: 'right' },
+  { key: 'sourceType', label: 'Origem', getValue: (item) => getCreditSourceTypeLabel(item.sourceType) },
   { key: 'status', label: 'Status', getValue: (item) => getCreditStatusLabel(item.status) },
   { key: 'createdAt', label: 'Data', getValue: (item) => formatDateLabel(item.createdAt) },
   { key: 'createdBy', label: 'Usuário', getValue: (item) => item.createdBy || '---' },
@@ -87,11 +89,14 @@ const DEFAULT_GRID_CONFIG: CreditGridConfig = {
   hidden: ['createdBy', 'notes'],
 };
 
+const DEFAULT_GRID_SORT: CreditGridSort = { key: 'createdAt', direction: 'DESC' };
+
 const DEFAULT_FILTERS: CreditGridFilters = {
   customerName: '',
   customerDocument: '',
   originalAmount: '',
   availableAmount: '',
+  sourceType: '',
   status: '',
   createdAt: '',
   createdBy: '',
@@ -188,6 +193,18 @@ function getCreditStatusLabel(status: string) {
   return status || '---';
 }
 
+function getCreditSourceTypeLabel(sourceType: string) {
+  if (sourceType === 'SALE_RETURN') return 'DEVOLUÇÃO DE MERCADORIA';
+  if (sourceType === 'MANUAL') return 'LANÇAMENTO MANUAL';
+  return sourceType || '---';
+}
+
+function getCreditSourceTypeClass(sourceType: string) {
+  if (sourceType === 'SALE_RETURN') return 'border-blue-200 bg-blue-50 text-blue-700';
+  if (sourceType === 'MANUAL') return 'border-slate-200 bg-slate-50 text-slate-700';
+  return 'border-amber-200 bg-amber-50 text-amber-800';
+}
+
 function getCreditStatusClass(status: string) {
   if (status === 'OPEN') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   if (status === 'USED') return 'border-amber-200 bg-amber-50 text-amber-800';
@@ -200,6 +217,7 @@ function getCreditColumnValue(item: CustomerCreditItem, key: CreditGridColumnKey
   if (key === 'customerDocument') return item.customerDocument || '';
   if (key === 'originalAmount') return formatCurrency(item.originalAmount);
   if (key === 'availableAmount') return formatCurrency(item.availableAmount);
+  if (key === 'sourceType') return getCreditSourceTypeLabel(item.sourceType);
   if (key === 'status') return getCreditStatusLabel(item.status);
   if (key === 'createdAt') return formatDateLabel(item.createdAt);
   if (key === 'createdBy') return item.createdBy || '';
@@ -295,9 +313,13 @@ function GridConfigModal({
 }) {
   const [draftOrder, setDraftOrder] = useState<CreditGridColumnKey[]>(order);
   const [draftHidden, setDraftHidden] = useState<CreditGridColumnKey[]>(hidden);
+  const [activeColumnKey, setActiveColumnKey] = useState<CreditGridColumnKey | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setActiveColumnKey(null);
+      return;
+    }
     setDraftOrder(order);
     setDraftHidden(hidden);
   }, [hidden, isOpen, order]);
@@ -307,6 +329,23 @@ function GridConfigModal({
   const orderedColumns = draftOrder
     .map((key) => columns.find((column) => column.key === key))
     .filter((column): column is GridColumnDefinition<CustomerCreditItem, CreditGridColumnKey> => Boolean(column));
+  const visibleCount = draftOrder.filter((columnKey) => !draftHidden.includes(columnKey)).length;
+
+  const moveColumnToIndex = (columnKey: CreditGridColumnKey, targetIndex: number) => {
+    const currentIndex = draftOrder.indexOf(columnKey);
+    if (currentIndex === -1 || currentIndex === targetIndex) return;
+    setDraftOrder((current) => moveArrayItem(current, currentIndex, targetIndex));
+    setActiveColumnKey(columnKey);
+  };
+
+  const toggleColumnVisibility = (columnKey: CreditGridColumnKey) => {
+    setDraftHidden((current) =>
+      current.includes(columnKey)
+        ? current.filter((key) => key !== columnKey)
+        : [...current, columnKey],
+    );
+    setActiveColumnKey(columnKey);
+  };
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
@@ -323,54 +362,57 @@ function GridConfigModal({
           </button>
         </div>
         <div className={FINANCE_GRID_PAGE_LAYOUT.modalBody}>
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
-            Use as setas para organizar a ordem e ligue/desligue as colunas visíveis.
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-sm font-black text-slate-700">
+                  Colunas visíveis: {visibleCount}
+                </div>
+                <div className="text-xs font-semibold text-slate-500">
+                  Reordene, oculte ou inclua colunas do grid nesta tela.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftOrder(DEFAULT_GRID_CONFIG.order);
+                  setDraftHidden(DEFAULT_GRID_CONFIG.hidden);
+                  setActiveColumnKey(null);
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Restaurar padrão
+              </button>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="space-y-2">
               {orderedColumns.map((column, index) => {
                 const isHidden = draftHidden.includes(column.key);
+                const isActive = activeColumnKey === column.key;
 
                 return (
                   <div
                     key={column.key}
+                    onClick={() => setActiveColumnKey(column.key)}
                     className={`${FINANCE_GRID_PAGE_LAYOUT.modalListItem} ${
-                      isHidden
-                        ? FINANCE_GRID_PAGE_LAYOUT.modalInactiveItem
-                        : FINANCE_GRID_PAGE_LAYOUT.modalActiveItem
+                      isActive
+                        ? FINANCE_GRID_PAGE_LAYOUT.modalActiveItem
+                        : FINANCE_GRID_PAGE_LAYOUT.modalInactiveItem
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="text-sm font-black text-slate-900">{column.label}</div>
-                      <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                        {index + 1}º coluna
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-4">
                       <button
                         type="button"
-                        onClick={() => setDraftOrder((current) => moveArrayItem(current, index, index - 1))}
-                        disabled={index === 0}
-                        className="h-9 w-9 rounded-full border border-slate-300 bg-white text-sm font-black text-slate-600 disabled:opacity-40"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDraftOrder((current) => moveArrayItem(current, index, index + 1))}
-                        disabled={index === orderedColumns.length - 1}
-                        className="h-9 w-9 rounded-full border border-slate-300 bg-white text-sm font-black text-slate-600 disabled:opacity-40"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDraftHidden((current) =>
-                            current.includes(column.key)
-                              ? current.filter((key) => key !== column.key)
-                              : [...current, column.key],
-                          )
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleColumnVisibility(column.key);
+                        }}
+                        aria-pressed={!isHidden}
+                        title={
+                          !isHidden
+                            ? 'Esta coluna esta sendo usada no grid'
+                            : 'Esta coluna nao esta sendo usada no grid'
                         }
                         className={
                           isHidden
@@ -379,6 +421,36 @@ function GridConfigModal({
                         }
                       >
                         {isHidden ? '✕' : '✓'}
+                      </button>
+                      <div className="min-w-0">
+                        <div className="text-sm font-black text-slate-900">{column.label}</div>
+                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          {isHidden ? 'Coluna oculta' : `${index + 1}º coluna visível`}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          moveColumnToIndex(column.key, Math.max(index - 1, 0));
+                        }}
+                        disabled={index === 0}
+                        className="h-9 w-9 rounded-full border border-slate-300 bg-white text-sm font-black text-slate-600 disabled:opacity-40"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          moveColumnToIndex(column.key, Math.min(index + 1, orderedColumns.length - 1));
+                        }}
+                        disabled={index === orderedColumns.length - 1}
+                        className="h-9 w-9 rounded-full border border-slate-300 bg-white text-sm font-black text-slate-600 disabled:opacity-40"
+                      >
+                        ↓
                       </button>
                     </div>
                   </div>
@@ -393,7 +465,7 @@ function GridConfigModal({
             onClick={onClose}
             className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-600 transition hover:bg-slate-100"
           >
-            Cancelar
+            Fechar
           </button>
           <button
             type="button"
@@ -403,7 +475,7 @@ function GridConfigModal({
             }}
             className="rounded-xl bg-blue-600 px-6 py-3 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
           >
-            Aplicar
+            Salvar
           </button>
         </div>
       </div>
@@ -419,7 +491,7 @@ export default function FinanceiroCustomerCreditsPage() {
   const [filterDrafts, setFilterDrafts] = useState<CreditGridFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<CreditGridFilters>(DEFAULT_FILTERS);
   const [activeFilterColumn, setActiveFilterColumn] = useState<CreditGridFilterKey | null>(null);
-  const [gridSort, setGridSort] = useState<CreditGridSort>({ key: 'createdAt', direction: 'DESC' });
+  const [gridSort, setGridSort] = useState<CreditGridSort>(DEFAULT_GRID_SORT);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
@@ -544,6 +616,7 @@ export default function FinanceiroCustomerCreditsPage() {
         credit.customerDocument,
         formatCurrency(credit.originalAmount),
         formatCurrency(credit.availableAmount),
+        getCreditSourceTypeLabel(credit.sourceType),
         getCreditStatusLabel(credit.status),
         formatDateLabel(credit.createdAt),
         credit.createdBy,
@@ -574,14 +647,6 @@ export default function FinanceiroCustomerCreditsPage() {
     );
   }, [filteredCredits]);
 
-  const openCount = useMemo(
-    () => credits.filter((credit) => credit.status === 'OPEN').length,
-    [credits],
-  );
-  const inactiveCount = useMemo(
-    () => credits.filter((credit) => credit.status === 'USED' || credit.status === 'CANCELED').length,
-    [credits],
-  );
   const totalPages = Math.max(1, Math.ceil(filteredCredits.length / pageSize));
   const paginatedCredits = useMemo(() => {
     const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
@@ -631,8 +696,35 @@ export default function FinanceiroCustomerCreditsPage() {
     setGeneralSearch('');
     setFilterDrafts(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
-    setGridSort({ key: 'createdAt', direction: 'DESC' });
+    setGridSort(DEFAULT_GRID_SORT);
     setActiveFilterColumn(null);
+  }
+
+  const hasActiveGridControls =
+    Object.values(appliedFilters).some((value) => value.trim()) ||
+    Boolean(generalSearch.trim()) ||
+    gridSort.key !== DEFAULT_GRID_SORT.key ||
+    gridSort.direction !== DEFAULT_GRID_SORT.direction;
+
+  function renderClearAllFiltersButton() {
+    return (
+      <button
+        type="button"
+        onClick={clearAllFilters}
+        title="Limpar todos os filtros"
+        aria-label="Limpar todos os filtros"
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition ${
+          hasActiveGridControls
+            ? 'border-rose-300 bg-rose-50 text-rose-600 shadow-sm hover:bg-rose-100'
+            : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+        }`}
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.9} d="M4 6h16M7 12h10M10 18h4" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.9} d="M18 4 6 20" />
+        </svg>
+      </button>
+    );
   }
 
   async function handleCreateCredit() {
@@ -777,19 +869,7 @@ export default function FinanceiroCustomerCreditsPage() {
             <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
               <tr>
                 <th className="w-12 px-3 py-3">
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    title="Limpar todos os filtros"
-                    aria-label="Limpar todos os filtros"
-                    className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm font-black transition ${
-                      Object.values(appliedFilters).some(Boolean) || generalSearch || gridSort.key
-                        ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                        : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
-                    }`}
-                  >
-                    x
-                  </button>
+                  {renderClearAllFiltersButton()}
                 </th>
                 {visibleColumns.map((column) => (
                   <th key={column.key} className={`px-4 py-3 ${column.align === 'right' ? 'text-right' : ''}`}>
@@ -820,6 +900,11 @@ export default function FinanceiroCustomerCreditsPage() {
                   </th>
                 ))}
               </tr>
+              {activeFilterColumn ? (
+                <tr aria-hidden="true">
+                  <th colSpan={(visibleColumns.length || 1) + 1} className="h-44 bg-white p-0" />
+                </tr>
+              ) : null}
             </thead>
             <tbody>
               {paginatedCredits.map((credit, index) => (
@@ -851,6 +936,10 @@ export default function FinanceiroCustomerCreditsPage() {
                         <span className="font-black text-slate-900">{formatCurrency(credit.originalAmount)}</span>
                       ) : column.key === 'availableAmount' ? (
                         <span className="font-black text-blue-700">{formatCurrency(credit.availableAmount)}</span>
+                      ) : column.key === 'sourceType' ? (
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${getCreditSourceTypeClass(credit.sourceType)}`}>
+                          {getCreditSourceTypeLabel(credit.sourceType)}
+                        </span>
                       ) : column.key === 'status' ? (
                         <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${getCreditStatusClass(credit.status)}`}>
                           {getCreditStatusLabel(credit.status)}
@@ -913,21 +1002,20 @@ export default function FinanceiroCustomerCreditsPage() {
           pageSize={pageSize}
           currentPage={currentPage}
           totalPages={totalPages}
-          aggregateSummaries={[
-            { label: 'Abertos', value: String(openCount) },
-            { label: 'Baixados/Cancelados', value: String(inactiveCount) },
-            { label: 'Disponível', value: formatCurrency(totals.availableAmount) },
-          ]}
+          showRecordSummary={false}
+          typographyVariant="school"
           onColumnSettings={() => setIsColumnConfigOpen(true)}
           onExport={() => setIsExportModalOpen(true)}
           onStatusFilterChange={setStatusFilter}
           onPageSizeChange={(value) => setPageSize(value)}
           onPageChange={setCurrentPage}
         >
-          <ScreenNameCopy
-            screenId={runtimeContext.embedded ? SCREEN_ID : FINANCE_SCREEN_ID}
-            className="justify-end"
-          />
+          {!runtimeContext.embedded ? (
+            <ScreenNameCopy
+              screenId={FINANCE_SCREEN_ID}
+              className="justify-end"
+            />
+          ) : null}
         </GridStandardFooter>
       </section>
 

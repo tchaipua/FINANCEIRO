@@ -57,7 +57,14 @@ type SaleReturnResult = {
 type ReturnFilters = {
   dateFrom: string;
   dateTo: string;
-  search: string;
+  saleNumber: string;
+  productSearch: string;
+  customerSearch: string;
+};
+
+type ReturnCustomerState = {
+  name: string;
+  document: string;
 };
 
 type ReturnTabKey = 'sale' | 'products' | 'summary';
@@ -79,12 +86,23 @@ function getDefaultFilters(): ReturnFilters {
   return {
     dateFrom: toDateInputValue(firstDay),
     dateTo: toDateInputValue(today),
-    search: '',
+    saleNumber: '',
+    productSearch: '',
+    customerSearch: '',
   };
 }
 
 function normalizeUpperInput(value: string) {
   return String(value || '').toUpperCase();
+}
+
+function normalizeDigits(value: string) {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function hasIdentifiedCustomer(sale: SaleItemForReturn | null) {
+  const document = normalizeDigits(sale?.customerDocument || '');
+  return document.length === 11 || document.length === 14;
 }
 
 function formatDateTimeLabel(value?: string | null) {
@@ -179,6 +197,7 @@ export default function SaleReturnPage() {
   const [selectedSale, setSelectedSale] = useState<SaleItemForReturn | null>(null);
   const [activeTab, setActiveTab] = useState<ReturnTabKey>('sale');
   const [quantityByItemId, setQuantityByItemId] = useState<Record<string, string>>({});
+  const [returnCustomer, setReturnCustomer] = useState<ReturnCustomerState>({ name: '', document: '' });
   const [reason, setReason] = useState('');
   const [password, setPassword] = useState('');
   const [isLoadingSales, setIsLoadingSales] = useState(false);
@@ -202,7 +221,9 @@ export default function SaleReturnPage() {
           dateFrom: appliedFilters.dateFrom,
           dateTo: appliedFilters.dateTo,
           status: 'CONFIRMED',
-          search: appliedFilters.search,
+          saleNumber: appliedFilters.saleNumber,
+          productSearch: appliedFilters.productSearch,
+          customerSearch: appliedFilters.customerSearch,
         })}`,
       );
       setSales(Array.isArray(data) ? data : []);
@@ -253,6 +274,10 @@ export default function SaleReturnPage() {
     () => roundMoney(selectedReturnLines.reduce((total, line) => total + line.totalAmount, 0)),
     [selectedReturnLines],
   );
+  const needsCustomerIdentification = useMemo(
+    () => selectedSale ? !hasIdentifiedCustomer(selectedSale) : false,
+    [selectedSale],
+  );
 
   const auditText = useMemo(
     () => `--- LOGICA DA TELA ---
@@ -271,10 +296,13 @@ FILTROS APLICADOS AGORA:
 - sistema origem (:sourceSystem): ${formatAuditValue(runtimeContext.sourceSystem)}
 - período inicial (:dateFrom): ${formatAuditValue(appliedFilters.dateFrom)}
 - período final (:dateTo): ${formatAuditValue(appliedFilters.dateTo)}
-- busca (:search): ${formatAuditValue(appliedFilters.search)}
+- número da venda (:saleNumber): ${formatAuditValue(appliedFilters.saleNumber)}
+- produto (:productSearch): ${formatAuditValue(appliedFilters.productSearch)}
+- cliente/documento (:customerSearch): ${formatAuditValue(appliedFilters.customerSearch)}
 - venda selecionada: ${selectedSale?.saleNumber || '---'}
+- cliente precisa ser identificado na devolução: ${needsCustomerIdentification ? 'SIM' : 'NÃO'}
 - total selecionado para devolução: ${formatCurrency(returnTotal)}`,
-    [appliedFilters, returnTotal, runtimeContext.sourceSystem, runtimeContext.sourceTenantId, selectedSale],
+    [appliedFilters, needsCustomerIdentification, returnTotal, runtimeContext.sourceSystem, runtimeContext.sourceTenantId, selectedSale],
   );
 
   const sqlText = useMemo(
@@ -294,17 +322,26 @@ WHERE S.canceledAt IS NULL
   AND S.status = ${toSqlLiteral('CONFIRMED')}
   AND S.sourceSystem = ${toSqlLiteral(runtimeContext.sourceSystem || '')}
   AND S.sourceTenantId = ${toSqlLiteral(runtimeContext.sourceTenantId || '')}
-  AND DATE(S.confirmedAt) >= DATE(${toSqlLiteral(appliedFilters.dateFrom)})
-  AND DATE(S.confirmedAt) <= DATE(${toSqlLiteral(appliedFilters.dateTo)})
+  AND (${toSqlLiteral(appliedFilters.saleNumber)} <> '' OR DATE(S.confirmedAt) >= DATE(${toSqlLiteral(appliedFilters.dateFrom)}))
+  AND (${toSqlLiteral(appliedFilters.saleNumber)} <> '' OR DATE(S.confirmedAt) <= DATE(${toSqlLiteral(appliedFilters.dateTo)}))
+  AND (${toSqlLiteral(appliedFilters.saleNumber)} = '' OR S.saleNumber LIKE '%' || ${toSqlLiteral(appliedFilters.saleNumber)} || '%')
+  AND (${toSqlLiteral(appliedFilters.customerSearch)} = '' OR S.customerNameSnapshot LIKE '%' || ${toSqlLiteral(appliedFilters.customerSearch)} || '%' OR S.customerDocumentSnapshot LIKE '%' || ${toSqlLiteral(normalizeDigits(appliedFilters.customerSearch))} || '%')
+  AND (${toSqlLiteral(appliedFilters.productSearch)} = '' OR SI.productNameSnapshot LIKE '%' || ${toSqlLiteral(appliedFilters.productSearch)} || '%' OR SI.productCodeSnapshot LIKE '%' || ${toSqlLiteral(appliedFilters.productSearch)} || '%')
 ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
     [appliedFilters, runtimeContext.sourceSystem, runtimeContext.sourceTenantId],
   );
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setAppliedFilters({ ...filters, search: filters.search.trim() });
+    setAppliedFilters({
+      ...filters,
+      saleNumber: filters.saleNumber.trim(),
+      productSearch: filters.productSearch.trim(),
+      customerSearch: filters.customerSearch.trim(),
+    });
     setSelectedSale(null);
     setQuantityByItemId({});
+    setReturnCustomer({ name: '', document: '' });
     setLastReturn(null);
   }
 
@@ -320,6 +357,7 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
       );
       setSelectedSale(loadedSale);
       setQuantityByItemId({});
+      setReturnCustomer({ name: '', document: '' });
       setReason('');
       setPassword('');
       setActiveTab('products');
@@ -344,6 +382,17 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
       setAlert({ type: 'warning', message: 'Informe o motivo da devolução.' });
       setActiveTab('summary');
       return;
+    }
+    if (needsCustomerIdentification) {
+      const customerDocument = normalizeDigits(returnCustomer.document);
+      if (!returnCustomer.name.trim() || ![11, 14].includes(customerDocument.length)) {
+        setAlert({
+          type: 'warning',
+          message: 'Informe nome e CPF/CNPJ do cliente para gerar o crédito da devolução.',
+        });
+        setActiveTab('summary');
+        return;
+      }
     }
     if (!password.trim()) {
       setAlert({ type: 'warning', message: 'Informe a senha para autorizar a devolução.' });
@@ -373,6 +422,12 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
             sourceBranchCode: runtimeContext.sourceBranchCode,
             requestedBy,
             reason: reason.trim(),
+            customer: needsCustomerIdentification
+              ? {
+                  name: returnCustomer.name.trim(),
+                  document: normalizeDigits(returnCustomer.document),
+                }
+              : undefined,
             items: selectedReturnLines.map((line) => ({
               saleItemId: line.item.id,
               quantity: line.quantity,
@@ -390,6 +445,7 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
       setPassword('');
       setReason('');
       setQuantityByItemId({});
+      setReturnCustomer({ name: '', document: '' });
       await loadSales();
       const refreshedSale = await getJson<SaleItemForReturn>(
         `/sales/${selectedSale.id}/return-context${buildFinanceApiQueryString(runtimeContext, {
@@ -411,7 +467,7 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
-        <form onSubmit={handleSearchSubmit} className="grid gap-4 border-b border-slate-100 p-6 lg:grid-cols-[auto_auto_1fr_auto]">
+        <form onSubmit={handleSearchSubmit} className="grid gap-4 border-b border-slate-100 p-6 lg:grid-cols-[auto_auto_1fr_1fr_1fr_auto]">
           <input
             type="date"
             value={filters.dateFrom}
@@ -425,10 +481,22 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
             className={FINANCE_GRID_PAGE_LAYOUT.input}
           />
           <input
-            value={filters.search}
-            onChange={(event) => setFilters((current) => ({ ...current, search: normalizeUpperInput(event.target.value) }))}
+            value={filters.saleNumber}
+            onChange={(event) => setFilters((current) => ({ ...current, saleNumber: normalizeUpperInput(event.target.value) }))}
             className={FINANCE_GRID_PAGE_LAYOUT.input}
-            placeholder="BUSCAR VENDA, CLIENTE OU DOCUMENTO"
+            placeholder="NÚMERO DA VENDA"
+          />
+          <input
+            value={filters.productSearch}
+            onChange={(event) => setFilters((current) => ({ ...current, productSearch: normalizeUpperInput(event.target.value) }))}
+            className={FINANCE_GRID_PAGE_LAYOUT.input}
+            placeholder="PRODUTO / CÓDIGO"
+          />
+          <input
+            value={filters.customerSearch}
+            onChange={(event) => setFilters((current) => ({ ...current, customerSearch: normalizeUpperInput(event.target.value) }))}
+            className={FINANCE_GRID_PAGE_LAYOUT.input}
+            placeholder="CLIENTE / CPF / CNPJ"
           />
           <button type="submit" className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}>
             Pesquisar
@@ -630,6 +698,26 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
                           O valor ficará disponível no controle de créditos do cliente para baixa futura de parcelas.
                         </div>
                       </div>
+
+                      {needsCustomerIdentification ? (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                          <div className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-700">Cliente do crédito</div>
+                          <div className="mt-2 grid gap-3 md:grid-cols-[1fr_220px]">
+                            <input
+                              value={returnCustomer.name}
+                              onChange={(event) => setReturnCustomer((current) => ({ ...current, name: normalizeUpperInput(event.target.value) }))}
+                              className={FINANCE_GRID_PAGE_LAYOUT.input}
+                              placeholder="NOME DO CLIENTE"
+                            />
+                            <input
+                              value={returnCustomer.document}
+                              onChange={(event) => setReturnCustomer((current) => ({ ...current, document: event.target.value }))}
+                              className={FINANCE_GRID_PAGE_LAYOUT.input}
+                              placeholder="CPF/CNPJ"
+                            />
+                          </div>
+                        </div>
+                      ) : null}
 
                       <div className="overflow-auto rounded-2xl border border-slate-200">
                         <table className="min-w-full text-left text-sm text-slate-600">
