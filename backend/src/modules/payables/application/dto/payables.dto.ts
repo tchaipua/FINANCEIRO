@@ -58,6 +58,22 @@ export class ListPayableInvoiceImportsDto {
   search?: string;
 }
 
+export class ListPayableSuppliersDto {
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
 export class GetPayableInvoiceImportDto {
   @IsString()
   sourceSystem!: string;

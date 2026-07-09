@@ -7,6 +7,7 @@ import {
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
   ListPayableInvoiceImportsDto,
+  ListPayableSuppliersDto,
   UpdatePayableInvoiceImportItemApprovalDraftDto,
   UpdatePayableInvoiceImportInstallmentsDto,
 } from "../application/dto/payables.dto";
@@ -22,6 +23,14 @@ export class PayablesController {
   })
   listInvoiceImports(@Query() query: ListPayableInvoiceImportsDto) {
     return this.payablesService.listInvoiceImports(query);
+  }
+
+  @Get("suppliers")
+  @ApiOperation({
+    summary: "Lista os fornecedores do contas a pagar",
+  })
+  listSuppliers(@Query() query: ListPayableSuppliersDto) {
+    return this.payablesService.listSuppliers(query);
   }
 
   @Get("invoice-imports/:importId")

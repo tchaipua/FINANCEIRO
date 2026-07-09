@@ -19,6 +19,7 @@ import {
   CancelPayableInvoiceImportDto,
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
+  ListPayableSuppliersDto,
   ListPayableInvoiceImportsDto,
   PAYABLE_INSTALLMENT_PAYMENT_METHODS,
   UpdatePayableInvoiceImportItemApprovalDraftDto,
@@ -1311,6 +1312,77 @@ export class PayablesService {
     return invoiceImports.map((invoiceImport) =>
       this.mapImportSummary(invoiceImport),
     );
+  }
+
+  async listSuppliers(query: ListPayableSuppliersDto) {
+    const company = await this.findCompany(
+      query.sourceSystem,
+      query.sourceTenantId,
+    );
+
+    if (!company) {
+      return [];
+    }
+
+    const normalizedStatus = normalizeText(query.status);
+    const normalizedSearch = normalizeText(query.search);
+    const searchDigits = normalizeDigits(query.search);
+
+    const suppliers = await this.prisma.supplier.findMany({
+      where: {
+        companyId: company.id,
+        canceledAt: null,
+        ...(normalizedStatus && normalizedStatus !== "ALL"
+          ? { status: normalizedStatus }
+          : {}),
+        ...(normalizedSearch
+          ? {
+              OR: [
+                { legalName: { contains: normalizedSearch } },
+                { tradeName: { contains: normalizedSearch } },
+                { document: { contains: searchDigits || normalizedSearch } },
+                { email: { contains: normalizedSearch.toLowerCase() } },
+                { phone: { contains: searchDigits || normalizedSearch } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        company: true,
+        payableInvoiceImports: {
+          where: { canceledAt: null },
+          select: { id: true },
+        },
+        payableTitles: {
+          where: { canceledAt: null },
+          select: { id: true },
+        },
+      },
+      orderBy: [{ legalName: "asc" }],
+    });
+
+    return suppliers.map((supplier) => ({
+      id: supplier.id,
+      companyId: supplier.companyId,
+      companyName: supplier.company.name,
+      sourceSystem: supplier.company.sourceSystem,
+      sourceTenantId: supplier.company.sourceTenantId,
+      branchCode: supplier.branchCode,
+      status: supplier.status,
+      legalName: supplier.legalName,
+      tradeName: supplier.tradeName,
+      document: supplier.document,
+      stateRegistration: supplier.stateRegistration,
+      email: supplier.email,
+      phone: supplier.phone,
+      notes: supplier.notes,
+      invoiceImportsCount: supplier.payableInvoiceImports.length,
+      payableTitlesCount: supplier.payableTitles.length,
+      createdAt: supplier.createdAt,
+      createdBy: supplier.createdBy,
+      updatedAt: supplier.updatedAt,
+      updatedBy: supplier.updatedBy,
+    }));
   }
 
   async getInvoiceImport(

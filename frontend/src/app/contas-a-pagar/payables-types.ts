@@ -37,6 +37,29 @@ export type PayableInvoiceImportSummary = {
   alreadyImported?: boolean;
 };
 
+export type PayableSupplierSummary = {
+  id: string;
+  companyId: string;
+  companyName?: string | null;
+  sourceSystem?: string | null;
+  sourceTenantId?: string | null;
+  branchCode: number;
+  status: string;
+  legalName: string;
+  tradeName?: string | null;
+  document?: string | null;
+  stateRegistration?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  invoiceImportsCount: number;
+  payableTitlesCount: number;
+  createdAt: string;
+  createdBy?: string | null;
+  updatedAt: string;
+  updatedBy?: string | null;
+};
+
 export type PayableInvoiceImportItem = {
   id: string;
   lineNumber: number;

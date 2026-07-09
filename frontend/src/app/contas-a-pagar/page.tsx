@@ -78,6 +78,7 @@ const MENU_ITEMS = [
   {
     id: 'fornecedores',
     label: 'Fornecedores',
+    href: '/contas-a-pagar/fornecedores',
     accent: 'from-indigo-500 to-indigo-600',
     icon: (
       <svg className="h-12 w-12 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
