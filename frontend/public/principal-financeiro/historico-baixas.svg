@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" role="img" aria-label="Histórico Baixas">
+  <rect x="5" y="7" width="86" height="58" rx="15" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <path d="M24 22h34M24 36h48M24 50h31" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="72" cy="22" r="9" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/>
+  <path d="M68 22l3 3 6-7" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M68 51l-6-6 6-6" fill="none" stroke="#ef4444" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M62 45h17a7 7 0 0 1 0 14h-4" fill="none" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+</svg>

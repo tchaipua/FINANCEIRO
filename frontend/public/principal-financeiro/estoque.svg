@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Estoque">
+  <rect width="640" height="360" fill="#f1f5f9"/>
+  <path d="M320 64l194 82-194 82-194-82z" fill="#2563eb"/>
+  <path d="M126 146l194 82v92l-194-82z" fill="#0ea5e9"/>
+  <path d="M514 146l-194 82v92l194-82z" fill="#14b8a6"/>
+  <path d="M224 105l194 82" fill="none" stroke="#dbeafe" stroke-width="14" stroke-linecap="round" opacity=".85"/>
+  <path d="M320 228v92" fill="none" stroke="#ecfeff" stroke-width="12" stroke-linecap="round" opacity=".75"/>
+  <rect x="248" y="254" width="144" height="42" rx="16" fill="#ffffff" opacity=".9"/>
+  <path d="M286 275h68" fill="none" stroke="#15803d" stroke-width="12" stroke-linecap="round"/>
+</svg>

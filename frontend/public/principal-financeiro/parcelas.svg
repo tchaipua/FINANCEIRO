@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Parcelas">
+  <rect width="640" height="360" fill="#f1f5f9"/>
+  <rect x="130" y="78" width="380" height="232" rx="24" fill="#ffffff"/>
+  <rect x="174" y="128" width="292" height="20" rx="10" fill="#2563eb"/>
+  <rect x="174" y="178" width="238" height="20" rx="10" fill="#0ea5e9"/>
+  <rect x="174" y="228" width="272" height="20" rx="10" fill="#14b8a6"/>
+  <circle cx="462" cy="252" r="48" fill="#16a34a"/>
+  <path d="M444 252l12 12 26-30" fill="none" stroke="#dcfce7" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

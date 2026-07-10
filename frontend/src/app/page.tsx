@@ -7,23 +7,83 @@ import { buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/a
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 
 type MenuItem = {
+  id: string;
   label: string;
   href: string;
-  schoolPath?: string;
+  hostPath: string;
+  description: string;
+  title?: string;
+  image: string;
 };
 
 const MENU_ITEMS: MenuItem[] = [
-  { label: 'Resumo geral', href: '/resumo', schoolPath: '/principal/financeiro/resumo' },
-  { label: 'Empresa', href: '/empresas', schoolPath: '/principal/financeiro/empresa' },
-  { label: 'Bancos', href: '/bancos', schoolPath: '/principal/financeiro/bancos' },
-  { label: 'Produtos', href: '/produtos' },
-  { label: 'Lotes', href: '/recebiveis/lotes', schoolPath: '/principal/financeiro/lotes' },
-  { label: 'Retornos', href: '/recebiveis/retornos', schoolPath: '/principal/financeiro/retornos' },
-  { label: 'Parcelas', href: '/recebiveis/parcelas', schoolPath: '/principal/financeiro/parcelas' },
-  { label: 'Caixa', href: '/caixa', schoolPath: '/principal/financeiro/caixa' },
+  {
+    id: 'empresa',
+    label: 'Empresa',
+    href: '/empresas',
+    hostPath: '/principal/financeiro/empresa',
+    description: 'Cadastro financeiro da empresa atual.',
+    image: '/principal-financeiro/empresa.svg?v=2',
+  },
+  {
+    id: 'bancos-e-boletos',
+    label: 'Bancos e Boletos',
+    href: '/bancos-e-boletos',
+    hostPath: '/principal/financeiro/bancos-e-boletos',
+    description: 'Acesse bancos, registro e retorno de boletos.',
+    image: '/principal-financeiro/bancos.svg?v=1',
+  },
+  {
+    id: 'resumo',
+    label: 'Resumo geral',
+    href: '/resumo',
+    hostPath: '/principal/financeiro/resumo',
+    description: 'Visao consolidada da operacao financeira.',
+    image: '/principal-financeiro/resumo.svg?v=2',
+  },
+  {
+    id: 'contas-a-receber',
+    label: 'Contas a Receber',
+    href: '/recebiveis/parcelas',
+    hostPath: '/principal/financeiro/contas-a-receber',
+    description: 'Acesse as operacoes de contas a receber.',
+    image: '/principal-financeiro/parcelas.svg?v=2',
+  },
+  {
+    id: 'contas-a-pagar',
+    label: 'Contas a Pagar',
+    href: '/contas-a-pagar',
+    hostPath: '/principal/financeiro/contas-a-pagar',
+    description: 'Acesse as operacoes de contas a pagar.',
+    image: '/principal-financeiro/contas-a-pagar.svg?v=1',
+  },
+  {
+    id: 'estoque',
+    label: 'Estoque',
+    href: '/estoque',
+    hostPath: '/principal/financeiro/estoque',
+    description: 'Acesse o controle de produtos e estoque.',
+    image: '/principal-financeiro/estoque.svg?v=1',
+  },
+  {
+    id: 'caixa',
+    label: 'Controle Caixa',
+    href: '/caixa',
+    hostPath: '/principal/financeiro/caixa',
+    description: 'Abertura e fechamento do caixa do usuario logado.',
+    image: '/principal-financeiro/caixa.svg?v=2',
+  },
+  {
+    id: 'vendas',
+    label: 'Vendas',
+    href: '/vendas',
+    hostPath: '/principal/financeiro/vendas',
+    description: 'Venda produtos com caixa, estoque e contas a receber.',
+    image: '/principal-financeiro/vendas.svg?v=1',
+  },
 ];
 
-function resolveSchoolBaseUrl() {
+function resolveHostBaseUrl() {
   if (typeof document === 'undefined' || !document.referrer) {
     return null;
   }
@@ -43,25 +103,34 @@ type FinanceMenuCardProps = {
 };
 
 function FinanceMenuCard({ item, href, target }: FinanceMenuCardProps) {
-  const className =
-    'rounded-3xl border border-slate-200 bg-white px-5 py-5 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:shadow-md sm:min-h-[92px]';
-
   const content = (
-    <div className="text-base font-black uppercase tracking-[0.2em] text-slate-700">
-      {item.label}
-    </div>
+    <>
+      <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
+        <img
+          src={item.image}
+          alt={item.label}
+          className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
+        />
+      </div>
+      <div className="flex min-h-11 items-center justify-center p-2.5 text-center">
+        <div className="text-sm font-black text-slate-800">{item.label}</div>
+      </div>
+    </>
   );
+
+  const className =
+    'group overflow-hidden rounded-xl border border-slate-200 bg-white text-left text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50';
 
   if (target) {
     return (
-      <a href={href} target={target} rel="noreferrer" className={className}>
+      <a href={href} target={target} rel="noreferrer" title={item.title || item.description} className={className}>
         {content}
       </a>
     );
   }
 
   return (
-    <Link href={href} className={className}>
+    <Link href={href} title={item.title || item.description} className={className}>
       {content}
     </Link>
   );
@@ -70,50 +139,52 @@ function FinanceMenuCard({ item, href, target }: FinanceMenuCardProps) {
 export default function FinanceiroHomePage() {
   const runtimeContext = useFinanceRuntimeContext();
   const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
-  const [schoolBaseUrl, setSchoolBaseUrl] = useState<string | null>(null);
+  const [hostBaseUrl, setHostBaseUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    setSchoolBaseUrl(resolveSchoolBaseUrl());
+    setHostBaseUrl(resolveHostBaseUrl());
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <section className={`${cardClass} relative left-1/2 w-screen -translate-x-1/2 overflow-hidden`}>
-        <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h1 className="text-2xl font-black tracking-tight">Controle Financeiro</h1>
+    <div className="space-y-6">
+      {!runtimeContext.embedded ? (
+        <section className={`${cardClass} overflow-hidden`}>
+          <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
+                  Financeiro integrado
+                </div>
+                <h1 className="mt-1 text-2xl font-black tracking-tight">Portal Financeiro</h1>
+                <p className="mt-1 max-w-3xl text-xs font-medium text-blue-100/90">
+                  Escolha abaixo a area desejada para abrir a tela completa do Financeiro.
+                </p>
+              </div>
             </div>
-            <span className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white">
-              Menu Financeiro
-            </span>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className={`${cardClass} p-8`}>
-        <div className="mx-auto grid max-w-5xl gap-4 sm:grid-cols-2">
+      <section className={`${cardClass} p-6`}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {MENU_ITEMS.map((item) => {
-            const shouldReturnToSchool =
-              runtimeContext.embedded &&
-              item.schoolPath &&
-              schoolBaseUrl;
-
-            const href = shouldReturnToSchool
-              ? `${schoolBaseUrl}${item.schoolPath}`
+            const shouldReturnToHost = runtimeContext.embedded && hostBaseUrl;
+            const href = shouldReturnToHost
+              ? `${hostBaseUrl}${item.hostPath}`
               : `${item.href}${preservedQueryString}`;
 
             return (
               <FinanceMenuCard
-                key={item.label}
+                key={item.id}
                 item={item}
                 href={href}
-                target={shouldReturnToSchool ? '_top' : undefined}
+                target={shouldReturnToHost ? '_top' : undefined}
               />
             );
           })}
         </div>
       </section>
+
     </div>
   );
 }

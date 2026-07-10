@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 72" role="img" aria-label="Recebimentos por Cliente">
+  <rect x="5" y="7" width="86" height="58" rx="15" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <circle cx="31" cy="28" r="10" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/>
+  <path d="M16 54c3-10 10-15 15-15s12 5 15 15" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round"/>
+  <path d="M57 22h21M57 36h21M57 50h13" fill="none" stroke="#0f9f6e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M72 45l5 5 9-11" fill="none" stroke="#0f9f6e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

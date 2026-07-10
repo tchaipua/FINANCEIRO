@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Caixa">
+  <rect width="640" height="360" fill="#f1f5f9"/>
+  <rect x="104" y="100" width="432" height="178" rx="28" fill="#15803d"/>
+  <rect x="150" y="136" width="196" height="42" rx="14" fill="#dcfce7"/>
+  <rect x="150" y="206" width="338" height="28" rx="14" fill="#bbf7d0" opacity=".45"/>
+  <circle cx="448" cy="156" r="48" fill="#22c55e"/>
+  <path d="M448 132v48m-18-34c7-12 29-12 36 0m-36 20c7 12 29 12 36 0" stroke="#052e16" stroke-width="12" stroke-linecap="round"/>
+</svg>

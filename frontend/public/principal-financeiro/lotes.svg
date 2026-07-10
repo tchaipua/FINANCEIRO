@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Lotes">
+  <rect width="640" height="360" fill="#f1f5f9"/>
+  <rect x="118" y="84" width="404" height="68" rx="18" fill="#2563eb"/>
+  <rect x="118" y="166" width="404" height="68" rx="18" fill="#0ea5e9"/>
+  <rect x="118" y="248" width="404" height="68" rx="18" fill="#14b8a6"/>
+  <circle cx="166" cy="118" r="14" fill="#dbeafe"/>
+  <circle cx="166" cy="200" r="14" fill="#e0f2fe"/>
+  <circle cx="166" cy="282" r="14" fill="#ccfbf1"/>
+  <path d="M214 118h230M214 200h230M214 282h230" stroke="#ffffff" stroke-width="14" stroke-linecap="round" opacity=".72"/>
+</svg>
