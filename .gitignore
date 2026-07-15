@@ -1,5 +1,6 @@
 /backend/node_modules/
 /backend/dist/
+/backend/output/
 /backend/.env
 /backend/*.log
 /backend_antes_migracao_*/

@@ -180,3 +180,27 @@ Motivo:
 - manter consistencia visual entre Escola e Financeiro;
 - garantir que o usuario sempre reconheca a origem institucional do popup;
 - evitar regressao em novos popups criados a partir de detalhes de registros.
+
+## D014 - Ativacao segura da NFC-e por empresa
+
+Decisao:
+
+- a emissao fiscal pertence exclusivamente ao sistema `Financeiro`;
+- o CNPJ do certificado A1 deve ser igual ao CNPJ da empresa emitente;
+- a emissao automatica no fechamento da venda fica desativada ate existir NFC-e autorizada em homologacao para a mesma empresa;
+- rejeicoes da SEFAZ devem ser preservadas como evidencia tecnica, sem simular autorizacao, DANFE ou envio ao consumidor;
+- producao exige credenciamento, perfil fiscal completo, numeracao controlada e teste homologado anterior.
+
+Motivo:
+
+- impedir uso cruzado de certificado entre empresas e tenants;
+- preservar validade fiscal, auditoria e idempotencia da venda;
+- evitar que uma venda seja apresentada como fiscalmente autorizada quando houve rejeicao externa.
+
+Complemento operacional:
+
+- a venda é persistida antes da chamada à SEFAZ e recebe o resultado fiscal separadamente;
+- a mesma venda nunca recebe outra numeração em uma repetição; documento assinado é consultado antes de nova autorização;
+- PIX somente dispara a emissão depois da confirmação bancária;
+- venda com NFC-e autorizada não pode ser cancelada localmente antes do cancelamento fiscal;
+- todas as formas de pagamento da venda são convertidas para os códigos `tPag` do leiaute NFC-e 4.00.

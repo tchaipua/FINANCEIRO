@@ -39,6 +39,10 @@ import {
 } from "./dto/receivables.dto";
 import { SicoobBillingService } from "./sicoob-billing.service";
 import {
+  SicrediApiError,
+  SicrediBillingService,
+} from "./sicredi-billing.service";
+import {
   buildImportedBankReturnItem,
   evaluateBankReturnForInstallment,
   resolveBankReturnMovementStatus,
@@ -52,6 +56,7 @@ export class ReceivablesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sicoobBillingService: SicoobBillingService,
+    private readonly sicrediBillingService: SicrediBillingService,
   ) {}
 
   private branchCode() {
@@ -2153,27 +2158,52 @@ export class ReceivablesService {
       );
     }
 
-    if (normalizeText(bank.billingProvider) !== "SICOOB") {
+    const provider = normalizeText(bank.billingProvider);
+
+    if (provider !== "SICOOB" && provider !== "SICREDI") {
       throw new BadRequestException(
-        "A emissão automática disponível no momento atende apenas bancos configurados como SICOOB.",
+        "A emissão automática atende bancos configurados como SICOOB ou SICREDI.",
       );
     }
 
     if (!bank.billingApiClientId) {
       throw new BadRequestException(
-        "Client ID não configurado no cadastro do banco.",
+        provider === "SICREDI"
+          ? "Chave da API não configurada no cadastro do Sicredi."
+          : "Client ID não configurado no cadastro do banco.",
       );
     }
 
-    if (!bank.billingCertificateBase64 || !bank.billingCertificatePassword) {
+    if (
+      provider === "SICOOB" &&
+      (!bank.billingCertificateBase64 || !bank.billingCertificatePassword)
+    ) {
       throw new BadRequestException(
         "Certificado digital não configurado no cadastro do banco.",
       );
     }
 
+    if (provider === "SICREDI" && !bank.billingApiClientSecret) {
+      throw new BadRequestException(
+        "Código de acesso não configurado no cadastro do Sicredi.",
+      );
+    }
+
     if (!bank.billingBeneficiaryCode) {
       throw new BadRequestException(
-        "Código do beneficiário não configurado no cadastro do banco.",
+        provider === "SICREDI"
+          ? "Código do beneficiário não configurado no cadastro do Sicredi."
+          : "Código do beneficiário não configurado no cadastro do banco.",
+      );
+    }
+
+    const sicrediCooperative = normalizeDigits(
+      bank.billingContractNumber || "",
+    );
+    const sicrediPosto = normalizeDigits(bank.branchNumber || "");
+    if (provider === "SICREDI" && (!sicrediCooperative || !sicrediPosto)) {
+      throw new BadRequestException(
+        "Informe a cooperativa no contrato da cobrança e o posto no cadastro da conta Sicredi.",
       );
     }
 
@@ -2256,6 +2286,8 @@ export class ReceivablesService {
         let sequenceNumber = nextBoletoNumber;
         let response: Awaited<
           ReturnType<SicoobBillingService["issueBankSlip"]>
+        > | Awaited<
+          ReturnType<SicrediBillingService["issueBankSlip"]>
         > | null = null;
         let lastEmissionError: unknown = null;
 
@@ -2263,49 +2295,66 @@ export class ReceivablesService {
           sequenceNumber = nextBoletoNumber;
 
           try {
-            response = await this.sicoobBillingService.issueBankSlip(
-              {
-                environment: bank.billingEnvironment,
-                clientId: bank.billingApiClientId,
-                certificateBase64: bank.billingCertificateBase64,
-                certificatePassword: bank.billingCertificatePassword,
-                beneficiaryCode: bank.billingBeneficiaryCode,
-                accountNumber: this.buildSicoobAccountNumber(bank) || "",
-                contractNumber: bank.billingContractNumber,
-                modalityCode:
-                  bank.billingModalityCode || bank.billingWalletVariation,
-                documentSpeciesCode: bank.billingDocumentSpeciesCode,
-                acceptanceCode: bank.billingAcceptanceCode,
-                issueTypeCode: bank.billingIssueTypeCode,
-                distributionTypeCode: bank.billingDistributionTypeCode,
-                registerPixCode: bank.billingRegisterPixCode,
-                instructionLine1: bank.billingInstructionLine1,
-                instructionLine2: bank.billingInstructionLine2,
-                defaultFinePercent: bank.billingDefaultFinePercent,
-                defaultInterestPercent: bank.billingDefaultInterestPercent,
-                protestDays: bank.billingProtestDays,
-                negativeDays: bank.billingNegativeDays,
+            const issueInput = {
+              sequenceNumber,
+              amount: installment.openAmount,
+              dueDate: installment.dueDate,
+              installmentNumber: installment.installmentNumber,
+              payer: {
+                name: payerParty?.name || installment.payerNameSnapshot,
+                document:
+                  payerParty?.document ||
+                  installment.payerDocumentSnapshot ||
+                  "",
+                email: payerParty?.email || null,
+                addressLine1: payerParty?.addressLine1 || "",
+                neighborhood: payerParty?.neighborhood || "",
+                city: payerParty?.city || "",
+                state: payerParty?.state || "",
+                postalCode: payerParty?.postalCode || "",
               },
-              {
-                sequenceNumber,
-                amount: installment.openAmount,
-                dueDate: installment.dueDate,
-                installmentNumber: installment.installmentNumber,
-                payer: {
-                  name: payerParty?.name || installment.payerNameSnapshot,
-                  document:
-                    payerParty?.document ||
-                    installment.payerDocumentSnapshot ||
-                    "",
-                  email: payerParty?.email || null,
-                  addressLine1: payerParty?.addressLine1 || "",
-                  neighborhood: payerParty?.neighborhood || "",
-                  city: payerParty?.city || "",
-                  state: payerParty?.state || "",
-                  postalCode: payerParty?.postalCode || "",
+            };
+
+            if (provider === "SICREDI") {
+              response = await this.sicrediBillingService.issueBankSlip(
+                {
+                  environment: bank.billingEnvironment,
+                  apiKey: bank.billingApiClientId,
+                  accessCode: bank.billingApiClientSecret || "",
+                  cooperative: sicrediCooperative || "",
+                  posto: sicrediPosto || "",
+                  beneficiaryCode: bank.billingBeneficiaryCode,
+                  collectionType: bank.billingModalityCode,
                 },
-              },
-            );
+                issueInput,
+              );
+            } else {
+              response = await this.sicoobBillingService.issueBankSlip(
+                {
+                  environment: bank.billingEnvironment,
+                  clientId: bank.billingApiClientId,
+                  certificateBase64: bank.billingCertificateBase64 || "",
+                  certificatePassword: bank.billingCertificatePassword || "",
+                  beneficiaryCode: bank.billingBeneficiaryCode,
+                  accountNumber: this.buildSicoobAccountNumber(bank) || "",
+                  contractNumber: bank.billingContractNumber,
+                  modalityCode:
+                    bank.billingModalityCode || bank.billingWalletVariation,
+                  documentSpeciesCode: bank.billingDocumentSpeciesCode,
+                  acceptanceCode: bank.billingAcceptanceCode,
+                  issueTypeCode: bank.billingIssueTypeCode,
+                  distributionTypeCode: bank.billingDistributionTypeCode,
+                  registerPixCode: bank.billingRegisterPixCode,
+                  instructionLine1: bank.billingInstructionLine1,
+                  instructionLine2: bank.billingInstructionLine2,
+                  defaultFinePercent: bank.billingDefaultFinePercent,
+                  defaultInterestPercent: bank.billingDefaultInterestPercent,
+                  protestDays: bank.billingProtestDays,
+                  negativeDays: bank.billingNegativeDays,
+                },
+                issueInput,
+              );
+            }
             break;
           } catch (error) {
             lastEmissionError = error;
@@ -2340,7 +2389,7 @@ export class ReceivablesService {
             bankAssignedBy: payload.requestedBy || null,
             bankSlipStatus: "ISSUED",
             bankSlipMessage: "BOLETO EMITIDO COM SUCESSO.",
-            bankSlipProvider: "SICOOB",
+            bankSlipProvider: provider,
             bankSlipOurNumber:
               response.nossoNumero ||
               this.buildInstallmentBankSlipReference(sequenceNumber),
@@ -2368,7 +2417,12 @@ export class ReceivablesService {
           linhaDigitavel: response.linhaDigitavel,
         });
 
-        if (!discoveredContractNumber && response.numeroContratoCobranca) {
+        if (
+          provider === "SICOOB" &&
+          !discoveredContractNumber &&
+          "numeroContratoCobranca" in response &&
+          response.numeroContratoCobranca
+        ) {
           discoveredContractNumber = response.numeroContratoCobranca;
         }
 
@@ -2387,7 +2441,7 @@ export class ReceivablesService {
             bankAssignedBy: payload.requestedBy || null,
             bankSlipStatus: "ERROR",
             bankSlipMessage: failureMessage,
-            bankSlipProvider: "SICOOB",
+            bankSlipProvider: provider,
             updatedBy: payload.requestedBy || null,
           },
         });
@@ -2527,7 +2581,10 @@ export class ReceivablesService {
         accountNumber: true,
         accountDigit: true,
         billingProvider: true,
+        billingEnvironment: true,
         billingApiClientId: true,
+        billingApiClientSecret: true,
+        billingContractNumber: true,
         billingCertificateBase64: true,
         billingCertificatePassword: true,
         billingBeneficiaryCode: true,
@@ -2538,27 +2595,51 @@ export class ReceivablesService {
       throw new NotFoundException("BANCO NAO ENCONTRADO.");
     }
 
-    if (normalizeText(bank.billingProvider) !== "SICOOB") {
+    const provider = normalizeText(bank.billingProvider);
+    if (provider !== "SICOOB" && provider !== "SICREDI") {
       throw new BadRequestException(
-        "A importacao automatica de retorno disponivel no momento atende apenas bancos configurados como SICOOB.",
+        "A importação automática de retorno atende bancos configurados como SICOOB ou SICREDI.",
       );
     }
 
     if (!bank.billingApiClientId) {
       throw new BadRequestException(
-        "Client ID nao configurado no cadastro do banco.",
+        provider === "SICREDI"
+          ? "Chave da API não configurada no cadastro do Sicredi."
+          : "Client ID não configurado no cadastro do banco.",
       );
     }
 
-    if (!bank.billingCertificateBase64 || !bank.billingCertificatePassword) {
+    if (
+      provider === "SICOOB" &&
+      (!bank.billingCertificateBase64 || !bank.billingCertificatePassword)
+    ) {
       throw new BadRequestException(
-        "Certificado digital nao configurado no cadastro do banco.",
+        "Certificado digital não configurado no cadastro do banco.",
+      );
+    }
+
+    if (provider === "SICREDI" && !bank.billingApiClientSecret) {
+      throw new BadRequestException(
+        "Código de acesso não configurado no cadastro do Sicredi.",
       );
     }
 
     if (!bank.billingBeneficiaryCode) {
       throw new BadRequestException(
-        "Codigo do beneficiario nao configurado no cadastro do banco.",
+        provider === "SICREDI"
+          ? "Código do beneficiário não configurado no cadastro do Sicredi."
+          : "Código do beneficiário não configurado no cadastro do banco.",
+      );
+    }
+
+    const sicrediCooperative = normalizeDigits(
+      bank.billingContractNumber || "",
+    );
+    const sicrediPosto = normalizeDigits(bank.branchNumber || "");
+    if (provider === "SICREDI" && (!sicrediCooperative || !sicrediPosto)) {
+      throw new BadRequestException(
+        "Informe a cooperativa no contrato da cobrança e o posto no cadastro da conta Sicredi.",
       );
     }
 
@@ -2592,16 +2673,94 @@ export class ReceivablesService {
       SICOOB_MOVEMENT_TYPE_CODES.LIQUIDATION,
       SICOOB_MOVEMENT_TYPE_CODES.WRITE_OFF,
     ];
+    const appendImportedItem = (
+      movementPayload: Record<string, unknown>,
+      requestCode?: string | number | null,
+      fileId?: string | number | null,
+    ) => {
+      const movementStatus = resolveBankReturnMovementStatus(
+        String(movementPayload.siglaMovimento || ""),
+      );
+      const importedBase = buildImportedBankReturnItem({
+        payload: movementPayload,
+        movementStatus: movementStatus.code,
+        requestCode,
+        fileId,
+      });
+      const matchedInstallment =
+        (importedBase.ourNumber
+          ? installmentMaps.byOurNumber.get(importedBase.ourNumber)
+          : null) ||
+        (importedBase.barcode
+          ? installmentMaps.byBarcode.get(importedBase.barcode)
+          : null) ||
+        null;
+
+      importedItems.push({
+        ...importedBase,
+        matchedInstallmentId: matchedInstallment?.id || null,
+        matchedInstallment: matchedInstallment
+          ? {
+              id: matchedInstallment.id,
+              sourceInstallmentKey: matchedInstallment.sourceInstallmentKey,
+              status: matchedInstallment.status,
+              openAmount: matchedInstallment.openAmount,
+              paidAmount: matchedInstallment.paidAmount,
+              settledAt: matchedInstallment.settledAt || null,
+            }
+          : null,
+      });
+    };
 
     for (const currentDate of rangeDates) {
       const currentDateOnly = dateToDateOnly(currentDate);
+
+      if (provider === "SICREDI") {
+        const downloadResult = await this.sicrediBillingService.downloadSettled(
+          {
+            environment: bank.billingEnvironment,
+            apiKey: bank.billingApiClientId,
+            accessCode: bank.billingApiClientSecret || "",
+            cooperative: sicrediCooperative || "",
+            posto: sicrediPosto || "",
+            beneficiaryCode: bank.billingBeneficiaryCode,
+          },
+          { date: currentDateOnly || "" },
+        );
+        requestSnapshot.push({
+          provider,
+          date: currentDateOnly,
+          itemCount: downloadResult.items.length,
+          response: downloadResult.rawResponseJson,
+        });
+
+        for (const item of downloadResult.items) {
+          appendImportedItem(
+            {
+              ...item,
+              siglaMovimento: "LIQUIDACAO_SICREDI",
+              numeroTitulo: item.nossoNumero,
+              codigoBarras: null,
+              valorTitulo: item.valor,
+              valorLiquido: item.valorLiquidado,
+              valorDesconto: item.descontoLiquido,
+              valorMora: item.jurosLiquido,
+              valorTarifaMovimento: item.multaLiquida,
+              dataMovimentoLiquidacao: item.dataPagamento,
+              dataLiquidacao: item.dataPagamento,
+            },
+            currentDateOnly,
+          );
+        }
+        continue;
+      }
 
       for (const movementType of movementTypes) {
         const downloadResult = await this.sicoobBillingService.downloadMovements(
           {
             clientId: bank.billingApiClientId,
-            certificateBase64: bank.billingCertificateBase64,
-            certificatePassword: bank.billingCertificatePassword,
+            certificateBase64: bank.billingCertificateBase64 || "",
+            certificatePassword: bank.billingCertificatePassword || "",
           },
           {
             numeroCliente: Number(normalizeDigits(bank.billingBeneficiaryCode)),
@@ -2622,40 +2781,11 @@ export class ReceivablesService {
         });
 
         for (const record of downloadResult.records) {
-          const movementPayload = record as Record<string, unknown>;
-          const movementStatus = resolveBankReturnMovementStatus(
-            String(movementPayload.siglaMovimento || ""),
+          appendImportedItem(
+            record as Record<string, unknown>,
+            downloadResult.codigoSolicitacao,
+            downloadResult.idArquivos[0],
           );
-          const importedBase = buildImportedBankReturnItem({
-            payload: movementPayload,
-            movementStatus: movementStatus.code,
-            requestCode: downloadResult.codigoSolicitacao,
-            fileId: downloadResult.idArquivos[0],
-          });
-
-          const matchedInstallment =
-            (importedBase.ourNumber
-              ? installmentMaps.byOurNumber.get(importedBase.ourNumber)
-              : null) ||
-            (importedBase.barcode
-              ? installmentMaps.byBarcode.get(importedBase.barcode)
-              : null) ||
-            null;
-
-          importedItems.push({
-            ...importedBase,
-            matchedInstallmentId: matchedInstallment?.id || null,
-            matchedInstallment: matchedInstallment
-              ? {
-                  id: matchedInstallment.id,
-                  sourceInstallmentKey: matchedInstallment.sourceInstallmentKey,
-                  status: matchedInstallment.status,
-                  openAmount: matchedInstallment.openAmount,
-                  paidAmount: matchedInstallment.paidAmount,
-                  settledAt: matchedInstallment.settledAt || null,
-                }
-              : null,
-          });
         }
       }
     }
@@ -2672,7 +2802,7 @@ export class ReceivablesService {
         data: {
           companyId: company.id,
           bankAccountId: bank.id,
-          provider: "SICOOB",
+          provider,
           periodStart: parsedStart,
           periodEnd: parsedEnd,
           importedItemCount: summary.importedItemCount,

@@ -62,6 +62,7 @@ RELACIONAMENTOS:
 METRICAS / CAMPOS EXIBIDOS:
 - atalhos de produtos
 - atalho de historico de movimentacao do estoque
+- atalho para conferencia das imagens locais dos produtos por EAN-8/EAN-13
 - atalhos de cores, numeros e grades quando a filial usa grade cor/numero
 - identificacao da filial operacional atual
 
@@ -97,6 +98,19 @@ const MENU_ITEMS: MenuItem[] = [
       <svg className="h-12 w-12 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h16" />
         <path strokeLinecap="round" strokeLinejoin="round" d="m16 9 3 3-3 3" />
+      </svg>
+    ),
+  },
+  {
+    id: 'imagens-produtos',
+    label: 'Imagens Produtos',
+    href: '/estoque/imagens-produtos',
+    accent: 'from-violet-500 to-violet-600',
+    icon: (
+      <svg className="h-12 w-12 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="8.5" cy="9" r="1.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="m4 18 5-5 3.5 3.5 2.5-2.5L20 18" />
       </svg>
     ),
   },

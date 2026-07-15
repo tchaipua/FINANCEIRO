@@ -101,9 +101,26 @@ export function branchMiddleware(): Prisma.Middleware {
         originalWhere = flattenCompoundUniqueWhere(originalWhere);
       }
 
+      const requestedBranchFilter = originalWhere.branchCode;
+      const explicitlyRequestedBranchCodes = isPlainObject(requestedBranchFilter)
+        ? [
+            ...(requestedBranchFilter.equals !== undefined
+              ? [Number(requestedBranchFilter.equals)]
+              : []),
+            ...(Array.isArray(requestedBranchFilter.in)
+              ? requestedBranchFilter.in.map(Number)
+              : []),
+          ]
+        : requestedBranchFilter !== undefined
+          ? [Number(requestedBranchFilter)]
+          : [];
+
       if (
-        originalWhere.branchCode !== undefined &&
-        !visibleBranchCodes.includes(Number(originalWhere.branchCode))
+        explicitlyRequestedBranchCodes.some(
+          (branchCode) =>
+            !Number.isInteger(branchCode) ||
+            !visibleBranchCodes.includes(branchCode),
+        )
       ) {
         throw new ForbiddenException(
           "Tentativa de acesso a filial fora do escopo atual.",

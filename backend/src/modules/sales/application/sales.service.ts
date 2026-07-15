@@ -21,12 +21,16 @@ import {
 import { getFinanceContext } from "../../../common/finance-context";
 import {
   CancelSaleDto,
+  CheckSalePixStatusDto,
   CreateSaleReturnDto,
   CreateSaleDto,
   GetSaleDto,
+  IssueSalePixQrDto,
   ListSalesDto,
   SalePaymentDto,
 } from "./dto/sales.dto";
+import { SicoobPixService } from "./sicoob-pix.service";
+import { NfceService } from "../../fiscal-documents/application/nfce/nfce.service";
 
 type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
 
@@ -51,8 +55,8 @@ type ResolvedStockOptions = {
   allowsNegativeStock: boolean;
 };
 
-const IMMEDIATE_PAYMENT_METHODS = ["CASH", "PIX", "DEBIT_CARD", "CREDIT_CARD"];
-const DEFERRED_PAYMENT_METHODS = ["BOLETO", "TERM", "INSTALLMENT"];
+const IMMEDIATE_PAYMENT_METHODS = ["CASH", "DEBIT_CARD", "CREDIT_CARD"];
+const DEFERRED_PAYMENT_METHODS = ["PIX", "BOLETO", "TERM", "INSTALLMENT"];
 const GENERIC_PRODUCT_INTERNAL_CODE = "1";
 
 function getRegisteredPersonId(value?: string | null) {
@@ -62,7 +66,7 @@ function getRegisteredPersonId(value?: string | null) {
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CASH: "DINHEIRO",
-  PIX: "PIX",
+  PIX: "PIX SICOOB",
   DEBIT_CARD: "CARTÃO DE DÉBITO",
   CREDIT_CARD: "CARTÃO DE CRÉDITO",
   BOLETO: "BOLETO",
@@ -151,7 +155,11 @@ function isValidBrazilianDocument(value?: string | null) {
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sicoobPixService: SicoobPixService,
+    private readonly nfceService: NfceService,
+  ) {}
 
   private currentBranchCode(sourceBranchCode?: number | null) {
     const requestedBranchCode = normalizeBranchCode(
@@ -209,6 +217,23 @@ export class SalesService {
         canceledAt: null,
       },
     });
+    const salesScreenParameter = branch
+      ? await this.prisma.screenParameter.findFirst({
+          where: {
+            companyId,
+            branchId: branch.id,
+            screenId: "PRINCIPAL_FINANCEIRO_VENDAS",
+            canceledAt: null,
+          },
+        })
+      : null;
+    let salesScreenSettings: Record<string, unknown> = {};
+
+    try {
+      salesScreenSettings = JSON.parse(salesScreenParameter?.parametersJson || "{}");
+    } catch {
+      salesScreenSettings = {};
+    }
 
     return {
       branchCode,
@@ -236,8 +261,14 @@ export class SalesService {
         branch?.stockNegativeControlMode,
         "BY_PRODUCT",
       ),
-      allowSaleUnitPriceEdit: branch?.allowSaleUnitPriceEdit !== false,
-      allowSaleItemDiscount: branch?.allowSaleItemDiscount !== false,
+      allowSaleUnitPriceEdit:
+        salesScreenSettings.allowSaleUnitPriceEdit !== undefined
+          ? salesScreenSettings.allowSaleUnitPriceEdit !== false
+          : branch?.allowSaleUnitPriceEdit !== false,
+      allowSaleItemDiscount:
+        salesScreenSettings.allowSaleItemDiscount !== undefined
+          ? salesScreenSettings.allowSaleItemDiscount !== false
+          : branch?.allowSaleItemDiscount !== false,
     };
   }
 
@@ -510,6 +541,11 @@ export class SalesService {
         document,
         email: normalizeEmail(customer?.email),
         phone: normalizePhone(customer?.phone),
+        addressLine1: normalizeText(customer?.addressLine1),
+        neighborhood: normalizeText(customer?.neighborhood),
+        city: normalizeText(customer?.city),
+        state: normalizeText(customer?.state),
+        postalCode: normalizeDigits(customer?.postalCode),
         createdBy: payload.requestedBy || null,
         updatedBy: payload.requestedBy || null,
       },
@@ -518,6 +554,11 @@ export class SalesService {
         document,
         email: normalizeEmail(customer?.email),
         phone: normalizePhone(customer?.phone),
+        addressLine1: normalizeText(customer?.addressLine1),
+        neighborhood: normalizeText(customer?.neighborhood),
+        city: normalizeText(customer?.city),
+        state: normalizeText(customer?.state),
+        postalCode: normalizeDigits(customer?.postalCode),
         updatedBy: payload.requestedBy || null,
       },
     });
@@ -1069,7 +1110,10 @@ export class SalesService {
       );
     }
 
-    if (hasDeferredPayment) {
+    const hasCustomerRequiredDeferredPayment = normalizedPayments.some(
+      (payment) => ["BOLETO", "TERM", "INSTALLMENT"].includes(payment.paymentMethod) && payment.amount > 0,
+    );
+    if (hasCustomerRequiredDeferredPayment) {
       const payerName =
         normalizeText(payload.customer?.name) || normalizeText(payload.sourceEntityName);
       if (!payerName) {
@@ -1493,10 +1537,297 @@ export class SalesService {
       });
     });
 
+    const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+      company.id,
+      createdSale.id,
+      normalizedRequestedBy,
+    );
+    const nfceStatus = normalizeText((nfce as any)?.status);
     return {
       ...this.mapSale(createdSale),
-      message: "Venda confirmada com sucesso.",
+      nfce,
+      message:
+        nfceStatus === "AUTHORIZED"
+          ? "Venda confirmada e NFC-e autorizada com sucesso."
+          : nfceStatus === "REJECTED" || nfceStatus === "ERROR"
+            ? "Venda confirmada. A NFC-e requer correção ou reprocessamento."
+            : "Venda confirmada com sucesso.",
     };
+  }
+
+  async issuePixQr(saleId: string, payload: IssueSalePixQrDto) {
+    const company = await this.resolveCompany(payload);
+    const normalizedSaleId = String(saleId || "").trim();
+    const sourceSystem = normalizeText(payload.sourceSystem)!;
+    const sourceTenantId = normalizeText(payload.sourceTenantId)!;
+
+    const sale = await this.prisma.sale.findFirst({
+      where: {
+        id: normalizedSaleId,
+        companyId: company.id,
+        sourceSystem,
+        sourceTenantId,
+        canceledAt: null,
+      },
+      select: {
+        id: true,
+        saleNumber: true,
+        receivableBatchId: true,
+        payments: {
+          where: {
+            paymentMethod: "PIX",
+            status: "OPEN",
+            canceledAt: null,
+            receivableInstallmentId: { not: null },
+          },
+          select: { receivableInstallmentId: true },
+        },
+      },
+    });
+
+    if (!sale?.receivableBatchId) {
+      throw new BadRequestException(
+        "A venda não possui uma parcela PIX pendente para emissão.",
+      );
+    }
+
+    const installmentIds = sale.payments
+      .map((payment) => String(payment.receivableInstallmentId || "").trim())
+      .filter(Boolean);
+
+    if (installmentIds.length !== 1) {
+      throw new BadRequestException(
+        "A venda precisa possuir exatamente uma parcela PIX pendente para emitir o QR Code.",
+      );
+    }
+
+    const sicoobBanks = await this.prisma.bankAccount.findMany({
+      where: {
+        companyId: company.id,
+        status: "ACTIVE",
+        canceledAt: null,
+        billingProvider: "SICOOB",
+      },
+      select: { id: true },
+      take: 2,
+    });
+
+    if (sicoobBanks.length !== 1) {
+      throw new BadRequestException(
+        sicoobBanks.length
+          ? "Há mais de um banco Sicoob ativo. Defina uma única conta emissora para o PIX da venda."
+          : "Nenhuma conta Sicoob ativa foi encontrada para emitir o PIX da venda.",
+      );
+    }
+
+    const bank = await this.prisma.bankAccount.findFirst({
+      where: { id: sicoobBanks[0].id, companyId: company.id, canceledAt: null },
+      select: {
+        id: true, bankName: true, pixKey: true, billingApiClientId: true,
+        billingCertificateBase64: true, billingCertificatePassword: true,
+      },
+    });
+    if (!bank?.billingApiClientId || !bank.billingCertificateBase64 || !bank.billingCertificatePassword) {
+      throw new BadRequestException("A conta Sicoob não possui Client ID e certificado configurados.");
+    }
+    const installment = await this.prisma.receivableInstallment.findFirst({
+      where: {
+        id: installmentIds[0],
+        companyId: company.id,
+        canceledAt: null,
+      },
+      select: {
+        amount: true,
+        id: true,
+        bankSlipOurNumber: true,
+        bankSlipQrCode: true,
+        bankSlipPayloadJson: true,
+      },
+    });
+
+    if (!installment) throw new BadRequestException("Parcela PIX não encontrada.");
+    if (installment.bankSlipQrCode) {
+      return {
+        saleId: sale.id,
+        saleNumber: sale.saleNumber,
+        amount: roundMoney(installment.amount || 0),
+        pixCopyPaste: installment.bankSlipQrCode,
+        ourNumber: installment.bankSlipOurNumber,
+        status: "ISSUED",
+        message: "QR CODE PIX SICOOB JÁ EMITIDO PARA ESTA VENDA.",
+      };
+    }
+    const sicoobConfig = {
+      clientId: bank.billingApiClientId,
+      certificateBase64: bank.billingCertificateBase64,
+      certificatePassword: bank.billingCertificatePassword,
+      pixKey: bank.pixKey || "",
+    };
+    let charge: { txid: string; locationId: number | null; pixCopyPaste: string | null; payloadJson: string; responseJson: string } | null = null;
+    if (installment.bankSlipOurNumber && installment.bankSlipPayloadJson) {
+      try {
+        const savedPayload = JSON.parse(installment.bankSlipPayloadJson);
+        const savedLocationId = Number(savedPayload?.loc?.id || 0);
+        if (savedLocationId) {
+          charge = {
+            txid: installment.bankSlipOurNumber,
+            locationId: savedLocationId,
+            pixCopyPaste: null,
+            payloadJson: installment.bankSlipPayloadJson,
+            responseJson: "",
+          };
+        }
+      } catch {
+        // A tentativa anterior não possui dados aproveitáveis; a emissão será retomada com o mesmo txid.
+      }
+    }
+    if (!charge) {
+      const txid = `PIX${installment.id.replace(/-/g, "").toUpperCase()}`;
+      charge = await this.sicoobPixService.createImmediateCharge(sicoobConfig, {
+        amount: Number(installment.amount || 0),
+        description: `VENDA ${sale.saleNumber}`,
+        txid: installment.bankSlipOurNumber || txid,
+      });
+    }
+    if (charge.pixCopyPaste) {
+      await this.prisma.receivableInstallment.update({
+        where: { id: installment.id },
+        data: {
+          bankAccountId: bank.id,
+          bankAccountLabel: bank.bankName,
+          bankAssignedAt: new Date(),
+          bankAssignedBy: payload.requestedBy || null,
+          bankSlipStatus: "ISSUED",
+          bankSlipMessage: "PIX DINÂMICO SICOOB EMITIDO COM SUCESSO.",
+          bankSlipProvider: "SICOOB_PIX",
+          bankSlipOurNumber: charge.txid,
+          bankSlipQrCode: charge.pixCopyPaste,
+          bankSlipPayloadJson: charge.payloadJson,
+          bankSlipResponseJson: charge.responseJson,
+          bankSlipIssuedAt: new Date(),
+          bankSlipIssuedBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+      return {
+        saleId: sale.id,
+        saleNumber: sale.saleNumber,
+        amount: roundMoney(installment.amount || 0),
+        pixCopyPaste: charge.pixCopyPaste,
+        ourNumber: charge.txid,
+        status: "ISSUED",
+        message: "QR CODE PIX SICOOB EMITIDO COM SUCESSO.",
+      };
+    }
+    if (!charge.locationId) throw new BadRequestException("O Sicoob não retornou a localização do QR Code PIX.");
+    if (!installment.bankSlipOurNumber) {
+      await this.prisma.receivableInstallment.update({
+        where: { id: installment.id },
+        data: {
+          bankAccountId: bank.id,
+          bankAccountLabel: bank.bankName,
+          bankAssignedAt: new Date(),
+          bankAssignedBy: payload.requestedBy || null,
+          bankSlipStatus: "PROCESSING",
+          bankSlipMessage: "COBRANÇA PIX SICOOB CRIADA. OBTENDO QR CODE.",
+          bankSlipProvider: "SICOOB_PIX",
+          bankSlipOurNumber: charge.txid,
+          bankSlipPayloadJson: charge.payloadJson,
+          bankSlipIssuedAt: new Date(),
+          bankSlipIssuedBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+    }
+    const qr = await this.sicoobPixService.getQrCode(sicoobConfig, charge.locationId);
+    await this.prisma.receivableInstallment.update({
+      where: { id: installment.id },
+      data: {
+        bankSlipStatus: "ISSUED",
+        bankSlipMessage: "PIX DINÂMICO SICOOB EMITIDO COM SUCESSO.",
+        bankSlipQrCode: qr.pixCopyPaste,
+        bankSlipResponseJson: qr.responseJson,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    return {
+      saleId: sale.id,
+      saleNumber: sale.saleNumber,
+      amount: roundMoney(installment.amount || 0),
+      pixCopyPaste: qr.pixCopyPaste,
+      ourNumber: charge.txid,
+      status: "ISSUED",
+      message: "QR CODE PIX SICOOB EMITIDO COM SUCESSO.",
+    };
+  }
+
+  async checkPixStatus(saleId: string, payload: CheckSalePixStatusDto) {
+    const company = await this.resolveCompany(payload);
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: String(saleId || "").trim(), companyId: company.id, sourceSystem: normalizeText(payload.sourceSystem)!, sourceTenantId: normalizeText(payload.sourceTenantId)!, canceledAt: null },
+      select: { id: true, saleNumber: true, branchCode: true, paidAmount: true, receivableAmount: true, payments: { where: { paymentMethod: "PIX", canceledAt: null }, select: { id: true, status: true, amount: true, receivableInstallmentId: true } } },
+    });
+    const payment = sale?.payments.find((item) => item.receivableInstallmentId);
+    if (!sale || !payment?.receivableInstallmentId) throw new BadRequestException("A venda não possui PIX pendente para consulta.");
+    if (payment.status === "PAID") {
+      const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+        company.id,
+        sale.id,
+        payload.requestedBy || "PIX_SICOOB",
+      );
+      return { paid: true, saleNumber: sale.saleNumber, message: "PIX JÁ CONFIRMADO.", nfce };
+    }
+
+    const installment = await this.prisma.receivableInstallment.findFirst({ where: { id: payment.receivableInstallmentId, companyId: company.id, canceledAt: null }, select: { id: true, amount: true, status: true, bankSlipOurNumber: true, bankAccountId: true } });
+    if (!installment?.bankSlipOurNumber || !installment.bankAccountId) throw new BadRequestException("Cobrança PIX não encontrada para a venda.");
+    if (installment.status === "PAID") {
+      const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+        company.id,
+        sale.id,
+        payload.requestedBy || "PIX_SICOOB",
+      );
+      return { paid: true, saleNumber: sale.saleNumber, message: "PIX JÁ CONFIRMADO.", nfce };
+    }
+
+    const bank = await this.prisma.bankAccount.findFirst({ where: { id: installment.bankAccountId, companyId: company.id, canceledAt: null, billingProvider: "SICOOB" }, select: { id: true, bankName: true, billingApiClientId: true, billingCertificateBase64: true, billingCertificatePassword: true, pixKey: true } });
+    if (!bank?.billingApiClientId || !bank.billingCertificateBase64 || !bank.billingCertificatePassword) throw new BadRequestException("A conta Sicoob não possui certificado configurado.");
+    const charge = await this.sicoobPixService.getImmediateCharge({ clientId: bank.billingApiClientId, certificateBase64: bank.billingCertificateBase64, certificatePassword: bank.billingCertificatePassword, pixKey: bank.pixKey || "" }, installment.bankSlipOurNumber);
+    if (charge.status !== "CONCLUIDA") return { paid: false, bankStatus: charge.status || "ATIVA" };
+
+    await this.prisma.$transaction(async (tx: any) => {
+      const current = await tx.receivableInstallment.findFirst({ where: { id: installment.id, companyId: company.id, canceledAt: null }, select: { id: true, status: true, amount: true, openAmount: true } });
+      if (!current || current.status === "PAID") return;
+      const settledAt = new Date();
+      const cashSession = await tx.cashSession.create({ data: { companyId: company.id, sourceSystem: normalizeText(payload.sourceSystem)!, sourceTenantId: normalizeText(payload.sourceTenantId)!, cashierUserId: "PIX_SICOOB", cashierDisplayName: "PIX SICOOB", status: "CLOSED", openingAmount: 0, totalReceivedAmount: Number(current.openAmount || current.amount), expectedClosingAmount: 0, declaredClosingAmount: 0, openedAt: settledAt, closedAt: settledAt, notes: `BAIXA AUTOMÁTICA PIX SICOOB ${installment.bankSlipOurNumber}`, createdBy: payload.requestedBy || "PIX_SICOOB", updatedBy: payload.requestedBy || "PIX_SICOOB" } });
+      const receivedAmount = roundMoney(Number(current.openAmount || current.amount));
+      await tx.installmentSettlement.create({ data: { companyId: company.id, branchCode: sale.branchCode, installmentId: current.id, cashSessionId: cashSession.id, receivedAmount, discountAmount: 0, interestAmount: 0, penaltyAmount: 0, paymentMethod: "PIX", bankAccountId: bank.id, bankAccountLabel: bank.bankName, settledAt, requestedBy: payload.requestedBy || "PIX_SICOOB", notes: `PIX SICOOB CONFIRMADO ${installment.bankSlipOurNumber}`, createdBy: payload.requestedBy || "PIX_SICOOB", updatedBy: payload.requestedBy || "PIX_SICOOB" } });
+      await tx.receivableInstallment.update({ where: { id: current.id }, data: { openAmount: 0, paidAmount: { increment: receivedAmount }, status: "PAID", settlementMethod: "PIX_SICOOB", settledAt, updatedBy: payload.requestedBy || "PIX_SICOOB" } });
+      await tx.salePayment.update({ where: { id: payment.id }, data: { status: "PAID", bankAccountId: bank.id, bankAccountLabel: bank.bankName, updatedBy: payload.requestedBy || "PIX_SICOOB" } });
+      await tx.sale.update({ where: { id: sale.id }, data: { paidAmount: { increment: receivedAmount }, receivableAmount: { decrement: receivedAmount }, updatedBy: payload.requestedBy || "PIX_SICOOB" } });
+    });
+    const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+      company.id,
+      sale.id,
+      payload.requestedBy || "PIX_SICOOB",
+    );
+    return { paid: true, saleNumber: sale.saleNumber, message: "PIX CONFIRMADO PELO SICOOB.", nfce };
+  }
+
+  async cancelPix(saleId: string, payload: CancelSaleDto) {
+    const company = await this.resolveCompany(payload);
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: String(saleId || "").trim(), companyId: company.id, sourceSystem: normalizeText(payload.sourceSystem)!, sourceTenantId: normalizeText(payload.sourceTenantId)!, canceledAt: null },
+      select: { payments: { where: { paymentMethod: "PIX", status: "OPEN", canceledAt: null }, select: { receivableInstallmentId: true } } },
+    });
+    const installmentId = sale?.payments[0]?.receivableInstallmentId;
+    if (!installmentId) throw new BadRequestException("Não existe PIX pendente para cancelamento.");
+    const installment = await this.prisma.receivableInstallment.findFirst({ where: { id: installmentId, companyId: company.id, canceledAt: null }, select: { bankSlipOurNumber: true, bankAccountId: true } });
+    if (!installment?.bankSlipOurNumber || !installment.bankAccountId) throw new BadRequestException("Cobrança PIX não encontrada para cancelamento.");
+    const bank = await this.prisma.bankAccount.findFirst({ where: { id: installment.bankAccountId, companyId: company.id, canceledAt: null, billingProvider: "SICOOB" }, select: { billingApiClientId: true, billingCertificateBase64: true, billingCertificatePassword: true, pixKey: true } });
+    if (!bank?.billingApiClientId || !bank.billingCertificateBase64 || !bank.billingCertificatePassword) throw new BadRequestException("A conta Sicoob não possui certificado configurado.");
+    await this.sicoobPixService.cancelImmediateCharge({ clientId: bank.billingApiClientId, certificateBase64: bank.billingCertificateBase64, certificatePassword: bank.billingCertificatePassword, pixKey: bank.pixKey || "" }, installment.bankSlipOurNumber);
+    return this.cancel(saleId, { ...payload, reason: payload.reason || "CANCELAMENTO DO PAGAMENTO PIX" });
   }
 
   private mapSaleReturn(returnRecord: any) {
@@ -1985,6 +2316,22 @@ export class SalesService {
 
     if (!sale) {
       throw new NotFoundException("VENDA NÃO ENCONTRADA OU JÁ CANCELADA.");
+    }
+
+    const authorizedNfce = await this.prisma.fiscalDocument.findFirst({
+      where: {
+        companyId: company.id,
+        saleId: sale.id,
+        model: "65",
+        status: "AUTHORIZED",
+        canceledAt: null,
+      },
+      select: { id: true },
+    });
+    if (authorizedNfce) {
+      throw new BadRequestException(
+        "A VENDA POSSUI NFC-E AUTORIZADA. CANCELE O DOCUMENTO FISCAL NA SEFAZ ANTES DE CANCELAR A VENDA.",
+      );
     }
 
     const cancelerCashSession =

@@ -388,9 +388,16 @@ export default function FinanceiroOpenBankMovementsPage() {
       const activeBanks = loadedBanks.filter(
         (item) => String(item.status || '').trim().toUpperCase() === 'ACTIVE',
       );
+      const effectiveBankId =
+        selectedBankId || (!lockedBankId && activeBanks.length === 1 ? activeBanks[0].id : '');
+
+      if (!lockedBankId && activeBanks.length === 1) {
+        setSelectedBankId((currentBankId) => currentBankId || activeBanks[0].id);
+      }
+
       const openMovements = mapInstallmentsToOpenMovements(paidInstallments)
         .filter((movement) =>
-          selectedBankId ? movement.bankAccountId === selectedBankId : Boolean(movement.bankAccountId),
+          effectiveBankId ? movement.bankAccountId === effectiveBankId : false,
         );
 
       setBanks(activeBanks);
@@ -410,7 +417,7 @@ export default function FinanceiroOpenBankMovementsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [appliedSearch, runtimeContext, selectedBankId]);
+  }, [appliedSearch, lockedBankId, runtimeContext, selectedBankId]);
 
   useEffect(() => {
     void loadPageData();
@@ -474,7 +481,7 @@ export default function FinanceiroOpenBankMovementsPage() {
                 onChange={(event) => setSelectedBankId(event.target.value)}
                 className={inputClass}
               >
-                <option value="">TODOS OS BANCOS</option>
+                <option value="">SELECIONE</option>
                 {banks.map((item) => (
                   <option key={item.id} value={item.id}>
                     {buildBankLabel(item)}

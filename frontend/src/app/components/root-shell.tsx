@@ -51,7 +51,13 @@ function resolveSchoolShellOrigin() {
 }
 
 function resolveSchoolFinancePath(pathname: string) {
+  if (pathname.startsWith('/analises-graficos')) {
+    return `/principal/financeiro${pathname}`;
+  }
   if (pathname.startsWith('/bancos-e-boletos')) return '/principal/financeiro/bancos-e-boletos';
+  if (pathname.startsWith('/bancos/ddas-abertos')) {
+    return '/principal/financeiro/bancos/ddas-abertos';
+  }
   if (pathname.startsWith('/bancos')) return '/principal/financeiro/bancos';
   if (pathname.startsWith('/empresas')) return '/principal/financeiro/empresa';
   if (pathname.startsWith('/resumo')) return '/principal/financeiro/resumo';

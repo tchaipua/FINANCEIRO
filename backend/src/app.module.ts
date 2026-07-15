@@ -10,6 +10,7 @@ import { PayablesModule } from "./modules/payables/payables.module";
 import { FiscalCertificatesModule } from "./modules/fiscal-certificates/fiscal-certificates.module";
 import { SalesModule } from "./modules/sales/sales.module";
 import { FinanceContextMiddleware } from "./common/finance-context.middleware";
+import { FiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documents.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FinanceContextMiddleware } from "./common/finance-context.middleware";
     ProductsModule,
     PayablesModule,
     FiscalCertificatesModule,
+    FiscalDocumentsModule,
     SalesModule,
   ],
 })

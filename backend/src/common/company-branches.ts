@@ -36,7 +36,7 @@ export async function ensureDefaultCompanyBranch(
     return existing;
   }
 
-  return prisma.companyBranch.create({
+  const createdBranch = await prisma.companyBranch.create({
     data: {
       companyId,
       branchCode: DEFAULT_BRANCH_CODE,
@@ -58,6 +58,23 @@ export async function ensureDefaultCompanyBranch(
     },
     select: { id: true },
   });
+
+  await prisma.screenParameter.create({
+    data: {
+      companyId,
+      branchId: createdBranch.id,
+      screenId: "PRINCIPAL_FINANCEIRO_VENDAS",
+      parametersJson: JSON.stringify({
+        allowSaleUnitPriceEdit: true,
+        allowSaleItemDiscount: true,
+        groupSameProduct: true,
+      }),
+      createdBy: userId || null,
+      updatedBy: userId || null,
+    },
+  });
+
+  return createdBranch;
 }
 
 export async function listCompanyBranches(

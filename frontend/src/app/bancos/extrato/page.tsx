@@ -1022,11 +1022,11 @@ export default function FinanceiroBankStatementPage() {
         (item) => String(item.status || '').trim().toUpperCase() === 'ACTIVE',
       );
 
-      setBanks(activeBanks);
-
-      if (!selectedBankId && !lockedBankId && activeBanks.length) {
-        setSelectedBankId(activeBanks[0].id);
+      if (!lockedBankId && activeBanks.length === 1) {
+        setSelectedBankId((currentBankId) => currentBankId || activeBanks[0].id);
       }
+
+      setBanks(activeBanks);
     } catch (currentError) {
       setBanks([]);
       clearStatement();
@@ -1039,7 +1039,7 @@ export default function FinanceiroBankStatementPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [clearStatement, lockedBankId, runtimeContext, scopeReady, selectedBankId]);
+  }, [clearStatement, lockedBankId, runtimeContext, scopeReady]);
 
   const loadSavedStatement = useCallback(async () => {
     if (!scopeReady || !selectedBankId) {

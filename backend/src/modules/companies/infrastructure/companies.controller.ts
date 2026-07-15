@@ -4,6 +4,7 @@ import { CompaniesService } from "../application/companies.service";
 import {
   ListCompaniesDto,
   SaveCompanyBranchDto,
+  SaveSalesScreenParametersDto,
   SyncCompanyFinancialSettingsDto,
   UpdateCompanyFinancialSettingsDto,
 } from "../application/dto/companies.dto";
@@ -60,6 +61,36 @@ export class CompaniesController {
     @Body() payload: SaveCompanyBranchDto,
   ) {
     return this.companiesService.createBranch(id, query, payload);
+  }
+
+  @Get(":id/branches/:branchId/screen-parameters/vendas")
+  @ApiOperation({
+    summary: "Consulta os parâmetros da tela de vendas da filial",
+  })
+  getSalesScreenParameters(
+    @Param("id") id: string,
+    @Param("branchId") branchId: string,
+    @Query() query: ListCompaniesDto,
+  ) {
+    return this.companiesService.getSalesScreenParameters(id, branchId, query);
+  }
+
+  @Patch(":id/branches/:branchId/screen-parameters/vendas")
+  @ApiOperation({
+    summary: "Atualiza os parâmetros da tela de vendas da filial",
+  })
+  updateSalesScreenParameters(
+    @Param("id") id: string,
+    @Param("branchId") branchId: string,
+    @Query() query: ListCompaniesDto,
+    @Body() payload: SaveSalesScreenParametersDto,
+  ) {
+    return this.companiesService.updateSalesScreenParameters(
+      id,
+      branchId,
+      query,
+      payload,
+    );
   }
 
   @Patch(":id/branches/:branchId")

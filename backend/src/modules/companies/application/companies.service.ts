@@ -8,6 +8,7 @@ import {
 import {
   ListCompaniesDto,
   SaveCompanyBranchDto,
+  SaveSalesScreenParametersDto,
   SyncCompanyFinancialSettingsDto,
   UpdateCompanyFinancialSettingsDto,
 } from "./dto/companies.dto";
@@ -21,6 +22,8 @@ import { DEFAULT_BRANCH_CODE, normalizeBranchCode } from "../../../common/branch
 @Injectable()
 export class CompaniesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private readonly salesScreenId = "PRINCIPAL_FINANCEIRO_VENDAS";
 
   private mapCompany(company: any) {
     return {
@@ -78,6 +81,48 @@ export class CompaniesService {
 
     await ensureDefaultCompanyBranch(this.prisma, company.id);
     return company;
+  }
+
+  private async findScopedBranch(
+    companyId: string,
+    branchId: string,
+    scope: ListCompaniesDto,
+  ) {
+    const company = await this.findScopedCompany(
+      companyId,
+      scope.sourceSystem,
+      scope.sourceTenantId,
+    );
+    const branch = await this.prisma.companyBranch.findFirst({
+      where: {
+        id: String(branchId || "").trim(),
+        companyId: company.id,
+        canceledAt: null,
+      },
+    });
+
+    if (!branch) {
+      throw new BadRequestException("Filial não encontrada para esta empresa.");
+    }
+
+    return { company, branch };
+  }
+
+  private mapSalesScreenParameters(parametersJson?: string | null) {
+    try {
+      const parsed = JSON.parse(String(parametersJson || "{}"));
+      return {
+        allowSaleUnitPriceEdit: parsed?.allowSaleUnitPriceEdit !== false,
+        allowSaleItemDiscount: parsed?.allowSaleItemDiscount !== false,
+        groupSameProduct: parsed?.groupSameProduct !== false,
+      };
+    } catch {
+      return {
+        allowSaleUnitPriceEdit: true,
+        allowSaleItemDiscount: true,
+        groupSameProduct: true,
+      };
+    }
   }
 
   private normalizeOptionalInt(value?: number | null) {
@@ -366,6 +411,82 @@ export class CompaniesService {
     return branches.map(mapCompanyBranchSummary);
   }
 
+  async getSalesScreenParameters(
+    id: string,
+    branchId: string,
+    scope: ListCompaniesDto,
+  ) {
+    const { company, branch } = await this.findScopedBranch(id, branchId, scope);
+    const screenParameter = await this.prisma.screenParameter.findFirst({
+      where: {
+        companyId: company.id,
+        branchId: branch.id,
+        screenId: this.salesScreenId,
+        canceledAt: null,
+      },
+    });
+
+    return {
+      screenId: this.salesScreenId,
+      ...this.mapSalesScreenParameters(
+        screenParameter?.parametersJson ||
+          JSON.stringify({
+            allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
+            allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
+            groupSameProduct: true,
+          }),
+      ),
+    };
+  }
+
+  async updateSalesScreenParameters(
+    id: string,
+    branchId: string,
+    scope: ListCompaniesDto,
+    payload: SaveSalesScreenParametersDto,
+  ) {
+    const { company, branch } = await this.findScopedBranch(id, branchId, scope);
+    const current = await this.getSalesScreenParameters(id, branchId, scope);
+    const parameters = {
+      allowSaleUnitPriceEdit:
+        payload.allowSaleUnitPriceEdit ?? current.allowSaleUnitPriceEdit,
+      allowSaleItemDiscount:
+        payload.allowSaleItemDiscount ?? current.allowSaleItemDiscount,
+      groupSameProduct: payload.groupSameProduct ?? current.groupSameProduct,
+    };
+    const now = new Date();
+
+    await this.prisma.screenParameter.upsert({
+      where: {
+        companyId_branchId_screenId: {
+          companyId: company.id,
+          branchId: branch.id,
+          screenId: this.salesScreenId,
+        },
+      },
+      create: {
+        companyId: company.id,
+        branchId: branch.id,
+        screenId: this.salesScreenId,
+        parametersJson: JSON.stringify(parameters),
+        createdBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+      update: {
+        parametersJson: JSON.stringify(parameters),
+        updatedAt: now,
+        updatedBy: payload.requestedBy || null,
+        canceledAt: null,
+        canceledBy: null,
+      },
+    });
+
+    return {
+      screenId: this.salesScreenId,
+      ...parameters,
+    };
+  }
+
   async createBranch(
     id: string,
     scope: ListCompaniesDto,
@@ -418,6 +539,21 @@ export class CompaniesService {
         ...stockModes,
         allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
         allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
+        createdBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+
+    await this.prisma.screenParameter.create({
+      data: {
+        companyId: company.id,
+        branchId: createdBranch.id,
+        screenId: this.salesScreenId,
+        parametersJson: JSON.stringify({
+          allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
+          allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
+          groupSameProduct: true,
+        }),
         createdBy: payload.requestedBy || null,
         updatedBy: payload.requestedBy || null,
       },
@@ -477,6 +613,50 @@ export class CompaniesService {
         updatedBy: payload.requestedBy || null,
       },
     });
+
+    if (
+      payload.allowSaleUnitPriceEdit !== undefined ||
+      payload.allowSaleItemDiscount !== undefined
+    ) {
+      const currentScreenParameters = await this.getSalesScreenParameters(
+        id,
+        branchId,
+        scope,
+      );
+      const parameters = {
+        allowSaleUnitPriceEdit:
+          payload.allowSaleUnitPriceEdit ??
+          currentScreenParameters.allowSaleUnitPriceEdit,
+        allowSaleItemDiscount:
+          payload.allowSaleItemDiscount ??
+          currentScreenParameters.allowSaleItemDiscount,
+        groupSameProduct: currentScreenParameters.groupSameProduct,
+      };
+
+      await this.prisma.screenParameter.upsert({
+        where: {
+          companyId_branchId_screenId: {
+            companyId: company.id,
+            branchId: branch.id,
+            screenId: this.salesScreenId,
+          },
+        },
+        create: {
+          companyId: company.id,
+          branchId: branch.id,
+          screenId: this.salesScreenId,
+          parametersJson: JSON.stringify(parameters),
+          createdBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+        update: {
+          parametersJson: JSON.stringify(parameters),
+          updatedBy: payload.requestedBy || null,
+          canceledAt: null,
+          canceledBy: null,
+        },
+      });
+    }
 
     return mapCompanyBranchSummary(updatedBranch);
   }

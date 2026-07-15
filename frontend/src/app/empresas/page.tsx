@@ -672,7 +672,7 @@ function CompanyFinancialSettingsModal({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-5 xl:grid-cols-3">
+            <div className="mt-5 grid gap-5 xl:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   % multa
@@ -691,35 +691,37 @@ function CompanyFinancialSettingsModal({
                   disabled={penaltyRateDisabled}
                 />
               </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
-                  R$ valor fixo multa
-                </label>
-                <input
-                  value={form.penaltyValue}
-                  onChange={(event) => {
-                    onChange('penaltyValue', event.target.value);
-                    if (Number(event.target.value.replace(',', '.')) > 0) {
-                      onChange('penaltyRate', '');
-                    }
-                  }}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                  inputMode="decimal"
-                  placeholder="Ex: 10"
-                  disabled={penaltyValueDisabled}
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
-                  Dias de carência (multa)
-                </label>
-                <input
-                  value={form.penaltyGracePeriod}
-                  onChange={(event) => onChange('penaltyGracePeriod', event.target.value)}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                  inputMode="numeric"
-                  placeholder="Ex: 5"
-                />
+              <div className="space-y-5">
+                <div>
+                  <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                    R$ valor fixo multa
+                  </label>
+                  <input
+                    value={form.penaltyValue}
+                    onChange={(event) => {
+                      onChange('penaltyValue', event.target.value);
+                      if (Number(event.target.value.replace(',', '.')) > 0) {
+                        onChange('penaltyRate', '');
+                      }
+                    }}
+                    className={FINANCE_GRID_PAGE_LAYOUT.input}
+                    inputMode="decimal"
+                    placeholder="Ex: 10"
+                    disabled={penaltyValueDisabled}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                    Dias de carência (multa)
+                  </label>
+                  <input
+                    value={form.penaltyGracePeriod}
+                    onChange={(event) => onChange('penaltyGracePeriod', event.target.value)}
+                    className={FINANCE_GRID_PAGE_LAYOUT.input}
+                    inputMode="numeric"
+                    placeholder="Ex: 5"
+                  />
+                </div>
               </div>
             </div>
           </div>

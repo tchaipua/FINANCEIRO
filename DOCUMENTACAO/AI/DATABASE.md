@@ -308,6 +308,19 @@ Regras:
 - `unitCost` guarda o custo unitario informado ou herdado do produto, quando houver
 - `unitPrice` guarda o preco de venda unitario confirmado
 
+### `nfce_profiles`, `fiscal_documents` e `fiscal_document_attempts`
+
+Estrutura fiscal da NFC-e por empresa e filial.
+
+Regras:
+
+- `nfce_profiles` guarda ambiente, certificado, dados do emitente, tributação padrão, série e próxima numeração
+- o perfil e o certificado pertencem à mesma empresa, filial, ambiente e CNPJ
+- `fiscal_documents` possui vínculo único com a venda e preserva chave, XML assinado/processado, protocolo, status e código aleatório
+- `fiscal_document_attempts` registra cada autorização, consulta, rejeição ou falha sem apagar o histórico
+- a alocação da numeração e a criação do documento são transacionais e idempotentes
+- todos os registros respeitam auditoria e cancelamento lógico
+
 ### `sale_returns` e `sale_return_items`
 
 Tabelas de devolucao de mercadorias vinculadas a uma venda confirmada.

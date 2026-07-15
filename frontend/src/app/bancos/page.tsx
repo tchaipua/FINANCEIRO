@@ -3,6 +3,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import ScreenNameCopy from '@/app/components/screen-name-copy';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
@@ -346,6 +347,7 @@ const DEFAULT_BANK_GRID_SORT: BankGridSort = {
 
 const BANK_GRID_STORAGE_PREFIX = 'financeiro:bancos:grid-columns:';
 const BANK_EXPORT_STORAGE_PREFIX = 'financeiro:bancos:export-config:';
+const UPDATE_BANK_SUCCESS_POPUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_BANCOS_EDICAO_SUCESSO';
 
 function resolveSchoolBaseUrl() {
   if (typeof document === 'undefined' || !document.referrer) {
@@ -982,6 +984,7 @@ export default function FinanceiroBanksPage() {
   const [isCertificatePasswordVisible, setIsCertificatePasswordVisible] = useState(false);
   const [actionBankId, setActionBankId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [bankUpdateSuccessOpen, setBankUpdateSuccessOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeBankColumns = useMemo(
     () =>
@@ -1524,11 +1527,11 @@ export default function FinanceiroBanksPage() {
         throw new Error(errorMessage || 'Não foi possível salvar o banco.');
       }
 
-      setStatusMessage(
-        form.id
-          ? 'Banco atualizado com sucesso no core financeiro.'
-          : 'Banco cadastrado com sucesso no core financeiro.',
-      );
+      if (form.id) {
+        setBankUpdateSuccessOpen(true);
+      } else {
+        setStatusMessage('Banco cadastrado com sucesso no core financeiro.');
+      }
 
       if (form.id && payload && 'id' in payload) {
         setForm(buildFormFromBank(payload));
@@ -2322,6 +2325,50 @@ export default function FinanceiroBanksPage() {
           </div>
           </form>
         ) : null}
+
+      {bankUpdateSuccessOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-2xl shadow-slate-950/30">
+            <div className="flex items-center gap-3 bg-emerald-600 px-5 py-4 text-white">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/25 bg-white">
+                {runtimeContext.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={runtimeContext.logoUrl} alt="Logotipo" className="h-full w-full object-contain" />
+                ) : (
+                  <span className="text-xs font-black text-slate-900">MS</span>
+                )}
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-100">Sucesso</div>
+                <h2 className="mt-1 text-lg font-black uppercase tracking-[0.04em]">Banco atualizado</h2>
+              </div>
+            </div>
+            <div className="px-5 py-5">
+              <p className="text-sm font-bold leading-6 text-slate-700">Os dados bancários foram gravados com sucesso.</p>
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBankUpdateSuccessOpen(false);
+                    router.push(`/bancos${preservedQueryString}`);
+                  }}
+                  className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-slate-100 bg-slate-50 px-4 py-2">
+              <ScreenNameCopy
+                screenId={UPDATE_BANK_SUCCESS_POPUP_SCREEN_ID}
+                className="max-w-full justify-end rounded-xl bg-white px-2 py-1 text-right"
+                originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/bancos/page.tsx"
+                auditText="Popup de confirmação do salvamento da edição do banco."
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {!isCreateRoute ? (
         <>

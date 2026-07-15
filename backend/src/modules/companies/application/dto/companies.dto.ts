@@ -183,3 +183,22 @@ export class SaveCompanyBranchDto {
   @IsBoolean()
   allowSaleItemDiscount?: boolean;
 }
+
+export class SaveSalesScreenParametersDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  allowSaleUnitPriceEdit?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowSaleItemDiscount?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  groupSameProduct?: boolean;
+
+}

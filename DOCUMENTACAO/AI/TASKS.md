@@ -27,3 +27,17 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - criar modulo de cobranca
 - ampliar importacao automatica com manifestacao do destinatario e tratamento de resumos DF-e
 - acompanhar patch oficial do Next moderno para remover alerta residual de `postcss` interno sem downgrade para Next 9
+
+## NFC-e
+
+- concluido: primeira versao da tela `Vendas 2`, com novo layout de PDV e reutilizacao integral do fluxo operacional da tela de vendas atual
+- concluido: geracao, assinatura A1, QR Code v3, IBS/CBS 2026 e comunicacao com homologacao da SEFAZ-SP
+- concluido: bloqueio quando o CNPJ do certificado difere do emitente
+- concluido: NFC-e de homologacao autorizada para `A MONTANHER & CIA LTDA`, chave `35260745364981000194650012607140011061046523`, protocolo `13526000008317897`
+- concluido: segunda NFC-e de homologacao autorizada após integração do fluxo, chave `35260745364981000194650012607140021807000407`, protocolo `13526000008318783`
+- concluido: DANFE de homologacao gerado e verificado visualmente
+- concluido: emissão automática idempotente integrada ao fechamento da venda para dinheiro, cartões, prazo, parcelado, boleto e PIX confirmado
+- concluido: perfil fiscal isolado por empresa/filial/ambiente, tentativas auditadas e trava de cancelamento para venda autorizada
+- pendente externo: o CNPJ `51007652000199` da SACCARDO continua sem credenciamento NFC-e; retorno `245 - CNPJ Emitente não cadastrado`
+- pendente: cadastrar certificado e perfil fiscal do mesmo CNPJ da empresa usada pela tela de vendas e preencher NCM dos produtos
+- pendente: enviar o DANFE/XML de homologacao por e-mail

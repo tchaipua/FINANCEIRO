@@ -35,6 +35,11 @@ import {
   SicoobDdaBoleto,
   SicoobDdaService,
 } from "./sicoob-dda.service";
+import {
+  DownloadSicrediStatementResult,
+  SicrediApiError,
+  SicrediBillingService,
+} from "../../receivables/application/sicredi-billing.service";
 
 type NormalizedBankPayload = {
   bankCode: string;
@@ -187,15 +192,19 @@ type PersistedStatementMovement = {
 export class BanksService {
   private readonly sicoobBankStatementService: SicoobBankStatementService;
   private readonly sicoobDdaService: SicoobDdaService;
+  private readonly sicrediBillingService: SicrediBillingService;
 
   constructor(
     private readonly prisma: PrismaService,
     sicoobBankStatementService?: SicoobBankStatementService,
     sicoobDdaService?: SicoobDdaService,
+    sicrediBillingService?: SicrediBillingService,
   ) {
     this.sicoobBankStatementService =
       sicoobBankStatementService || new SicoobBankStatementService();
     this.sicoobDdaService = sicoobDdaService || new SicoobDdaService();
+    this.sicrediBillingService =
+      sicrediBillingService || new SicrediBillingService();
   }
 
   private normalizeOptionalRawText(value: string | null | undefined) {
@@ -706,7 +715,8 @@ export class BanksService {
       periodStart: string;
       periodEnd: string;
     },
-    result: DownloadSicoobStatementResult,
+    result: DownloadSicoobStatementResult | DownloadSicrediStatementResult,
+    provider = "SICOOB",
   ): MappedBankStatement {
     const bankAccountLabel = this.buildBankAccountLabel(bank);
     const orderedTransactions = [...result.transactions].sort((left, right) => {
@@ -764,7 +774,7 @@ export class BanksService {
     );
 
     return {
-      provider: "SICOOB",
+      provider,
       bankAccountId: bank.id,
       bankAccountLabel,
       periodStart: period.periodStart,
@@ -779,8 +789,8 @@ export class BanksService {
       movements,
       message:
         movements.length === 1
-          ? "1 lançamento de extrato bancário encontrado no Sicoob."
-          : `${movements.length} lançamentos de extrato bancário encontrados no Sicoob.`,
+          ? `1 lançamento de extrato bancário encontrado no ${provider}.`
+          : `${movements.length} lançamentos de extrato bancário encontrados no ${provider}.`,
     };
   }
 
@@ -955,7 +965,10 @@ export class BanksService {
     duplicateMovementCount: number,
     provider = "SICOOB",
   ) {
-    const sourceDescription = normalizeText(provider) === "OFX" ? "no OFX" : "no Sicoob";
+    const sourceDescription =
+      normalizeText(provider) === "OFX"
+        ? "no OFX"
+        : `no ${normalizeText(provider) || "banco"}`;
     const foundMessage =
       movementCount === 1
         ? `1 lançamento de extrato bancário encontrado ${sourceDescription}.`
@@ -1962,9 +1975,70 @@ export class BanksService {
       throw new BadRequestException("BANCO INATIVO PARA CONSULTA DE EXTRATO.");
     }
 
-    if (normalizeText(bank.billingProvider) !== "SICOOB") {
+    const provider = normalizeText(bank.billingProvider);
+
+    if (provider === "SICREDI") {
+      if (!bank.billingApiClientId || !bank.billingApiClientSecret) {
+        throw new BadRequestException(
+          "Chave da API e código de acesso não configurados no cadastro do Sicredi.",
+        );
+      }
+
+      if (!bank.billingBeneficiaryCode) {
+        throw new BadRequestException(
+          "Código do beneficiário não configurado no cadastro do Sicredi.",
+        );
+      }
+
+      const cooperative = normalizeDigits(
+        bank.billingContractNumber || bank.agreementCode || "",
+      );
+      const posto = normalizeDigits(bank.branchNumber || "");
+      if (!cooperative || !posto) {
+        throw new BadRequestException(
+          "Informe a cooperativa no contrato da cobrança e o posto no cadastro da conta Sicredi.",
+        );
+      }
+
+      try {
+        const statement = await this.sicrediBillingService.downloadStatement(
+          {
+            environment: bank.billingEnvironment,
+            apiKey: bank.billingApiClientId,
+            accessCode: bank.billingApiClientSecret,
+            cooperative,
+            posto,
+            beneficiaryCode: bank.billingBeneficiaryCode,
+          },
+          {
+            periodStart: period.periodStart,
+            periodEnd: period.periodEnd,
+          },
+        );
+        const mappedStatement = this.mapSicoobStatement(
+          bank,
+          period,
+          statement,
+          "SICREDI",
+        );
+        return this.persistSicoobStatement(
+          company,
+          bank,
+          period,
+          mappedStatement,
+          query,
+        );
+      } catch (error) {
+        if (error instanceof SicrediApiError) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
+    }
+
+    if (provider !== "SICOOB") {
       throw new BadRequestException(
-        "A consulta automática de extrato disponível no momento atende apenas bancos configurados como SICOOB.",
+        "A consulta automática de extrato atende bancos configurados como SICOOB ou SICREDI.",
       );
     }
 

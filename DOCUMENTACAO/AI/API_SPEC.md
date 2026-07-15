@@ -207,6 +207,7 @@ Regras:
 - registra `canceledAt/canceledBy` nos registros originais
 - o historico de estoque recebe nova entrada de retorno, preservando a saida original
 - quando houver recebiveis/baixas vinculadas, os registros financeiros ficam cancelados logicamente para preservar trilha
+- venda com NFC-e autorizada deve ter o documento fiscal cancelado na SEFAZ antes do cancelamento operacional
 
 Body resumido:
 
@@ -219,6 +220,36 @@ Body resumido:
   "reason": "CANCELAMENTO AUTORIZADO"
 }
 ```
+
+## NFC-e
+
+### GET `/fiscal-documents/nfce/profile`
+
+- consulta o perfil NFC-e por `sourceSystem`, `sourceTenantId`, filial e ambiente
+
+### PUT `/fiscal-documents/nfce/profile`
+
+- cria ou atualiza o perfil fiscal da empresa/filial
+- somente aceita certificado ativo do mesmo CNPJ, empresa, filial e ambiente
+- `autoIssueOnSale` habilita a emissão após a confirmação da venda
+
+### GET `/fiscal-documents/nfce/sales/:saleId`
+
+- consulta documento, chave, protocolo, status e tentativas da NFC-e vinculada à venda
+
+### POST `/fiscal-documents/nfce/sales/:saleId/issue`
+
+- solicita emissão ou recuperação idempotente da NFC-e da venda
+- reutiliza a mesma numeração e consulta a chave já assinada antes de repetir autorização
+
+Regras da emissão automática:
+
+- a venda é confirmada antes da comunicação com a SEFAZ; rejeição fiscal não duplica nem desfaz a venda
+- aceita `CASH=01`, `CREDIT_CARD=03`, `DEBIT_CARD=04`, `TERM/INSTALLMENT=05`, `BOLETO=15` e `PIX=17`
+- cartões são informados como integração não integrada quando não houver dados de adquirente
+- PIX pendente não emite; a emissão ocorre após a confirmação do pagamento
+- ausência de perfil ativo retorna `NOT_CONFIGURED`; falhas fiscais retornam `ERROR` com tentativa auditada
+- produção rejeita produto sem NCM fiscal válido
 
 ### GET `/sales/:saleId/return-context`
 

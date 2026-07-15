@@ -18,6 +18,22 @@ const MENU_ITEMS = [
     image: '/principal-financeiro/bancos.svg?v=1',
   },
   {
+    id: 'controle-extrato',
+    label: 'Controle Extrato',
+    href: '/bancos/extrato',
+    hostPath: '/principal/financeiro/bancos/extrato',
+    description: 'Consulte e confira o extrato bancario por banco.',
+    image: '/principal-financeiro/bancos.svg?v=1',
+  },
+  {
+    id: 'movimentos-abertos',
+    label: 'Movimentos em Aberto',
+    href: '/bancos/movimentos-abertos',
+    hostPath: '/principal/financeiro/bancos/movimentos-abertos',
+    description: 'Confira movimentos em aberto selecionando o banco.',
+    image: '/principal-financeiro/bancos.svg?v=1',
+  },
+  {
     id: 'lotes',
     label: 'Envio\\Registro Boletos',
     href: '/recebiveis/lotes',
@@ -32,6 +48,14 @@ const MENU_ITEMS = [
     hostPath: '/principal/financeiro/retornos',
     description: 'Importe e confira os retornos bancarios.',
     image: '/principal-financeiro/retornos.svg?v=2',
+  },
+  {
+    id: 'dda',
+    label: 'Duplicatas DDA',
+    href: '/bancos/ddas-abertos',
+    hostPath: '/principal/financeiro/bancos/ddas-abertos',
+    description: 'Consulte os boletos DDA em aberto das contas do Sicoob.',
+    image: '/principal-financeiro/contas-a-pagar.svg?v=1',
   },
 ] as const;
 
@@ -76,7 +100,7 @@ export default function BancosEBoletosPage() {
       ) : null}
 
       <section className={`${cardClass} p-6`}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {MENU_ITEMS.map((item) => {
             const shouldReturnToHost = runtimeContext.embedded && hostBaseUrl;
             const href = shouldReturnToHost

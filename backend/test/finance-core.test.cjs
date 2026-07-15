@@ -38,10 +38,15 @@ const {
 } = require("../dist/modules/receivables/application/bank-return.utils.js");
 
 async function resetDatabase(prisma) {
+  await prisma.fiscalDocumentAttempt.deleteMany();
+  await prisma.fiscalDocument.deleteMany();
+  await prisma.nfceProfile.deleteMany();
   await prisma.salePayment.deleteMany();
+  await prisma.saleReturnItem.deleteMany();
+  await prisma.saleReturn.deleteMany();
+  await prisma.stockMovement.deleteMany();
   await prisma.saleItem.deleteMany();
   await prisma.sale.deleteMany();
-  await prisma.stockMovement.deleteMany();
   await prisma.payableInstallment.deleteMany();
   await prisma.payableTitle.deleteMany();
   await prisma.payableInvoiceImportInstallment.deleteMany();
@@ -65,6 +70,7 @@ async function resetDatabase(prisma) {
   await prisma.cashSession.deleteMany();
   await prisma.bankAccount.deleteMany();
   await prisma.party.deleteMany();
+  await prisma.screenParameter.deleteMany();
   await prisma.companyBranch.deleteMany();
   await prisma.company.deleteMany();
 }
@@ -72,6 +78,19 @@ async function resetDatabase(prisma) {
 async function main() {
   const prisma = new PrismaService();
   await prisma.onModuleInit();
+
+  const nfceTables = await prisma.$queryRawUnsafe(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'nfce_profiles'",
+  );
+  if (!nfceTables.length) {
+    const migrationSql = fs.readFileSync(
+      path.resolve(__dirname, "../prisma/migrations/20260714121000_add_nfce_sale_flow/migration.sql"),
+      "utf8",
+    );
+    for (const statement of migrationSql.split(";").map((item) => item.trim()).filter(Boolean)) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+  }
 
   try {
     await resetDatabase(prisma);
@@ -117,7 +136,9 @@ async function main() {
     const banksService = new BanksService(prisma);
     const companiesService = new CompaniesService(prisma);
     const productsService = new ProductsService(prisma);
-    const salesService = new SalesService(prisma);
+    const salesService = new SalesService(prisma, {}, {
+      issueForSaleAfterConfirmation: async () => ({ status: "NOT_CONFIGURED" }),
+    });
 
     const createdBank = await banksService.create({
       requestedBy: "CODEX",

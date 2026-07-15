@@ -42,6 +42,14 @@ const MENU_ITEMS: MenuItem[] = [
     image: '/principal-financeiro/resumo.svg?v=2',
   },
   {
+    id: 'analises-graficos',
+    label: 'Análises e gráficos',
+    href: '/analises-graficos',
+    hostPath: '/principal/financeiro/analises-graficos',
+    description: 'Dashboards financeiros, comerciais e de estoque.',
+    image: '/principal-financeiro/resumo.svg?v=2',
+  },
+  {
     id: 'contas-a-receber',
     label: 'Contas a Receber',
     href: '/recebiveis/parcelas',

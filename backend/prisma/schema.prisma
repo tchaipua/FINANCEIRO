@@ -27,6 +27,9 @@ model Company {
   canceledBy              String?
   bankAccounts            BankAccount[]
   fiscalCertificates      FiscalCertificate[]
+  nfceProfiles            NfceProfile[]
+  fiscalDocuments         FiscalDocument[]
+  fiscalDocumentAttempts  FiscalDocumentAttempt[]
   products                Product[]
   suppliers               Supplier[]
   parties                 Party[]
@@ -53,6 +56,7 @@ model Company {
   saleItems               SaleItem[]
   saleReturnItems         SaleReturnItem[]
   salePayments            SalePayment[]
+  screenParameters        ScreenParameter[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
@@ -83,11 +87,33 @@ model CompanyBranch {
   canceledAt                 DateTime?
   canceledBy                 String?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  screenParameters ScreenParameter[]
 
   @@unique([companyId, branchCode])
   @@index([companyId, isActive, name])
   @@map("company_branches")
+}
+
+model ScreenParameter {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchId       String
+  screenId       String
+  parametersJson String
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branch  CompanyBranch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchId, screenId])
+  @@index([companyId, branchId, screenId, canceledAt])
+  @@map("screen_parameters")
 }
 
 model Product {
@@ -198,6 +224,8 @@ model FiscalCertificate {
 
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImports PayableInvoiceImport[]
+  nfceProfiles          NfceProfile[]
+  fiscalDocuments       FiscalDocument[]
 
   @@index([companyId, status, environment, purpose, aliasName])
   @@map("fiscal_certificates")
@@ -498,6 +526,7 @@ model Sale {
   items           SaleItem[]
   payments        SalePayment[]
   returns         SaleReturn[]
+  fiscalDocument  FiscalDocument?
 
   @@unique([companyId, branchCode, saleNumber])
   @@index([companyId, branchCode, status, confirmedAt])
@@ -543,9 +572,9 @@ model SaleItem {
   canceledAt            DateTime?
   canceledBy            String?
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
   returnItems SaleReturnItem[]
 
   @@unique([saleId, lineNumber])
@@ -587,6 +616,130 @@ model SalePayment {
   @@map("sale_payments")
 }
 
+model NfceProfile {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  certificateId         String
+  status                String    @default("ACTIVE")
+  environment           String    @default("HOMOLOGATION")
+  autoIssueOnSale       Boolean   @default(false)
+  series                Int       @default(1)
+  nextNumber            Int       @default(1)
+  stateCode             String
+  cityCode              String
+  stateRegistration     String
+  legalName             String
+  tradeName             String?
+  taxRegimeCode         String
+  street                String
+  number                String
+  complement            String?
+  neighborhood          String
+  city                  String
+  state                 String
+  postalCode            String
+  phone                 String?
+  defaultCfopCode       String    @default("5102")
+  defaultOriginCode     String    @default("0")
+  defaultIcmsCst        String    @default("00")
+  defaultIcmsRate       Float     @default(0)
+  defaultPisCst         String    @default("08")
+  defaultCofinsCst      String    @default("08")
+  ibsCbsCst             String    @default("000")
+  ibsCbsClassCode       String    @default("000001")
+  ibsStateRate          Float     @default(0.1)
+  ibsMunicipalRate      Float     @default(0)
+  cbsRate               Float     @default(0.9)
+  additionalInformation String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  certificate FiscalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  documents   FiscalDocument[]
+
+  @@unique([companyId, branchCode, environment])
+  @@index([companyId, branchCode, status, autoIssueOnSale])
+  @@map("nfce_profiles")
+}
+
+model FiscalDocument {
+  id            String    @id @default(uuid())
+  companyId     String
+  branchCode    Int       @default(1)
+  saleId        String    @unique
+  profileId     String
+  certificateId String
+  model         String    @default("65")
+  environment   String
+  series        Int
+  number        Int
+  randomCode    String?
+  accessKey     String?   @unique
+  status        String    @default("PENDING")
+  statusCode    String?
+  statusMessage String?
+  protocol      String?
+  receivedAt    DateTime?
+  issuedAt      DateTime
+  qrCodeUrl     String?
+  signedXml     String?
+  responseXml   String?
+  processedXml  String?
+  attemptCount  Int       @default(0)
+  lastAttemptAt DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt
+  updatedBy     String?
+  canceledAt    DateTime?
+  canceledBy    String?
+
+  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale        Sale                    @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  profile     NfceProfile             @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  certificate FiscalCertificate       @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  attempts    FiscalDocumentAttempt[]
+
+  @@unique([companyId, branchCode, model, series, number])
+  @@index([companyId, branchCode, status, issuedAt])
+  @@map("fiscal_documents")
+}
+
+model FiscalDocumentAttempt {
+  id               String    @id @default(uuid())
+  companyId        String
+  fiscalDocumentId String
+  attemptNumber    Int
+  status           String
+  statusCode       String?
+  statusMessage    String?
+  signedXml        String?
+  responseXml      String?
+  processedXml     String?
+  errorMessage     String?
+  attemptedAt      DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([fiscalDocumentId, attemptNumber])
+  @@index([companyId, attemptedAt])
+  @@map("fiscal_document_attempts")
+}
+
 model SaleReturn {
   id                       String    @id @default(uuid())
   companyId                String
@@ -621,35 +774,35 @@ model SaleReturn {
 }
 
 model SaleReturnItem {
-  id                    String    @id @default(uuid())
-  companyId             String
-  branchCode            Int       @default(1)
-  returnId              String
-  saleId                String
-  saleItemId            String
-  productId             String
-  lineNumber            Int
-  productNameSnapshot   String
-  productCodeSnapshot   String?
-  unitCodeSnapshot      String
-  quantity              Float
-  unitPrice             Float
-  totalAmount           Float
-  tracksInventory       Boolean   @default(false)
-  variantKey            String    @default("GERAL")
-  colorCode             String?
-  colorName             String?
-  sizeCode              String?
-  lotNumber             String?
-  lotExpirationDate     DateTime?
-  previousStock         Float?
-  resultingStock        Float?
-  createdAt             DateTime  @default(now())
-  createdBy             String?
-  updatedAt             DateTime  @updatedAt
-  updatedBy             String?
-  canceledAt            DateTime?
-  canceledBy            String?
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  returnId            String
+  saleId              String
+  saleItemId          String
+  productId           String
+  lineNumber          Int
+  productNameSnapshot String
+  productCodeSnapshot String?
+  unitCodeSnapshot    String
+  quantity            Float
+  unitPrice           Float
+  totalAmount         Float
+  tracksInventory     Boolean   @default(false)
+  variantKey          String    @default("GERAL")
+  colorCode           String?
+  colorName           String?
+  sizeCode            String?
+  lotNumber           String?
+  lotExpirationDate   DateTime?
+  previousStock       Float?
+  resultingStock      Float?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
 
   company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Restrict)
@@ -1016,8 +1169,8 @@ model CustomerCredit {
   canceledAt       DateTime?
   canceledBy       String?
 
-  company   Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  movements CustomerCreditMovement[]
+  company     Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  movements   CustomerCreditMovement[]
   saleReturns SaleReturn[]
 
   @@index([companyId, status, customerName])

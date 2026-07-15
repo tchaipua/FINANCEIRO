@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
@@ -34,6 +35,7 @@ type SaleCompanyItem = {
 };
 
 type SaleBranchItem = {
+  id: string;
   branchCode: number;
   allowSaleUnitPriceEdit?: boolean | null;
   allowSaleItemDiscount?: boolean | null;
@@ -42,6 +44,7 @@ type SaleBranchItem = {
 type SaleBranchConfig = {
   allowSaleUnitPriceEdit: boolean;
   allowSaleItemDiscount: boolean;
+  groupSameProduct: boolean;
 };
 
 type CartItem = {
@@ -112,6 +115,12 @@ type CreatedSale = {
   id: string;
   saleNumber: string;
   message?: string;
+  nfce?: {
+    status: string;
+    statusMessage?: string | null;
+    accessKey?: string | null;
+    protocol?: string | null;
+  } | null;
 };
 
 type CashSessionResponse = {
@@ -134,6 +143,11 @@ type CustomerState = {
   referenceName: string;
   registeredPersonId: string;
   registeredPersonSourceType: string;
+  addressLine1: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postalCode: string;
 };
 
 type PersonLookupResult = {
@@ -143,7 +157,21 @@ type PersonLookupResult = {
   document?: string | null;
   email?: string | null;
   phone?: string | null;
+  addressLine1?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   sourceType?: string | null;
+};
+
+type PixQrCodeState = {
+  saleId: string;
+  saleNumber: string;
+  amount: number;
+  pixCopyPaste: string;
+  imageUrl: string;
+  ourNumber?: string | null;
 };
 
 type QuickCashSaleState = {
@@ -181,9 +209,12 @@ type SaleActionMenuItem = {
 
 const SCREEN_ID = 'FINANCEIRO_VENDAS_PDV_GERAL';
 const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS';
+const V2_SCREEN_ID = 'FINANCEIRO_VENDAS_2_PDV_GERAL';
+const V2_EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS_2';
 const CHECKOUT_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS_FINALIZACAO';
 const QUICK_CASH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA';
 const QUICK_CASH_PEOPLE_SEARCH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA_PESQUISAR_PESSOAS';
+const PIX_QR_CODE_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_PIX_SICOOB_QRCODE';
 const SALE_DRAFT_STORAGE_PREFIX = 'financeiro:vendas:rascunho:';
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
@@ -192,7 +223,31 @@ const compactInputClass =
 const DEFAULT_SALE_BRANCH_CONFIG: SaleBranchConfig = {
   allowSaleUnitPriceEdit: true,
   allowSaleItemDiscount: true,
+  groupSameProduct: true,
 };
+
+const VENDAS2_LOCAL_IMAGE_BASE_URL = 'http://127.0.0.1:47821/imagens';
+const VENDAS2_LOCAL_IMAGE_EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg', 'bmp'] as const;
+
+function getVendas2ProductImageUrls(product: ProductItem | null) {
+  if (!product) return [];
+
+  const barcode = String(product.barcode || '').replace(/\D/g, '');
+  const eanCode = barcode.length === 8 || barcode.length === 13 ? barcode : '';
+  const productCodes = [eanCode, product.internalCode, product.sku]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  return Array.from(
+    new Set(
+      productCodes.flatMap((productCode) =>
+        VENDAS2_LOCAL_IMAGE_EXTENSIONS.map(
+          (extension) => `${VENDAS2_LOCAL_IMAGE_BASE_URL}/${encodeURIComponent(`${productCode}.${extension}`)}`,
+        ),
+      ),
+    ),
+  );
+}
 
 const PAYMENT_METHODS: Array<{
   id: PaymentMethod;
@@ -213,7 +268,7 @@ const PAYMENT_METHODS: Array<{
     label: 'Pix',
     shortLabel: 'PIX',
     tone: 'border-cyan-200 bg-cyan-50 text-cyan-700',
-    description: 'Recebido agora',
+    description: 'Gera QR Code Sicoob',
   },
   {
     id: 'DEBIT_CARD',
@@ -349,7 +404,7 @@ function getNextMonthDateInput() {
 }
 
 function isDeferredPayment(method: PaymentMethod) {
-  return method === 'BOLETO' || method === 'TERM';
+  return method === 'PIX' || method === 'BOLETO' || method === 'TERM';
 }
 
 function isImmediatePayment(method: PaymentMethod) {
@@ -600,6 +655,11 @@ function createCustomerState(): CustomerState {
     referenceName: '',
     registeredPersonId: '',
     registeredPersonSourceType: '',
+    addressLine1: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    postalCode: '',
   };
 }
 
@@ -671,6 +731,11 @@ function buildSalePayload(params: {
           document: customer.document || undefined,
           email: customer.email || undefined,
           phone: customer.phone || undefined,
+          addressLine1: customer.addressLine1 || undefined,
+          neighborhood: customer.neighborhood || undefined,
+          city: customer.city || undefined,
+          state: customer.state || undefined,
+          postalCode: customer.postalCode || undefined,
         }
       : undefined,
     items: cartItems.map((item) => ({
@@ -760,7 +825,7 @@ function writeSaleDraftCart(storageKey: string, cartItems: CartItem[]) {
   }
 }
 
-export default function SalesPage() {
+export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 'classic' | 'v2' }) {
   const runtimeContext = useFinanceRuntimeContext();
   const productSearchInputRef = useRef<HTMLInputElement | null>(null);
   const paymentAmountInputRef = useRef<HTMLInputElement | null>(null);
@@ -769,10 +834,14 @@ export default function SalesPage() {
   const [branchSaleConfig, setBranchSaleConfig] = useState<SaleBranchConfig>(
     DEFAULT_SALE_BRANCH_CONFIG,
   );
+  const [vendas2ProductImageIndex, setVendas2ProductImageIndex] = useState(0);
+  const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
+  const [currentBranchId, setCurrentBranchId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
   const [cartDescriptionSearch, setCartDescriptionSearch] = useState('');
   const saleChannel = 'GENERAL';
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [selectedCartLineId, setSelectedCartLineId] = useState<string | null>(null);
   const [productLookupOpen, setProductLookupOpen] = useState(false);
   const [productLookupSearch, setProductLookupSearch] = useState('');
   const [productLookupQuantity, setProductLookupQuantity] = useState(1);
@@ -781,6 +850,7 @@ export default function SalesPage() {
   const [checkoutTab, setCheckoutTab] = useState<CheckoutTab>('payment');
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([]);
   const [paymentAmountModal, setPaymentAmountModal] = useState<PaymentAmountModalState | null>(null);
+  const [clearSaleConfirmationOpen, setClearSaleConfirmationOpen] = useState(false);
   const [checkoutFeedback, setCheckoutFeedback] = useState<CheckoutFeedbackState | null>(null);
   const [quickCashSale, setQuickCashSale] = useState<QuickCashSaleState | null>(null);
   const [saleDiscount, setSaleDiscount] = useState('');
@@ -793,9 +863,16 @@ export default function SalesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successSale, setSuccessSale] = useState<CreatedSale | null>(null);
+  const [pixQrCode, setPixQrCode] = useState<PixQrCodeState | null>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
 
-  const screenId = runtimeContext.embedded ? EMBEDDED_SCREEN_ID : SCREEN_ID;
+  const screenId = visualVariant === 'v2'
+    ? runtimeContext.embedded
+      ? V2_EMBEDDED_SCREEN_ID
+      : V2_SCREEN_ID
+    : runtimeContext.embedded
+      ? EMBEDDED_SCREEN_ID
+      : SCREEN_ID;
 
   const focusProductSearchInput = useCallback(() => {
     window.setTimeout(() => {
@@ -934,6 +1011,7 @@ export default function SalesPage() {
         getJson<SaleCompanyItem[]>(`/companies${buildFinanceApiQueryString(runtimeContext)}`),
       ]);
       const company = companies[0];
+      setCurrentCompanyId(company?.id || null);
       let nextBranchSaleConfig = DEFAULT_SALE_BRANCH_CONFIG;
 
       if (company?.id) {
@@ -946,10 +1024,10 @@ export default function SalesPage() {
           branches[0];
 
         if (branch) {
-          nextBranchSaleConfig = {
-            allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
-            allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
-          };
+          setCurrentBranchId(branch.id);
+          nextBranchSaleConfig = await getJson<SaleBranchConfig>(
+            `/companies/${company.id}/branches/${branch.id}/screen-parameters/vendas${buildFinanceApiQueryString(runtimeContext)}`,
+          );
         }
       }
 
@@ -961,6 +1039,48 @@ export default function SalesPage() {
       );
     }
   }, [canLoadContext, queryString, runtimeContext]);
+
+  useEffect(() => {
+    const handleSalesParametersUpdate = async (event: MessageEvent) => {
+      if (event.data?.type !== 'MSINFOR_UPDATE_SALES_PARAMETERS') return;
+      const requestId = event.data.requestId;
+      if (!currentCompanyId || !currentBranchId) {
+        window.parent.postMessage({
+          type: 'MSINFOR_SALES_PARAMETERS_ERROR',
+          requestId,
+          message: 'O Financeiro ainda não carregou a empresa e a filial da venda.',
+        }, '*');
+        return;
+      }
+
+      const parameters: SaleBranchConfig = {
+        allowSaleUnitPriceEdit: event.data.parameters?.allowSaleUnitPriceEdit !== false,
+        allowSaleItemDiscount: event.data.parameters?.allowSaleItemDiscount !== false,
+        groupSameProduct: event.data.parameters?.groupSameProduct !== false,
+      };
+
+      try {
+        await requestJson(`/companies/${currentCompanyId}/branches/${currentBranchId}/screen-parameters/vendas${buildFinanceApiQueryString(runtimeContext)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(parameters),
+          fallbackMessage: 'Não foi possível salvar os parâmetros da tela de vendas.',
+        });
+        setBranchSaleConfig(parameters);
+          window.parent.postMessage({ type: 'MSINFOR_SALES_PARAMETERS_SAVED', requestId, parameters }, '*');
+        } catch (error) {
+          const message = getFriendlyRequestErrorMessage(error, 'Não foi possível salvar os parâmetros da tela de vendas.');
+          setErrorMessage(message);
+          window.parent.postMessage({ type: 'MSINFOR_SALES_PARAMETERS_ERROR', requestId, message }, '*');
+        }
+    };
+
+    window.addEventListener('message', handleSalesParametersUpdate);
+    return () => window.removeEventListener('message', handleSalesParametersUpdate);
+  }, [currentBranchId, currentCompanyId, runtimeContext]);
+
+  useEffect(() => {
+    window.parent.postMessage({ type: 'MSINFOR_SALES_PARAMETERS_STATE', parameters: branchSaleConfig }, '*');
+  }, [branchSaleConfig]);
 
   const loadCurrentCashSession = useCallback(async () => {
     if (!canLoadContext || !runtimeContext.cashierUserId) {
@@ -1123,6 +1243,27 @@ export default function SalesPage() {
     () => [...cartItems].sort((first, second) => second.itemNumber - first.itemNumber),
     [cartItems],
   );
+  const activeCartItem = sortedCartItems.find((item) => item.lineId === selectedCartLineId)
+    || sortedCartItems[0]
+    || null;
+  const activeCartQuantity = activeCartItem ? parseDecimal(activeCartItem.quantity) : 0;
+  const activeCartUnitPrice = activeCartItem ? parseDecimal(activeCartItem.unitPrice) : 0;
+  const activeCartUnitDiscount = activeCartItem && branchSaleConfig.allowSaleItemDiscount
+    ? parseDecimal(activeCartItem.discountAmount)
+    : 0;
+  const activeCartTotal = Math.max(
+    0,
+    activeCartQuantity * activeCartUnitPrice - activeCartQuantity * activeCartUnitDiscount,
+  );
+  const activeVendas2ProductImageUrls = useMemo(
+    () => getVendas2ProductImageUrls(activeCartItem?.product || null),
+    [activeCartItem?.product],
+  );
+  const activeVendas2ProductImageUrl = activeVendas2ProductImageUrls[vendas2ProductImageIndex] || '';
+
+  useEffect(() => {
+    setVendas2ProductImageIndex(0);
+  }, [activeCartItem?.lineId]);
 
   const visibleCartItems = useMemo(() => {
     const search = cartDescriptionSearch.trim().toUpperCase();
@@ -1148,6 +1289,7 @@ export default function SalesPage() {
 
   const addProductToCart = useCallback((product: ProductItem, quantity = 1) => {
     const quantityText = formatQuantityInput(quantity);
+    setVendas2ProductImageIndex(0);
 
     if (isGenericProduct(product)) {
       setGenericProductDraft({
@@ -1161,25 +1303,37 @@ export default function SalesPage() {
       return;
     }
 
-    setCartItems((current) => {
-      const existing = current.find((item) => item.product.id === product.id);
-      if (existing && !product.usesColorSize && !product.usesLotControl) {
+    const existingItem = cartItems.find((item) => item.product.id === product.id);
+    if (branchSaleConfig.groupSameProduct && existingItem && !product.usesColorSize && !product.usesLotControl) {
+      setCartItems((current) => {
+        const currentItem = current.find((item) => item.lineId === existingItem.lineId);
+        if (!currentItem) return current;
+
         const updatedItem = {
-          ...existing,
-          quantity: formatQuantityInput(parseDecimal(existing.quantity) + quantity),
-          unitCost: formatOptionalMoneyInputValue(existing.unitCost),
-          unitPrice: formatMoneyInputValue(existing.unitPrice),
-          discountAmount: formatOptionalMoneyInputValue(existing.discountAmount),
+          ...currentItem,
+          quantity: formatQuantityInput(parseDecimal(currentItem.quantity) + quantity),
+          unitCost: formatOptionalMoneyInputValue(currentItem.unitCost),
+          unitPrice: formatMoneyInputValue(currentItem.unitPrice),
+          discountAmount: formatOptionalMoneyInputValue(currentItem.discountAmount),
         };
+
         return [
           updatedItem,
-          ...current.filter((item) => item.lineId !== existing.lineId),
+          ...current.filter((item) => item.lineId !== currentItem.lineId),
         ];
-      }
+      });
+      setSelectedCartLineId(existingItem.lineId);
+      setErrorMessage('');
+      focusProductSearchInput();
+      return;
+    }
 
+    const lineId = generateId('item');
+
+    setCartItems((current) => {
       return [
         {
-          lineId: generateId('item'),
+          lineId,
           itemNumber: getNextCartItemNumber(current),
           product,
           description: '',
@@ -1196,9 +1350,10 @@ export default function SalesPage() {
         ...current,
       ];
     });
+    setSelectedCartLineId(lineId);
     setErrorMessage('');
     focusProductSearchInput();
-  }, [focusProductSearchInput, getNextCartItemNumber]);
+  }, [branchSaleConfig.groupSameProduct, cartItems, focusProductSearchInput, getNextCartItemNumber]);
 
   const addGenericProductToCart = useCallback(() => {
     if (!genericProductDraft) return;
@@ -1263,6 +1418,21 @@ export default function SalesPage() {
       ? productSearchCommand
       : parseProductSearchCommand(rawCommand);
     const term = command.term.trim();
+    if (term.toUpperCase() === 'FIM') {
+      if (!cartItems.length) {
+        setErrorMessage('Inclua ao menos um produto antes de finalizar a venda.');
+        focusProductSearchInput();
+        return;
+      }
+
+      setCheckoutTab('payment');
+      setCheckoutOpen(true);
+      setProductSearch('');
+      setErrorMessage('');
+      setSuccessSale(null);
+      return;
+    }
+
     if (term.toUpperCase() === 'VV') {
       if (!cartItems.length) {
         setErrorMessage('Inclua ao menos um produto antes de finalizar a venda à vista.');
@@ -1449,6 +1619,30 @@ export default function SalesPage() {
     setIsSearchingCustomerPeople(false);
   }, [saleDraftStorageKey]);
 
+  useEffect(() => {
+    if (!pixQrCode) return;
+    let disposed = false;
+    const checkPayment = async () => {
+      try {
+        const result = await requestJson<{ paid: boolean; nfce?: CreatedSale['nfce'] }>(`/sales/${pixQrCode.saleId}/pix-qrcode/status`, { method: 'POST', body: JSON.stringify({ sourceSystem: runtimeContext.sourceSystem, sourceTenantId: runtimeContext.sourceTenantId, requestedBy: runtimeContext.cashierUserId || undefined }) });
+        if (result.paid && !disposed) { setPixQrCode(null); clearSale(); setCheckoutOpen(true); setCheckoutFeedback({ type: 'success', title: 'VENDA SALVA COM SUCESSO !!!', message: result.nfce?.status === 'AUTHORIZED' ? `Venda ${pixQrCode.saleNumber} confirmada após o pagamento PIX e NFC-e autorizada.` : `Venda ${pixQrCode.saleNumber} confirmada após o pagamento PIX. ${result.nfce?.statusMessage || ''}`.trim(), closeCheckoutOnOk: true }); await loadData(); }
+      } catch { /* nova consulta em seguida */ }
+    };
+    void checkPayment();
+    const timer = window.setInterval(() => void checkPayment(), 5000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [clearSale, loadData, pixQrCode, runtimeContext.cashierUserId, runtimeContext.sourceSystem, runtimeContext.sourceTenantId]);
+
+  const cancelPixPayment = useCallback(async () => {
+    if (!pixQrCode) return;
+    setIsSubmitting(true);
+    try {
+      await requestJson(`/sales/${pixQrCode.saleId}/pix-qrcode/cancel`, { method: 'POST', body: JSON.stringify({ sourceSystem: runtimeContext.sourceSystem, sourceTenantId: runtimeContext.sourceTenantId, cashierUserId: runtimeContext.cashierUserId || undefined, cashierDisplayName: runtimeContext.cashierDisplayName || undefined, requestedBy: runtimeContext.cashierUserId || undefined, reason: 'CANCELAMENTO DO PAGAMENTO PIX' }) });
+      setPixQrCode(null); setCheckoutTab('payment'); setCheckoutOpen(true); await loadData();
+    } catch (error) { setCheckoutFeedback({ type: 'error', title: 'ERRO AO CANCELAR PIX !!!', message: getFriendlyRequestErrorMessage(error, 'Não foi possível cancelar o pagamento PIX.') }); setCheckoutOpen(true); }
+    finally { setIsSubmitting(false); }
+  }, [loadData, pixQrCode, runtimeContext.cashierDisplayName, runtimeContext.cashierUserId, runtimeContext.sourceSystem, runtimeContext.sourceTenantId]);
+
   const clearWholeSale = useCallback(() => {
     clearSale();
     setProductSearch('');
@@ -1587,6 +1781,11 @@ export default function SalesPage() {
       phone: person.phone || '',
       registeredPersonId,
       registeredPersonSourceType: person.sourceType || 'PESSOA',
+      addressLine1: person.addressLine1 || '',
+      neighborhood: person.neighborhood || '',
+      city: person.city || '',
+      state: person.state || '',
+      postalCode: person.postalCode || '',
     }));
     setCustomerPersonResults([]);
     setCheckoutFeedback(null);
@@ -1823,7 +2022,7 @@ export default function SalesPage() {
               feedback: {
                 type: 'success',
                 title: 'VENDA À VISTA CONFIRMADA !!!',
-                message: `Venda ${created.saleNumber} confirmada com sucesso.`,
+                message: created.message || `Venda ${created.saleNumber} confirmada com sucesso.`,
                 details: [
                   { label: 'Total final', value: formatCurrency(cartTotals.total), tone: 'success' },
                   { label: 'Valor pago', value: formatCurrency(amountPaid), tone: 'neutral' },
@@ -1946,6 +2145,17 @@ export default function SalesPage() {
         return;
       }
 
+      if (hasBoletoPayment && (!customer.addressLine1.trim() || !customer.neighborhood.trim() || !customer.city.trim() || !customer.state.trim() || !customer.postalCode.trim())) {
+        setCheckoutFeedback({
+          type: 'error',
+          title: 'ENDEREÇO DO PAGADOR OBRIGATÓRIO !!!',
+          message: 'O banco exige endereço completo do cliente para emitir boleto.',
+        });
+        setCheckoutOpen(true);
+        setCheckoutTab('customer');
+        return;
+      }
+
       setIsSubmitting(true);
       setErrorMessage('');
       setSuccessSale(null);
@@ -1968,12 +2178,53 @@ export default function SalesPage() {
           fallbackMessage: 'Não foi possível confirmar a venda.',
         });
 
+        const pixPayment = paymentRows.find(
+          (payment) => payment.paymentMethod === 'PIX' && parseDecimal(payment.amount) > 0,
+        );
+        if (pixPayment) {
+          try {
+            const issuedPix = await requestJson<{
+              saleNumber: string;
+              amount: number;
+              pixCopyPaste: string;
+              ourNumber?: string | null;
+            }>(`/sales/${created.id}/pix-qrcode`, {
+              method: 'POST',
+              body: JSON.stringify({
+                sourceSystem: runtimeContext.sourceSystem,
+                sourceTenantId: runtimeContext.sourceTenantId,
+                requestedBy: runtimeContext.cashierUserId || undefined,
+              }),
+              fallbackMessage: 'O Sicoob não confirmou a emissão do PIX.',
+            });
+            const imageUrl = await QRCode.toDataURL(issuedPix.pixCopyPaste, {
+              errorCorrectionLevel: 'M',
+              margin: 2,
+              width: 280,
+            });
+            setPixQrCode({ ...issuedPix, saleId: created.id, imageUrl });
+            setCheckoutOpen(false);
+            return;
+          } catch (error) {
+            clearSale();
+            setSuccessSale(created);
+            setCheckoutFeedback({
+              type: 'error',
+              title: 'VENDA CONFIRMADA — PIX PENDENTE !!!',
+              message: `A venda ${created.saleNumber} foi confirmada, mas o QR Code não foi emitido. ${getFriendlyRequestErrorMessage(error, 'Verifique a configuração do Sicoob antes de gerar o PIX.')} Não confirme a venda novamente.`,
+              closeCheckoutOnOk: true,
+            });
+            await loadData();
+            return;
+          }
+        }
+
         clearSale();
         setSuccessSale(created);
         setCheckoutFeedback({
           type: 'success',
           title: 'VENDA CONFIRMADA !!!',
-          message: `Venda ${created.saleNumber} confirmada com sucesso.`,
+          message: created.message || `Venda ${created.saleNumber} confirmada com sucesso.`,
           closeCheckoutOnOk: true,
         });
         await loadData();
@@ -2007,6 +2258,275 @@ export default function SalesPage() {
 
   return (
     <form onSubmit={handleSubmit} className={`flex h-[100dvh] min-h-0 flex-col overflow-hidden ${pageBottomPaddingClass}`}>
+      {visualVariant === 'v2' ? (
+        <>
+          <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden bg-slate-100 p-3">
+            <div className="flex min-h-[82px] shrink-0 items-center gap-4 rounded-xl bg-gradient-to-r from-[#061c3f] via-[#082a59] to-[#061c3f] px-5 py-3 text-white shadow-lg">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/35 bg-white/5">
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M20 13 11 22l-9-9V4a2 2 0 0 1 2-2h9l7 7v4Z" />
+                  <circle cx="8.5" cy="7.5" r="1.5" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-baseline justify-between gap-4 text-[clamp(1.35rem,3vw,2.7rem)] font-black uppercase leading-none tracking-tight">
+                  <span className="min-w-0 flex-1 truncate">
+                    {activeCartItem
+                      ? activeCartItem.description || activeCartItem.product.name
+                      : 'NOVA VENDA'}
+                  </span>
+                  {activeCartItem ? (
+                    <span className="shrink-0 whitespace-nowrap tracking-normal text-blue-100">
+                      {formatQuantityInput(activeCartQuantity)} x {formatCurrency(parseDecimal(activeCartItem.unitPrice))} = {formatCurrency(activeCartTotal)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">
+                  {activeCartItem
+                    ? activeCartItem.product.internalCode || activeCartItem.product.sku || activeCartItem.product.barcode || 'ITEM SELECIONADO'
+                    : 'INFORME O CÓDIGO OU PESQUISE UM PRODUTO'}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(230px,0.72fr)_minmax(310px,0.9fr)_minmax(460px,1.38fr)]">
+              <section className="flex min-h-[250px] flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex h-full min-h-[210px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f8fafc_58%,_#e2e8f0_100%)]">
+                  <div className="text-center">
+                    {activeCartItem && activeVendas2ProductImageUrls.length ? (
+                      activeVendas2ProductImageUrl ? (
+                        <img
+                          src={activeVendas2ProductImageUrl}
+                          alt={`Imagem de ${activeCartItem.description || activeCartItem.product.name}`}
+                          onError={() => setVendas2ProductImageIndex((current) => current + 1)}
+                          className="mx-auto h-36 w-36 rounded-[32px] border border-blue-100 bg-blue-50 object-contain shadow-inner"
+                        />
+                      ) : (
+                        <img
+                          src="/produto-imagem-nao-disponivel.svg"
+                          alt="Imagem não disponível"
+                          className="mx-auto h-36 w-36 rounded-[32px] border border-slate-200 bg-white object-contain shadow-inner"
+                        />
+                      )
+                    ) : (
+                      <div className="mx-auto flex h-36 w-36 items-center justify-center rounded-[32px] border border-blue-100 bg-blue-50 text-[#082a59] shadow-inner">
+                        <svg className="h-20 w-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" aria-hidden="true">
+                          <path d="m3 7 9-4 9 4-9 4-9-4Z" />
+                          <path d="m3 7 9 4 9-4v10l-9 4-9-4V7Z" />
+                          <path d="M12 11v10" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="min-h-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <label className="block">
+                  <span className="text-xs font-black text-[#061c3f]">Código de Barras / Produto</span>
+                  <div className="mt-2 flex overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+                    <input
+                      ref={productSearchInputRef}
+                      value={productSearch}
+                      onChange={(event) => setProductSearch(event.target.value)}
+                      onKeyDown={handleProductSearchKeyDown}
+                      className="min-w-0 flex-1 px-3 py-3 text-sm font-bold text-slate-900 outline-none"
+                      placeholder="Código, barras, SKU ou 0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => executeProductSearchCommand(productSearchInputRef.current?.value ?? productSearch)}
+                      className="flex w-14 items-center justify-center border-l border-slate-300 text-[#061c3f] transition hover:bg-blue-50"
+                      title="Pesquisar produto"
+                      aria-label="Pesquisar produto"
+                    >
+                      <span className="text-xl tracking-[-0.18em]" aria-hidden="true">||||</span>
+                    </button>
+                  </div>
+                </label>
+
+                <div className="mt-5">
+                  <div className="text-xs font-black text-[#061c3f]">Quantidade</div>
+                  <div className="mt-2 grid grid-cols-[52px_1fr_52px] overflow-hidden rounded-lg border border-slate-300">
+                    <button
+                      type="button"
+                      disabled={!activeCartItem}
+                      onClick={() => {
+                        if (!activeCartItem) return;
+                        const step = activeCartItem.product.allowFraction ? 0.001 : 1;
+                        updateCartItem(activeCartItem.lineId, 'quantity', formatQuantityInput(Math.max(step, activeCartQuantity - step)));
+                      }}
+                      className="border-r border-slate-300 bg-slate-50 py-3 text-2xl font-black text-[#061c3f] hover:bg-slate-100 disabled:text-slate-300"
+                      aria-label="Diminuir quantidade"
+                    >−</button>
+                    <input
+                      value={activeCartItem?.quantity || ''}
+                      disabled={!activeCartItem}
+                      onChange={(event) => activeCartItem && updateCartItem(activeCartItem.lineId, 'quantity', event.target.value)}
+                      className="min-w-0 px-3 text-center text-lg font-black text-slate-900 outline-none disabled:bg-white"
+                      placeholder="0,000"
+                    />
+                    <button
+                      type="button"
+                      disabled={!activeCartItem}
+                      onClick={() => {
+                        if (!activeCartItem) return;
+                        const step = activeCartItem.product.allowFraction ? 0.001 : 1;
+                        updateCartItem(activeCartItem.lineId, 'quantity', formatQuantityInput(activeCartQuantity + step));
+                      }}
+                      className="border-l border-slate-300 bg-slate-50 py-3 text-2xl font-black text-[#061c3f] hover:bg-slate-100 disabled:text-slate-300"
+                      aria-label="Aumentar quantidade"
+                    >+</button>
+                  </div>
+                </div>
+
+                <label className="mt-5 block">
+                  <span className="text-xs font-black text-[#061c3f]">Valor Unitário</span>
+                  <input
+                    value={activeCartItem?.unitPrice || ''}
+                    disabled={!activeCartItem || !(branchSaleConfig.allowSaleUnitPriceEdit || (activeCartItem && isGenericProduct(activeCartItem.product)))}
+                    onChange={(event) => activeCartItem && updateCartItem(activeCartItem.lineId, 'unitPrice', event.target.value)}
+                    onBlur={(event) => activeCartItem && updateCartItem(activeCartItem.lineId, 'unitPrice', formatMoneyInputValue(event.target.value))}
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-right text-lg font-black text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                    placeholder="R$ 0,00"
+                  />
+                </label>
+
+                {branchSaleConfig.allowSaleItemDiscount ? (
+                  <label className="mt-5 block">
+                    <span className="text-xs font-black text-[#061c3f]">Desconto Unitário</span>
+                    <input
+                      value={activeCartItem?.discountAmount || ''}
+                      disabled={!activeCartItem}
+                      onChange={(event) => activeCartItem && updateCartItem(activeCartItem.lineId, 'discountAmount', event.target.value)}
+                      onBlur={(event) => activeCartItem && updateCartItem(activeCartItem.lineId, 'discountAmount', formatMoneyInputValue(event.target.value))}
+                      className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-right text-lg font-black text-amber-700 outline-none focus:border-amber-500 disabled:bg-slate-100"
+                      placeholder="R$ 0,00"
+                    />
+                  </label>
+                ) : null}
+
+                <div className="mt-5">
+                  <div className="text-xs font-black text-[#061c3f]">Valor Total</div>
+                  <div className="mt-2 rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-right text-2xl font-black text-[#061c3f]">
+                    {formatCurrency(activeCartTotal)}
+                  </div>
+                </div>
+
+                {activeCartItem && (activeCartItem.product.usesColorSize || activeCartItem.product.usesLotControl) ? (
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {activeCartItem.product.usesColorSize ? (
+                      <>
+                        <input className={compactInputClass} value={activeCartItem.colorName} onChange={(event) => updateCartItem(activeCartItem.lineId, 'colorName', event.target.value)} placeholder="COR" />
+                        <input className={compactInputClass} value={activeCartItem.sizeCode} onChange={(event) => updateCartItem(activeCartItem.lineId, 'sizeCode', event.target.value)} placeholder="NÚMERO" />
+                      </>
+                    ) : null}
+                    {activeCartItem.product.usesLotControl ? (
+                      <>
+                        <input className={compactInputClass} value={activeCartItem.lotNumber} onChange={(event) => updateCartItem(activeCartItem.lineId, 'lotNumber', event.target.value)} placeholder="LOTE" />
+                        <input type="date" className={compactInputClass} value={activeCartItem.lotExpirationDate} onChange={(event) => updateCartItem(activeCartItem.lineId, 'lotExpirationDate', event.target.value)} />
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                  <div>
+                    <div className="text-lg font-black text-[#061c3f]">CUPOM</div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{cartItems.length} item(ns)</div>
+                  </div>
+                  <input
+                    value={cartDescriptionSearch}
+                    onChange={(event) => setCartDescriptionSearch(event.target.value)}
+                    className="w-40 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500"
+                    placeholder="PESQUISAR"
+                  />
+                </div>
+                <div className="grid grid-cols-[42px_minmax(170px,1fr)_78px_100px_100px_38px] gap-2 bg-slate-100 px-3 py-3 text-[10px] font-black uppercase tracking-[0.08em] text-slate-700">
+                  <div>#</div><div>Descrição</div><div className="text-right">Qtd.</div><div className="text-right">Unitário</div><div className="text-right">Total</div><div />
+                </div>
+                <div className="min-h-0 flex-1 overflow-auto">
+                  {visibleCartItems.map((item) => {
+                    const quantity = parseDecimal(item.quantity);
+                    const lineTotal = Math.max(0, quantity * parseDecimal(item.unitPrice) - quantity * parseDecimal(item.discountAmount));
+                    const selected = activeCartItem?.lineId === item.lineId;
+                    const stockTextTone = item.product.currentStock > 0
+                      ? 'text-emerald-600'
+                      : item.product.currentStock < 0
+                        ? 'text-rose-600'
+                        : 'text-slate-400';
+                    return (
+                      <div
+                        key={item.lineId}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedCartLineId(item.lineId)}
+                        onKeyDown={(event) => event.key === 'Enter' && setSelectedCartLineId(item.lineId)}
+                        className={`grid cursor-pointer grid-cols-[42px_minmax(170px,1fr)_78px_100px_100px_38px] items-center gap-2 border-b px-3 py-3 text-xs transition ${selected ? 'border-blue-200 bg-blue-50' : 'border-slate-100 hover:bg-slate-50'}`}
+                      >
+                        <div className="font-black text-blue-700">{item.itemNumber}</div>
+                        <div className="min-w-0">
+                          <div className="truncate font-black text-slate-900">{item.description || item.product.name}</div>
+                          <div className="mt-1 flex min-w-0 items-center gap-2 truncate text-[9px] font-bold uppercase tracking-[0.1em]">
+                            <span className="shrink-0 text-slate-400">{item.product.internalCode || item.product.sku || 'PRODUTO'}</span>
+                            <span className={`truncate ${stockTextTone}`}>ESTOQUE: {getStockLabel(item.product)}</span>
+                          </div>
+                        </div>
+                        <div className="text-right font-bold">{formatQuantityInput(quantity)}</div>
+                        <div className="text-right font-bold">{formatCurrency(parseDecimal(item.unitPrice))}</div>
+                        <div className="text-right font-black text-slate-950">{formatCurrency(lineTotal)}</div>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); removeCartItem(item.lineId); }} className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50" title="Remover item" aria-label="Remover item">×</button>
+                      </div>
+                    );
+                  })}
+                  {!visibleCartItems.length ? (
+                    <div className="flex h-full min-h-40 items-center justify-center p-8 text-center text-sm font-bold text-slate-400">
+                      {cartItems.length ? 'Nenhum item encontrado.' : 'Cupom vazio. Pesquise um produto para começar.'}
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section className={`fixed inset-x-3 z-50 sm:inset-x-4 ${footerBottomClass}`}>
+            <div className="mx-auto max-w-[1700px] rounded-xl border border-slate-200 bg-white/95 p-2 shadow-2xl shadow-slate-950/20 backdrop-blur">
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-[290px_86px_minmax(150px,1fr)_minmax(150px,1fr)_minmax(230px,1.1fr)_58px_58px]">
+                <button type="button" disabled={!cartItems.length} onClick={() => { setCheckoutTab('payment'); setCheckoutOpen(true); }} className="min-h-16 rounded-lg bg-[#061c3f] px-5 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:bg-[#0b3268] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">Finalizar venda</button>
+                <div ref={actionMenuRef} className="relative">
+                  <button type="button" onClick={() => setActionMenuOpen((current) => !current)} className="flex h-full min-h-16 w-full items-center justify-center rounded-lg border border-slate-300 bg-white text-3xl font-black text-[#061c3f] hover:bg-slate-50" aria-label="Abrir opções da venda">☰</button>
+                  {actionMenuOpen ? (
+                    <div className="absolute bottom-full left-0 z-50 mb-2 w-[280px] overflow-hidden rounded-lg border border-slate-200 bg-white py-1.5 shadow-xl">
+                      {saleActionMenuItems.map((item) => item.href ? (
+                        <Link key={item.label} href={item.href} onClick={() => setActionMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"><span>{item.icon}</span><span>{item.label}</span></Link>
+                      ) : (
+                        <button key={item.label} type="button" disabled className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-black text-slate-400"><span>{item.icon}</span><span>{item.label}</span></button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white px-4 py-2"><div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">Subtotal</div><div className="mt-1 text-xl font-black text-[#061c3f]">{formatCurrency(cartTotals.subtotal)}</div></div>
+                <button type="button" onClick={() => { setCheckoutTab('payment'); setCheckoutOpen(true); }} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-left"><div className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">Descontos</div><div className="mt-1 text-xl font-black text-amber-700">{formatCurrency(cartTotals.discount)}</div></button>
+                <button type="button" disabled={!cartItems.length} onClick={() => { setCheckoutTab('payment'); setCheckoutOpen(true); }} className="rounded-lg bg-blue-700 px-5 py-2 text-left text-white shadow-lg shadow-blue-900/20 disabled:bg-slate-300"><div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-100">Total final</div><div className="mt-1 text-2xl font-black">{formatCurrency(cartTotals.total)}</div></button>
+                <button type="button" onClick={() => setClearSaleConfirmationOpen(true)} className="flex min-h-16 items-center justify-center rounded-lg border border-slate-300 bg-white text-rose-600 hover:bg-rose-50" title="Limpar venda" aria-label="Limpar venda">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M6 6l1 15h10l1-15" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                  </svg>
+                </button>
+                {cashSessionDetailHref ? <Link href={cashSessionDetailHref} className="flex min-h-16 items-center justify-center rounded-lg border border-slate-300 bg-white text-2xl font-black text-emerald-700 hover:bg-emerald-50" title={cashSessionButtonTitle}>$</Link> : <button type="button" disabled className="min-h-16 rounded-lg border border-slate-200 bg-slate-100 text-2xl font-black text-slate-400">$</button>}
+              </div>
+              {!runtimeContext.embedded ? <ScreenNameCopy screenId={screenId} className="ml-auto mt-2 max-w-full justify-end rounded-xl bg-slate-50 px-3 py-1 text-right" originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx" auditText={auditText} sqlText={auditSql} /> : null}
+            </div>
+          </section>
+        </>
+      ) : (
+        <>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-0 flex-1 flex-col gap-3 bg-slate-50 p-3">
           <section className="shrink-0 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
@@ -2028,11 +2548,10 @@ export default function SalesPage() {
               </button>
               <button
                 type="button"
-                onClick={clearWholeSale}
-                disabled={!cartItems.length}
+                onClick={() => setClearSaleConfirmationOpen(true)}
                 title="limpar toda a venda"
                 aria-label="limpar toda a venda"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-300"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100"
               >
                 <svg
                   className="h-4 w-4"
@@ -2374,6 +2893,8 @@ export default function SalesPage() {
           )}
         </div>
       </section>
+        </>
+      )}
 
       {quickCashSale && (
         <section className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-3 py-4 backdrop-blur-sm">
@@ -2816,6 +3337,48 @@ export default function SalesPage() {
                       placeholder="E-mail"
                     />
                   </div>
+                  {hasBoletoPayment ? (
+                    <div className="grid gap-1.5 rounded-xl border border-cyan-200 bg-cyan-50 p-2">
+                      <div className="text-[9px] font-black uppercase tracking-[0.14em] text-cyan-700">
+                        Endereço para emissão Sicoob
+                      </div>
+                      <input
+                        className={compactInputClass}
+                        value={customer.addressLine1}
+                        onChange={(event) => setCustomer((current) => ({ ...current, addressLine1: event.target.value }))}
+                        placeholder="Rua, número e complemento"
+                      />
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          className={compactInputClass}
+                          value={customer.neighborhood}
+                          onChange={(event) => setCustomer((current) => ({ ...current, neighborhood: event.target.value }))}
+                          placeholder="Bairro"
+                        />
+                        <input
+                          className={compactInputClass}
+                          value={customer.postalCode}
+                          onChange={(event) => setCustomer((current) => ({ ...current, postalCode: event.target.value }))}
+                          placeholder="CEP"
+                        />
+                      </div>
+                      <div className="grid grid-cols-[1fr_72px] gap-1.5">
+                        <input
+                          className={compactInputClass}
+                          value={customer.city}
+                          onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))}
+                          placeholder="Cidade"
+                        />
+                        <input
+                          className={compactInputClass}
+                          value={customer.state}
+                          onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))}
+                          placeholder="UF"
+                          maxLength={2}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               ) : null}
@@ -3271,6 +3834,66 @@ export default function SalesPage() {
         </section>
       )}
 
+      {pixQrCode ? (
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-cyan-200 bg-white shadow-2xl shadow-slate-950/35">
+            <div className="flex items-center justify-between gap-3 bg-cyan-700 px-5 py-4 text-white">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/25 bg-white">
+                  {runtimeContext.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={runtimeContext.logoUrl} alt="Logotipo" className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="text-xs font-black text-slate-900">MS</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-100">PIX SICOOB</div>
+                  <h2 className="truncate text-lg font-black">Aguardando pagamento</h2>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-3 text-center">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Venda {pixQrCode.saleNumber}</p>
+              <div className="mt-1 text-3xl font-black text-slate-950">{formatCurrency(pixQrCode.amount)}</div>
+              <div className="mx-auto mt-3 w-fit rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pixQrCode.imageUrl} alt="QR Code PIX Sicoob" className="h-56 w-56" />
+              </div>
+              <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">
+                A venda permanece com este PIX em aberto até a confirmação do banco.
+              </p>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(pixQrCode.pixCopyPaste)}
+                className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-800 transition hover:bg-cyan-100"
+              >
+                Copiar PIX copia e cola
+              </button>
+              {pixQrCode.ourNumber ? (
+                <div className="mt-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Nosso número: {pixQrCode.ourNumber}</div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void cancelPixPayment()}
+                disabled={isSubmitting}
+                className="mt-3 rounded-xl bg-rose-600 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-rose-600/25 transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancelar pagamento PIX
+              </button>
+            </div>
+            <div className="border-t border-slate-100 bg-slate-50 px-4 py-2">
+              <ScreenNameCopy
+                screenId={PIX_QR_CODE_SCREEN_ID}
+                className="max-w-full justify-end rounded-xl bg-white px-2 py-1 text-right"
+                originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx"
+                auditText="QR Code PIX emitido pelo Sicoob para parcela aberta de venda."
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {productLookupOpen && (
         <section className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
           <div className="flex max-h-[86vh] w-full max-w-3xl flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-950/20">
@@ -3445,6 +4068,56 @@ export default function SalesPage() {
         </section>
       )}
 
+      {clearSaleConfirmationOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/30">
+            <div className="bg-rose-600 px-5 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/25 bg-white">
+                  {runtimeContext.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={runtimeContext.logoUrl} alt="Logotipo" className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="text-xs font-black text-slate-900">MS</span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-100">Confirmação</div>
+                  <h3 className="mt-1 text-lg font-black uppercase tracking-[0.04em]">Limpar toda a venda?</h3>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-5">
+              <p className="text-sm font-bold leading-6 text-slate-700">
+                Os itens, pagamentos, desconto, cliente e observações ainda não confirmados serão removidos.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setClearSaleConfirmationOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-50"
+                >
+                  Não
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearWholeSale();
+                    setClearSaleConfirmationOpen(false);
+                  }}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-rose-900/15 transition hover:bg-rose-700"
+                >
+                  Sim, limpar
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-slate-100 bg-slate-50 px-5 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+              POPUP_PRINCIPAL_FINANCEIRO_VENDAS_CONFIRMAR_LIMPAR_GRID
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {!checkoutOpen && (errorMessage || successSale) && (
         <section
           className={`rounded-2xl border p-4 text-sm font-bold shadow-sm ${
@@ -3459,4 +4132,8 @@ export default function SalesPage() {
 
     </form>
   );
+}
+
+export default function SalesPage() {
+  return <SalesWorkspace />;
 }
