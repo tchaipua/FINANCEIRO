@@ -204,3 +204,33 @@ Complemento operacional:
 - PIX somente dispara a emissão depois da confirmação bancária;
 - venda com NFC-e autorizada não pode ser cancelada localmente antes do cancelamento fiscal;
 - todas as formas de pagamento da venda são convertidas para os códigos `tPag` do leiaute NFC-e 4.00.
+
+## D015 - Cadastro híbrido de clientes
+
+Decisao:
+
+- usar `parties` como cadastro único e genérico de clientes/pagadores do Financeiro
+- empresas da vertical `ESCOLA` recebem clientes exclusivamente por sincronização da fonte escolar e não permitem cadastro local
+- as demais empresas mantêm clientes diretamente no Financeiro
+- a sincronização escolar acontece antes de existir parcela e é refeita ao consultar a tela de clientes
+- registros integrados e locais são isolados por empresa e filial, com auditoria e inativação lógica
+
+Motivo:
+
+- permitir que o mesmo Financeiro atenda Escola, petshop, oficina e outras operações sem duplicar o domínio de clientes
+- preservar a Escola como fonte oficial dos responsáveis e alunos pagadores
+- disponibilizar cadastro local para operações sem sistema externo de clientes
+
+## D016 - Movimentação manual de estoque append-only
+
+Decisão:
+
+- entrada e saída manual são programas operacionais vinculados ao produto e à filial
+- cada confirmação atualiza o saldo e cria um novo `stock_movements` na mesma transação
+- cada operação usa identificador idempotente para impedir duplicidade por duplo clique
+- a consulta do produto abre o histórico filtrado e ordenado da movimentação mais recente para a mais antiga
+- a coluna redundante de situação sai do grid; o estado ativo/inativo continua indicado junto ao nome e pelo filtro padrão do rodapé
+
+Motivo:
+
+- permitir acertos operacionais rastreáveis sem editar ou apagar o histórico de estoque

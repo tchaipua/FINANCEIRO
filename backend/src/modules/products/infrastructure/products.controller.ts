@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ProductsService } from "../application/products.service";
 import {
   ChangeProductStatusDto,
+  CreateManualStockMovementDto,
   GetProductDto,
   ListProductsDto,
   ListStockMovementsDto,
@@ -36,6 +37,17 @@ export class ProductsController {
   })
   get(@Param("productId") productId: string, @Query() query: GetProductDto) {
     return this.productsService.get(productId, query);
+  }
+
+  @Post(":productId/stock-movements")
+  @ApiOperation({
+    summary: "Registra uma entrada ou saída manual auditada no estoque",
+  })
+  createManualStockMovement(
+    @Param("productId") productId: string,
+    @Body() payload: CreateManualStockMovementDto,
+  ) {
+    return this.productsService.createManualStockMovement(productId, payload);
   }
 
   @Post()

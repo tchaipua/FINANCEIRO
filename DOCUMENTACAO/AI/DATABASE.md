@@ -295,6 +295,7 @@ Regras:
 - deve ser tratada como historico append-only
 - nao deve existir tela de cadastro direto para movimentacao
 - a tela de historico apenas lista o resultado gerado por fluxos operacionais do estoque
+- os programas de entrada e saída manual são fluxos operacionais auditados; eles sempre criam um novo movimento e nunca editam diretamente a tabela histórica
 - correcoes devem ser feitas por nova movimentacao de ajuste ou estorno, nunca por edicao fisica do historico
 - cada registro deve guardar produto, filial, tipo de movimento, quantidade, saldo anterior, saldo resultante, origem/documento quando houver, usuario e data
 
@@ -334,3 +335,17 @@ Regras:
 - produtos com controle de estoque geram entrada em `stock_movements` com `sourceType = SALE_RETURN`
 - a devolucao gera credito em `customer_credits` com `sourceType = SALE_RETURN`, sem movimento de caixa
 - quando a venda original nao possui documento valido do cliente, a devolucao deve receber identificacao do cliente para que `sale_returns` e `customer_credits` guardem nome/documento do titular do credito
+
+## Cadastro híbrido de clientes
+
+O modelo `parties` é o cadastro genérico usado por clientes e pagadores.
+
+Regras:
+
+- empresas com `sourceSystem = ESCOLA` recebem clientes exclusivamente por sincronização do cadastro escolar
+- na Escola, aparecem os clientes sincronizados (`ALUNO | RESPONSAVEL`) e os cadastros legados efetivamente vinculados a títulos a receber
+- snapshots sem vínculo com `parties`, como `CONSUMIDOR FINAL`, permanecem apenas no histórico financeiro e não viram cliente
+- empresas das demais origens cadastram clientes diretamente no Financeiro com `externalEntityType = FINANCEIRO_CLIENTE`
+- toda consulta e mutação respeita `companyId` e `branchCode`
+- inativação usa `canceledAt` e `canceledBy`; não existe exclusão física
+- títulos e parcelas mantêm seus snapshots históricos mesmo após atualização ou inativação do cliente

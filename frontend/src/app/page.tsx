@@ -18,6 +18,14 @@ type MenuItem = {
 
 const MENU_ITEMS: MenuItem[] = [
   {
+    id: 'clientes',
+    label: 'Clientes',
+    href: '/clientes',
+    hostPath: '/principal/financeiro/clientes',
+    description: 'Cadastro híbrido de clientes do contas a receber.',
+    image: '/principal-financeiro/historico-cliente.svg?v=1',
+  },
+  {
     id: 'empresa',
     label: 'Empresa',
     href: '/empresas',
@@ -89,6 +97,14 @@ const MENU_ITEMS: MenuItem[] = [
     description: 'Venda produtos com caixa, estoque e contas a receber.',
     image: '/principal-financeiro/vendas.svg?v=1',
   },
+  {
+    id: 'vendas-2',
+    label: 'Vendas 2',
+    href: '/vendas-2',
+    hostPath: '/principal/financeiro/vendas-2',
+    description: 'Novo fluxo de vendas com consulta visual e foto dos produtos.',
+    image: '/principal-financeiro/vendas.svg?v=1',
+  },
 ];
 
 function resolveHostBaseUrl() {
@@ -98,6 +114,9 @@ function resolveHostBaseUrl() {
 
   try {
     const referrerUrl = new URL(document.referrer);
+    if (typeof window !== 'undefined' && referrerUrl.origin === window.location.origin) {
+      return null;
+    }
     return referrerUrl.origin;
   } catch {
     return null;
@@ -175,7 +194,7 @@ export default function FinanceiroHomePage() {
 
       <section className={`${cardClass} p-6`}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {MENU_ITEMS.map((item) => {
+          {MENU_ITEMS.filter((item) => item.id !== 'vendas-2' || runtimeContext.userRole === 'ADMIN').map((item) => {
             const shouldReturnToHost = runtimeContext.embedded && hostBaseUrl;
             const href = shouldReturnToHost
               ? `${hostBaseUrl}${item.hostPath}`

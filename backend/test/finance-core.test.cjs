@@ -34,6 +34,9 @@ const {
   SalesService,
 } = require("../dist/modules/sales/application/sales.service.js");
 const {
+  CustomersService,
+} = require("../dist/modules/customers/application/customers.service.js");
+const {
   evaluateBankReturnForInstallment,
 } = require("../dist/modules/receivables/application/bank-return.utils.js");
 
@@ -136,9 +139,119 @@ async function main() {
     const banksService = new BanksService(prisma);
     const companiesService = new CompaniesService(prisma);
     const productsService = new ProductsService(prisma);
+    const customersService = new CustomersService(prisma);
     const salesService = new SalesService(prisma, {}, {
       issueForSaleAfterConfirmation: async () => ({ status: "NOT_CONFIGURED" }),
     });
+
+    const schoolCustomerSync = await customersService.sync({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_CLIENTES",
+      sourceBranchCode: 1,
+      companyName: "ESCOLA CLIENTES",
+      customers: [
+        {
+          externalEntityType: "RESPONSAVEL",
+          externalEntityId: "RESPONSAVEL_001",
+          name: "RESPONSAVEL TESTE",
+          document: "12345678901",
+          email: "responsavel@teste.com",
+        },
+      ],
+    });
+
+    assert.equal(schoolCustomerSync.synchronizedCustomers, 1);
+    const schoolCompany = await prisma.company.findUnique({
+      where: {
+        sourceSystem_sourceTenantId: {
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_CLIENTES",
+        },
+      },
+    });
+    const legacySchoolCustomer = await prisma.party.create({
+      data: {
+        companyId: schoolCompany.id,
+        branchCode: 1,
+        externalEntityType: "CLIENTE_LEGADO",
+        externalEntityId: "LEGADO_LOCAL",
+        name: "CLIENTE LEGADO COM TITULO",
+      },
+    });
+    const legacySchoolBatch = await prisma.receivableBatch.create({
+      data: {
+        companyId: schoolCompany.id,
+        branchCode: 1,
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_CLIENTES",
+        sourceBatchType: "TESTE_CLIENTES",
+        sourceBatchId: "LOTE_CLIENTE_LEGADO",
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+    });
+    await prisma.receivableTitle.create({
+      data: {
+        companyId: schoolCompany.id,
+        branchCode: 1,
+        batchId: legacySchoolBatch.id,
+        payerPartyId: legacySchoolCustomer.id,
+        sourceEntityType: "ALUNO",
+        sourceEntityId: "ALUNO_LEGADO",
+        businessKey: "TESTE:CLIENTE:LEGADO",
+        description: "TITULO LEGADO",
+        totalAmount: 100,
+        payerNameSnapshot: "CLIENTE LEGADO COM TITULO",
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+    });
+
+    const schoolCustomers = await customersService.list({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_CLIENTES",
+      sourceBranchCode: 1,
+      status: "ACTIVE",
+    });
+    assert.equal(schoolCustomers.canCreateLocally, false);
+    assert.equal(schoolCustomers.items.length, 2);
+    assert.deepEqual(
+      schoolCustomers.items.map((item) => item.name).sort(),
+      ["CLIENTE LEGADO COM TITULO", "RESPONSAVEL TESTE"],
+    );
+    await assert.rejects(
+      () =>
+        customersService.create({
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_CLIENTES",
+          name: "CLIENTE INDEVIDO",
+        }),
+      /exclusivamente no sistema Escola/i,
+    );
+
+    const localCustomer = await customersService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "PETSHOP",
+      sourceTenantId: "TENANT_PETSHOP_CLIENTES",
+      companyName: "PETSHOP CLIENTES",
+      name: "CLIENTE LOCAL",
+      document: "11222333000144",
+    });
+    assert.equal(localCustomer.origin, "FINANCEIRO");
+    assert.equal(localCustomer.canManageLocally, true);
+
+    const inactivatedLocalCustomer = await customersService.inactivate(
+      localCustomer.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "PETSHOP",
+        sourceTenantId: "TENANT_PETSHOP_CLIENTES",
+      },
+    );
+    assert.equal(inactivatedLocalCustomer.status, "INACTIVE");
+    assert.ok(inactivatedLocalCustomer.canceledAt);
 
     const createdBank = await banksService.create({
       requestedBy: "CODEX",
@@ -655,6 +768,201 @@ async function main() {
     });
 
     assert.equal(productWithCodes.internalCode, "9001");
+
+    await prisma.companyBranch.update({
+      where: {
+        companyId_branchCode: {
+          companyId: salesCompany.id,
+          branchCode: 1,
+        },
+      },
+      data: {
+        stockControlMode: "YES",
+        stockIntegerQuantityMode: "YES",
+        stockLotControlMode: "YES",
+        stockExpirationControlMode: "YES",
+        stockGridControlMode: "YES",
+        stockNegativeControlMode: "YES",
+        updatedBy: "CODEX",
+      },
+    });
+
+    const productWithBranchRulesEnabled = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "PRODUTO REGRAS FILIAL SIM",
+      internalCode: "9003",
+      barcode: "789000000005",
+      tracksInventory: false,
+      allowFraction: true,
+      usesColorSize: false,
+      usesLotControl: false,
+      usesExpirationControl: false,
+      allowsNegativeStock: false,
+      currentStock: 1,
+      minimumStock: 0,
+    });
+
+    assert.equal(productWithBranchRulesEnabled.tracksInventory, true);
+    assert.equal(productWithBranchRulesEnabled.allowFraction, false);
+    assert.equal(productWithBranchRulesEnabled.usesColorSize, true);
+    assert.equal(productWithBranchRulesEnabled.usesLotControl, true);
+    assert.equal(productWithBranchRulesEnabled.usesExpirationControl, true);
+    assert.equal(productWithBranchRulesEnabled.allowsNegativeStock, true);
+
+    await prisma.companyBranch.update({
+      where: {
+        companyId_branchCode: {
+          companyId: salesCompany.id,
+          branchCode: 1,
+        },
+      },
+      data: {
+        stockControlMode: "NO",
+        stockIntegerQuantityMode: "NO",
+        stockLotControlMode: "NO",
+        stockExpirationControlMode: "NO",
+        stockGridControlMode: "NO",
+        stockNegativeControlMode: "NO",
+        updatedBy: "CODEX",
+      },
+    });
+
+    const productWithBranchRulesDisabled = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "PRODUTO REGRAS FILIAL NAO",
+      internalCode: "9004",
+      barcode: "789000000006",
+      tracksInventory: true,
+      allowFraction: false,
+      usesColorSize: true,
+      usesLotControl: true,
+      usesExpirationControl: true,
+      allowsNegativeStock: true,
+      currentStock: 0,
+      minimumStock: 0,
+    });
+
+    assert.equal(productWithBranchRulesDisabled.tracksInventory, false);
+    assert.equal(productWithBranchRulesDisabled.allowFraction, true);
+    assert.equal(productWithBranchRulesDisabled.usesColorSize, false);
+    assert.equal(productWithBranchRulesDisabled.usesLotControl, false);
+    assert.equal(productWithBranchRulesDisabled.usesExpirationControl, false);
+    assert.equal(productWithBranchRulesDisabled.allowsNegativeStock, false);
+
+    await prisma.companyBranch.update({
+      where: {
+        companyId_branchCode: {
+          companyId: salesCompany.id,
+          branchCode: 1,
+        },
+      },
+      data: {
+        stockControlMode: "BY_PRODUCT",
+        stockIntegerQuantityMode: "BY_PRODUCT",
+        stockLotControlMode: "BY_PRODUCT",
+        stockExpirationControlMode: "BY_PRODUCT",
+        stockGridControlMode: "BY_PRODUCT",
+        stockNegativeControlMode: "BY_PRODUCT",
+        updatedBy: "CODEX",
+      },
+    });
+
+    const productWithDefaultNegativeStock = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "PRODUTO ESTOQUE NEGATIVO PADRAO",
+      internalCode: "9005",
+      barcode: "789000000007",
+      tracksInventory: true,
+      currentStock: 0,
+      minimumStock: 0,
+    });
+
+    assert.equal(productWithDefaultNegativeStock.allowsNegativeStock, true);
+
+    const manualEntry = await productsService.createManualStockMovement(
+      productWithCodes.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        operationId: "MANUAL_ENTRY_001",
+        movementType: "ENTRY",
+        quantity: 2,
+        notes: "ACERTO DE CONTAGEM",
+      },
+    );
+    assert.equal(manualEntry.previousStock, 5);
+    assert.equal(manualEntry.resultingStock, 7);
+
+    const repeatedManualEntry = await productsService.createManualStockMovement(
+      productWithCodes.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        operationId: "MANUAL_ENTRY_001",
+        movementType: "ENTRY",
+        quantity: 2,
+        notes: "ACERTO DE CONTAGEM",
+      },
+    );
+    assert.equal(repeatedManualEntry.id, manualEntry.id);
+    assert.equal(
+      await prisma.stockMovement.count({
+        where: { sourceType: "MANUAL_STOCK", sourceId: "MANUAL_ENTRY_001" },
+      }),
+      1,
+    );
+
+    const manualExit = await productsService.createManualStockMovement(
+      productWithCodes.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        operationId: "MANUAL_EXIT_001",
+        movementType: "EXIT",
+        quantity: 3,
+        notes: "PERDA IDENTIFICADA",
+      },
+    );
+    assert.equal(manualExit.previousStock, 7);
+    assert.equal(manualExit.resultingStock, 4);
+
+    const manualMovements = await productsService.listStockMovements({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+      productId: productWithCodes.id,
+      movementType: "ALL",
+    });
+    assert.equal(manualMovements.length, 2);
+    assert.equal(manualMovements[0].id, manualExit.id);
+    assert.equal(manualMovements[1].id, manualEntry.id);
+
+    await assert.rejects(
+      () =>
+        productsService.createManualStockMovement(productWithCodes.id, {
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          operationId: "MANUAL_EXIT_SEM_SALDO",
+          movementType: "EXIT",
+          quantity: 99,
+          notes: "SAIDA SEM SALDO",
+        }),
+      /Estoque insuficiente/,
+    );
+    assert.equal(
+      (await prisma.product.findUnique({ where: { id: productWithCodes.id } })).currentStock,
+      4,
+    );
 
     await assert.rejects(
       () =>

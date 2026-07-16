@@ -5,7 +5,7 @@ import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useS
 import QRCode from 'qrcode';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
-import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
+import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
@@ -143,6 +143,8 @@ type CustomerState = {
   referenceName: string;
   registeredPersonId: string;
   registeredPersonSourceType: string;
+  externalEntityType: string;
+  externalEntityId: string;
   addressLine1: string;
   neighborhood: string;
   city: string;
@@ -163,6 +165,26 @@ type PersonLookupResult = {
   state?: string | null;
   postalCode?: string | null;
   sourceType?: string | null;
+  externalEntityType?: string | null;
+  externalEntityId?: string | null;
+};
+
+type FinancialCustomersLookupResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    document?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    addressLine1?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    origin?: string | null;
+    externalEntityType: string;
+    externalEntityId: string;
+  }>;
 };
 
 type PixQrCodeState = {
@@ -207,6 +229,34 @@ type SaleActionMenuItem = {
   disabledTitle?: string;
 };
 
+type VpCustomerHistoryItem = {
+  customerName: string;
+  customerDocument?: string | null;
+  openAmount: number;
+  installments?: Array<{
+    dueDate?: string | null;
+    openAmount: number;
+    status: string;
+  }>;
+};
+
+type VpSaleState = {
+  origin: 'command' | 'checkout';
+  phase: 'search' | 'confirm';
+  search: string;
+  results: PersonLookupResult[];
+  isSearching: boolean;
+  isLoadingSummary: boolean;
+  customer: PersonLookupResult | null;
+  openAmount: number;
+  oldestOpenDueDate: string | null;
+};
+
+type SubmitSaleOptions = {
+  customerOverride?: CustomerState;
+  paymentRowsOverride?: PaymentRow[];
+};
+
 const SCREEN_ID = 'FINANCEIRO_VENDAS_PDV_GERAL';
 const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS';
 const V2_SCREEN_ID = 'FINANCEIRO_VENDAS_2_PDV_GERAL';
@@ -215,6 +265,9 @@ const CHECKOUT_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS_FINALIZACAO';
 const QUICK_CASH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA';
 const QUICK_CASH_PEOPLE_SEARCH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA_PESQUISAR_PESSOAS';
 const PIX_QR_CODE_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_PIX_SICOOB_QRCODE';
+const PRODUCT_LOOKUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_2_PESQUISAR_PRODUTO';
+const VP_CUSTOMER_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_VP_SELECIONAR_CLIENTE';
+const VP_CONFIRMATION_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_VP_CONFIRMAR_VENDA';
 const SALE_DRAFT_STORAGE_PREFIX = 'financeiro:vendas:rascunho:';
 const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
@@ -302,6 +355,45 @@ const PAYMENT_METHODS: Array<{
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function requestSchoolCustomersSyncFromHost() {
+  return new Promise<void>((resolve) => {
+    if (typeof window === 'undefined' || window.parent === window) {
+      resolve();
+      return;
+    }
+
+    const requestId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `vendas-vp-${Date.now()}-${Math.random()}`;
+    const finish = () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', handleResult);
+      resolve();
+    };
+    const timeout = window.setTimeout(finish, 10000);
+
+    function handleResult(event: MessageEvent) {
+      const payload = event.data;
+      if (
+        !payload ||
+        payload.type !== 'MSINFOR_SYNC_FINANCIAL_CUSTOMERS_RESULT' ||
+        payload.requestId !== requestId
+      ) {
+        return;
+      }
+
+      finish();
+    }
+
+    window.addEventListener('message', handleResult);
+    window.parent.postMessage(
+      { type: 'MSINFOR_SYNC_FINANCIAL_CUSTOMERS', requestId },
+      '*',
+    );
+  });
 }
 
 function appendNavigationParam(href: string, key: string, value: string) {
@@ -655,6 +747,8 @@ function createCustomerState(): CustomerState {
     referenceName: '',
     registeredPersonId: '',
     registeredPersonSourceType: '',
+    externalEntityType: '',
+    externalEntityId: '',
     addressLine1: '',
     neighborhood: '',
     city: '',
@@ -708,6 +802,13 @@ function buildSalePayload(params: {
   const registeredPersonSourceType = registeredPersonId
     ? (customer.registeredPersonSourceType.trim() || 'PESSOA')
     : '';
+  const externalEntityType = registeredPersonId
+    ? 'PERSON'
+    : customer.externalEntityType.trim() || 'CUSTOMER';
+  const externalEntityId = registeredPersonId
+    || customer.externalEntityId.trim()
+    || customer.document
+    || customer.name;
 
   return {
     sourceSystem: runtimeContext.sourceSystem,
@@ -715,16 +816,16 @@ function buildSalePayload(params: {
     sourceBranchCode: runtimeContext.sourceBranchCode,
     companyName: runtimeContext.companyName || undefined,
     saleChannel,
-    sourceEntityType: registeredPersonId ? 'PERSON' : customer.referenceName ? 'REFERENCE' : undefined,
-    sourceEntityId: registeredPersonId || customer.document || undefined,
+    sourceEntityType: registeredPersonId ? 'PERSON' : customer.externalEntityType || (customer.referenceName ? 'REFERENCE' : undefined),
+    sourceEntityId: registeredPersonId || customer.externalEntityId || customer.document || undefined,
     sourceEntityName: customer.referenceName || undefined,
     requestedBy: runtimeContext.cashierUserId || undefined,
     cashierUserId: runtimeContext.cashierUserId || undefined,
     cashierDisplayName: runtimeContext.cashierDisplayName || undefined,
     customer: customer.name
       ? {
-          externalEntityType: registeredPersonId ? 'PERSON' : 'CUSTOMER',
-          externalEntityId: registeredPersonId || customer.document || customer.name,
+          externalEntityType,
+          externalEntityId,
           registeredPersonId: registeredPersonId || undefined,
           registeredPersonSourceType: registeredPersonSourceType || undefined,
           name: customer.name,
@@ -830,6 +931,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const productSearchInputRef = useRef<HTMLInputElement | null>(null);
   const paymentAmountInputRef = useRef<HTMLInputElement | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const vpCustomerSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const vpCustomerSearchRequestRef = useRef(0);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [branchSaleConfig, setBranchSaleConfig] = useState<SaleBranchConfig>(
     DEFAULT_SALE_BRANCH_CONFIG,
@@ -859,6 +962,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const [isLoadingCashSession, setIsLoadingCashSession] = useState(false);
   const [customer, setCustomer] = useState<CustomerState>(() => createCustomerState());
   const [customerPersonResults, setCustomerPersonResults] = useState<PersonLookupResult[]>([]);
+  const [vpSaleState, setVpSaleState] = useState<VpSaleState | null>(null);
   const [isSearchingCustomerPeople, setIsSearchingCustomerPeople] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -1413,6 +1517,28 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     setErrorMessage('');
   }, []);
 
+  const openVPSale = useCallback((origin: 'command' | 'checkout' = 'command') => {
+    if (!cartItems.length) {
+      setErrorMessage('Inclua ao menos um produto antes de iniciar a venda a prazo.');
+      focusProductSearchInput();
+      return;
+    }
+
+    setProductSearch('');
+    setErrorMessage('');
+    setVpSaleState({
+      origin,
+      phase: 'search',
+      search: '',
+      results: [],
+      isSearching: false,
+      isLoadingSummary: false,
+      customer: null,
+      openAmount: 0,
+      oldestOpenDueDate: null,
+    });
+  }, [cartItems.length, focusProductSearchInput]);
+
   const executeProductSearchCommand = useCallback((rawCommand?: string) => {
     const command = rawCommand === undefined
       ? productSearchCommand
@@ -1453,6 +1579,11 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       return;
     }
 
+    if (term.toUpperCase() === 'VP') {
+      openVPSale();
+      return;
+    }
+
     if (!term || term === '0') {
       openProductLookup(command.quantity, term);
       return;
@@ -1473,6 +1604,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     cartItems.length,
     cartTotals.total,
     focusProductSearchInput,
+    openVPSale,
     openProductLookup,
     productSearchCommand,
     products,
@@ -1529,6 +1661,12 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
 
   const handlePaymentMethodCardClick = useCallback(
     (paymentMethod: PaymentMethod) => {
+      if (paymentMethod === 'TERM') {
+        setPaymentAmountModal(null);
+        openVPSale('checkout');
+        return;
+      }
+
       const currentAmount = paymentAmountByMethod.get(paymentMethod) || 0;
       if (currentAmount > 0) {
         setPaymentRows((current) =>
@@ -1549,7 +1687,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         installments: buildPaymentInstallmentDrafts(nextAmount, 1, nextDueDate),
       });
     },
-    [cartTotals.paymentTotal, cartTotals.total, paymentAmountByMethod],
+    [cartTotals.paymentTotal, cartTotals.total, openVPSale, paymentAmountByMethod],
   );
 
   const confirmPaymentAmount = useCallback(() => {
@@ -1612,6 +1750,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     }
     setPaymentRows([]);
     setPaymentAmountModal(null);
+    setProductSearch('');
+    setCartDescriptionSearch('');
+    setSelectedCartLineId(null);
+    setVendas2ProductImageIndex(0);
     setSaleDiscount('');
     setNotes('');
     setCustomer(createCustomerState());
@@ -1732,6 +1874,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       [field]: value,
       registeredPersonId: '',
       registeredPersonSourceType: '',
+      externalEntityType: '',
+      externalEntityId: '',
     }));
   }, []);
 
@@ -1781,6 +1925,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       phone: person.phone || '',
       registeredPersonId,
       registeredPersonSourceType: person.sourceType || 'PESSOA',
+      externalEntityType: 'PERSON',
+      externalEntityId: registeredPersonId,
       addressLine1: person.addressLine1 || '',
       neighborhood: person.neighborhood || '',
       city: person.city || '',
@@ -1790,6 +1936,212 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     setCustomerPersonResults([]);
     setCheckoutFeedback(null);
   }, []);
+
+  const searchFinancialCustomers = useCallback(async (rawSearch: string) => {
+    const search = rawSearch.trim();
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      return [];
+    }
+
+    const response = await requestJson<FinancialCustomersLookupResponse>(
+      `/customers${buildFinanceApiQueryString(runtimeContext, {
+        sourceBranchCode: runtimeContext.sourceBranchCode,
+        status: 'ACTIVE',
+        search: search || null,
+      })}`,
+    );
+
+    const mappedCustomers = (response.items || []).map((item): PersonLookupResult => ({
+      id: item.id,
+      name: item.name,
+      document: item.document || null,
+      email: item.email || null,
+      phone: item.phone || null,
+      addressLine1: item.addressLine1 || null,
+      neighborhood: item.neighborhood || null,
+      city: item.city || null,
+      state: item.state || null,
+      postalCode: item.postalCode || null,
+      sourceType: [item.origin, item.externalEntityType].filter(Boolean).join(' - '),
+      externalEntityType: item.externalEntityType,
+      externalEntityId: item.externalEntityId,
+    }));
+
+    const preferFormattedValue = (
+      currentValue: string | null | undefined,
+      candidateValue: string | null | undefined,
+    ) => {
+      const currentText = String(currentValue || '').trim();
+      const candidateText = String(candidateValue || '').trim();
+      return candidateText.length > currentText.length ? candidateValue : currentValue;
+    };
+    const uniqueCustomers = new Map<string, PersonLookupResult>();
+
+    mappedCustomers.forEach((person) => {
+      const documentDigits = normalizeDocumentDigits(person.document || '');
+      const externalEntityType = String(person.externalEntityType || '').trim().toUpperCase();
+      const externalEntityId = String(person.externalEntityId || '').trim().toUpperCase();
+      const normalizedName = String(person.name || '').trim().toUpperCase();
+      const normalizedEmail = String(person.email || '').trim().toUpperCase();
+      const phoneDigits = normalizeDocumentDigits(person.phone || '');
+      const identityKey = documentDigits
+        ? `DOCUMENT:${documentDigits}`
+        : externalEntityType && externalEntityId
+          ? `EXTERNAL:${externalEntityType}:${externalEntityId}`
+          : normalizedEmail
+            ? `EMAIL:${normalizedName}:${normalizedEmail}`
+            : phoneDigits
+              ? `PHONE:${normalizedName}:${phoneDigits}`
+              : `ID:${person.id}`;
+      const current = uniqueCustomers.get(identityKey);
+
+      if (!current) {
+        uniqueCustomers.set(identityKey, person);
+        return;
+      }
+
+      uniqueCustomers.set(identityKey, {
+        ...current,
+        document: preferFormattedValue(current.document, person.document),
+        phone: preferFormattedValue(current.phone, person.phone),
+        email: current.email || person.email,
+        addressLine1: current.addressLine1 || person.addressLine1,
+        neighborhood: current.neighborhood || person.neighborhood,
+        city: current.city || person.city,
+        state: current.state || person.state,
+        postalCode: current.postalCode || person.postalCode,
+      });
+    });
+
+    return Array.from(uniqueCustomers.values());
+  }, [runtimeContext]);
+
+  const ensureVPCustomersSynchronized = useCallback(async () => {
+    if (runtimeContext.sourceSystem !== 'ESCOLA' || !runtimeContext.embedded) return;
+
+    if (!vpCustomerSyncPromiseRef.current) {
+      vpCustomerSyncPromiseRef.current = requestSchoolCustomersSyncFromHost();
+    }
+    await vpCustomerSyncPromiseRef.current;
+  }, [runtimeContext.embedded, runtimeContext.sourceSystem]);
+
+  const performVPSearch = useCallback(async (rawSearch?: string) => {
+    const search = String(rawSearch || '').trim();
+    const requestId = vpCustomerSearchRequestRef.current + 1;
+    vpCustomerSearchRequestRef.current = requestId;
+
+    setVpSaleState((current) => current ? { ...current, search, isSearching: true } : current);
+    try {
+      await ensureVPCustomersSynchronized();
+      const results = await searchFinancialCustomers(search);
+      if (requestId !== vpCustomerSearchRequestRef.current) return;
+      setVpSaleState((current) => current ? { ...current, search, results, isSearching: false } : current);
+    } catch (error) {
+      if (requestId !== vpCustomerSearchRequestRef.current) return;
+      setVpSaleState((current) => current ? { ...current, search, results: [], isSearching: false } : current);
+      setErrorMessage(
+        getFriendlyRequestErrorMessage(error, 'Não foi possível pesquisar os clientes.'),
+      );
+    }
+  }, [ensureVPCustomersSynchronized, searchFinancialCustomers]);
+
+  useEffect(() => {
+    if (!vpSaleState || vpSaleState.phase !== 'search') return;
+
+    const timeout = window.setTimeout(
+      () => void performVPSearch(vpSaleState.search),
+      vpSaleState.search.trim() ? 250 : 0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [performVPSearch, vpSaleState?.phase, vpSaleState?.search]);
+
+  const selectVPCustomer = useCallback(async (person: PersonLookupResult) => {
+    const vpOrigin = vpSaleState?.origin || 'command';
+    const registeredPersonId = getRegisteredPersonId(person.registeredPersonId);
+    const externalEntityType = String(person.externalEntityType || '').trim();
+    const externalEntityId = String(person.externalEntityId || '').trim();
+    if (!registeredPersonId && (!externalEntityType || !externalEntityId)) {
+      setErrorMessage('Selecione um cliente cadastrado para a venda a prazo.');
+      return;
+    }
+
+    setCustomer((current) => ({
+      ...current,
+      name: person.name,
+      document: person.document || '',
+      email: person.email || '',
+      phone: person.phone || '',
+      registeredPersonId,
+      registeredPersonSourceType: person.sourceType || '',
+      externalEntityType: registeredPersonId ? 'PERSON' : externalEntityType,
+      externalEntityId: registeredPersonId || externalEntityId,
+      addressLine1: person.addressLine1 || '',
+      neighborhood: person.neighborhood || '',
+      city: person.city || '',
+      state: person.state || '',
+      postalCode: person.postalCode || '',
+    }));
+
+    if (vpOrigin === 'checkout') {
+      const remainingAmount = Math.max(0, cartTotals.total - cartTotals.paymentTotal);
+      const nextAmount = remainingAmount || cartTotals.total;
+      const nextDueDate = getNextMonthDateInput();
+
+      setVpSaleState(null);
+      setPaymentAmountModal({
+        paymentMethod: 'TERM',
+        amount: formatNumberInput(nextAmount),
+        installmentCount: '1',
+        dueDate: nextDueDate,
+        installments: buildPaymentInstallmentDrafts(nextAmount, 1, nextDueDate),
+      });
+      setCheckoutTab('payment');
+      setCheckoutOpen(true);
+      setErrorMessage('');
+      return;
+    }
+
+    setPaymentRows([{
+      ...createDefaultPayment(cartTotals.total),
+      paymentMethod: 'TERM',
+      dueDate: getNextMonthDateInput(),
+      installmentCount: '1',
+      cardInstallmentCount: '1',
+    }]);
+    setVpSaleState((current) => current ? {
+      ...current,
+      phase: 'confirm',
+      customer: person,
+      results: [],
+      isSearching: false,
+      isLoadingSummary: true,
+    } : current);
+
+    try {
+      const history = await requestJson<VpCustomerHistoryItem[]>(
+        `/receivables/customer-history${buildFinanceApiQueryString(runtimeContext, {
+          search: person.document || person.name,
+        })}`,
+      );
+      const normalizedName = person.name.trim().toUpperCase();
+      const historyCustomer = history.find((item) =>
+        String(item.customerName || '').trim().toUpperCase() === normalizedName,
+      ) || history[0];
+      const openInstallments = (historyCustomer?.installments || [])
+        .filter((item) => String(item.status || '').toUpperCase() === 'OPEN' && Number(item.openAmount || 0) > 0 && item.dueDate)
+        .sort((left, right) => new Date(left.dueDate || 0).getTime() - new Date(right.dueDate || 0).getTime());
+
+      setVpSaleState((current) => current ? {
+        ...current,
+        isLoadingSummary: false,
+        openAmount: Number(historyCustomer?.openAmount || 0),
+        oldestOpenDueDate: openInstallments[0]?.dueDate || null,
+      } : current);
+    } catch (error) {
+      setVpSaleState((current) => current ? { ...current, isLoadingSummary: false } : current);
+      setErrorMessage(getFriendlyRequestErrorMessage(error, 'Não foi possível consultar o histórico financeiro do cliente.'));
+    }
+  }, [cartTotals.paymentTotal, cartTotals.total, runtimeContext, vpSaleState?.origin]);
 
   const performQuickCashPeopleSearch = useCallback(async (rawSearch: string) => {
     const search = rawSearch.trim();
@@ -2064,9 +2416,17 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     saleDiscount,
   ]);
 
-  const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
+  const submitSale = useCallback(
+    async (options?: SubmitSaleOptions) => {
+      const effectiveCustomer = options?.customerOverride || customer;
+      const effectivePaymentRows = options?.paymentRowsOverride || paymentRows;
+      const effectivePaymentTotal = effectivePaymentRows.reduce(
+        (total, payment) => total + parseDecimal(payment.amount),
+        0,
+      );
+      const effectiveHasBoletoPayment = effectivePaymentRows.some(
+        (payment) => payment.paymentMethod === 'BOLETO' && parseDecimal(payment.amount) > 0,
+      );
 
       if (!canLoadContext) {
         setCheckoutFeedback({
@@ -2074,7 +2434,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           title: 'ATENÇÃO !!!',
           message: 'Abra a tela pelo sistema consumidor para carregar empresa e filial.',
         });
-        return;
+        return null;
       }
 
       if (!cartItems.length) {
@@ -2083,7 +2443,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           title: 'ATENÇÃO !!!',
           message: 'Inclua ao menos um produto no carrinho.',
         });
-        return;
+        return null;
       }
 
       if (cartTotals.total <= 0) {
@@ -2092,12 +2452,12 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           title: 'ATENÇÃO !!!',
           message: 'O total final da venda precisa ser maior que zero.',
         });
-        return;
+        return null;
       }
 
-      if (Math.abs(cartTotals.paymentTotal - cartTotals.total) > 0.01) {
-        const difference = cartTotals.total - cartTotals.paymentTotal;
-        const selectedPayments = paymentRows
+      if (Math.abs(effectivePaymentTotal - cartTotals.total) > 0.01) {
+        const difference = cartTotals.total - effectivePaymentTotal;
+        const selectedPayments = effectivePaymentRows
           .filter((payment) => parseDecimal(payment.amount) > 0)
           .map((payment) => ({
             label: getPaymentMethodLabel(payment.paymentMethod),
@@ -2116,8 +2476,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
             },
             {
               label: 'Total informado',
-              value: formatCurrency(cartTotals.paymentTotal),
-              tone: cartTotals.paymentTotal > cartTotals.total ? 'danger' : 'warning',
+              value: formatCurrency(effectivePaymentTotal),
+              tone: effectivePaymentTotal > cartTotals.total ? 'danger' : 'warning',
             },
             {
               label: difference > 0 ? 'Valor faltante' : 'Valor excedente',
@@ -2131,10 +2491,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         });
         setCheckoutOpen(true);
         setCheckoutTab('payment');
-        return;
+        return null;
       }
 
-      if (hasBoletoPayment && !getRegisteredPersonId(customer.registeredPersonId)) {
+      if (effectiveHasBoletoPayment && !getRegisteredPersonId(effectiveCustomer.registeredPersonId)) {
         setCheckoutFeedback({
           type: 'error',
           title: 'CLIENTE CADASTRADO OBRIGATÓRIO !!!',
@@ -2142,10 +2502,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         });
         setCheckoutOpen(true);
         setCheckoutTab('customer');
-        return;
+        return null;
       }
 
-      if (hasBoletoPayment && (!customer.addressLine1.trim() || !customer.neighborhood.trim() || !customer.city.trim() || !customer.state.trim() || !customer.postalCode.trim())) {
+      if (effectiveHasBoletoPayment && (!effectiveCustomer.addressLine1.trim() || !effectiveCustomer.neighborhood.trim() || !effectiveCustomer.city.trim() || !effectiveCustomer.state.trim() || !effectiveCustomer.postalCode.trim())) {
         setCheckoutFeedback({
           type: 'error',
           title: 'ENDEREÇO DO PAGADOR OBRIGATÓRIO !!!',
@@ -2153,7 +2513,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         });
         setCheckoutOpen(true);
         setCheckoutTab('customer');
-        return;
+        return null;
       }
 
       setIsSubmitting(true);
@@ -2165,9 +2525,9 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         const payload = buildSalePayload({
           runtimeContext,
           saleChannel,
-          customer,
+          customer: effectiveCustomer,
           cartItems,
-          paymentRows,
+          paymentRows: effectivePaymentRows,
           saleDiscount,
           notes,
           allowSaleItemDiscount: branchSaleConfig.allowSaleItemDiscount,
@@ -2178,7 +2538,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           fallbackMessage: 'Não foi possível confirmar a venda.',
         });
 
-        const pixPayment = paymentRows.find(
+        const pixPayment = effectivePaymentRows.find(
           (payment) => payment.paymentMethod === 'PIX' && parseDecimal(payment.amount) > 0,
         );
         if (pixPayment) {
@@ -2204,7 +2564,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
             });
             setPixQrCode({ ...issuedPix, saleId: created.id, imageUrl });
             setCheckoutOpen(false);
-            return;
+            return created;
           } catch (error) {
             clearSale();
             setSuccessSale(created);
@@ -2215,7 +2575,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
               closeCheckoutOnOk: true,
             });
             await loadData();
-            return;
+            return created;
           }
         }
 
@@ -2228,12 +2588,14 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           closeCheckoutOnOk: true,
         });
         await loadData();
+        return created;
       } catch (error) {
         setCheckoutFeedback({
           type: 'error',
           title: 'ERRO AO CONFIRMAR !!!',
           message: getFriendlyRequestErrorMessage(error, 'Não foi possível confirmar a venda.'),
         });
+        return null;
       } finally {
         setIsSubmitting(false);
       }
@@ -2243,7 +2605,6 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       cartItems,
       clearSale,
       customer,
-      hasBoletoPayment,
       loadData,
       notes,
       paymentRows,
@@ -2251,10 +2612,57 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       saleChannel,
       saleDiscount,
       branchSaleConfig.allowSaleItemDiscount,
-      cartTotals.paymentTotal,
       cartTotals.total,
     ],
   );
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void submitSale();
+    },
+    [submitSale],
+  );
+
+  const confirmVPSale = useCallback(async () => {
+    if (!vpSaleState?.customer || vpSaleState.isLoadingSummary) return;
+    const selectedCustomer = vpSaleState.customer;
+    const registeredPersonId = getRegisteredPersonId(selectedCustomer.registeredPersonId);
+    const vpCustomer: CustomerState = {
+      ...createCustomerState(),
+      name: selectedCustomer.name,
+      document: selectedCustomer.document || '',
+      email: selectedCustomer.email || '',
+      phone: selectedCustomer.phone || '',
+      registeredPersonId,
+      registeredPersonSourceType: selectedCustomer.sourceType || '',
+      externalEntityType: registeredPersonId
+        ? 'PERSON'
+        : String(selectedCustomer.externalEntityType || '').trim(),
+      externalEntityId: registeredPersonId
+        || String(selectedCustomer.externalEntityId || '').trim(),
+      addressLine1: selectedCustomer.addressLine1 || '',
+      neighborhood: selectedCustomer.neighborhood || '',
+      city: selectedCustomer.city || '',
+      state: selectedCustomer.state || '',
+      postalCode: selectedCustomer.postalCode || '',
+    };
+    const vpPaymentRows: PaymentRow[] = [{
+      ...createDefaultPayment(cartTotals.total),
+      paymentMethod: 'TERM',
+      dueDate: getNextMonthDateInput(),
+      installmentCount: '1',
+      cardInstallmentCount: '1',
+    }];
+
+    setVpSaleState(null);
+    setCheckoutTab('payment');
+    setCheckoutOpen(true);
+    await submitSale({
+      customerOverride: vpCustomer,
+      paymentRowsOverride: vpPaymentRows,
+    });
+  }, [cartTotals.total, submitSale, vpSaleState]);
 
   return (
     <form onSubmit={handleSubmit} className={`flex h-[100dvh] min-h-0 flex-col overflow-hidden ${pageBottomPaddingClass}`}>
@@ -2262,11 +2670,19 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         <>
           <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden bg-slate-100 p-3">
             <div className="flex min-h-[82px] shrink-0 items-center gap-4 rounded-xl bg-gradient-to-r from-[#061c3f] via-[#082a59] to-[#061c3f] px-5 py-3 text-white shadow-lg">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/35 bg-white/5">
-                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <path d="M20 13 11 22l-9-9V4a2 2 0 0 1 2-2h9l7 7v4Z" />
-                  <circle cx="8.5" cy="7.5" r="1.5" />
-                </svg>
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/35 bg-white">
+                {runtimeContext.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={runtimeContext.logoUrl}
+                    alt={`Logotipo de ${runtimeContext.companyName || 'ESCOLA'}`}
+                    className="h-full w-full object-contain p-1"
+                  />
+                ) : (
+                  <span className="text-xs font-black tracking-[0.16em] text-[#082a59]">
+                    {String(runtimeContext.companyName || 'ESCOLA').slice(0, 3).toUpperCase()}
+                  </span>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-baseline justify-between gap-4 text-[clamp(1.35rem,3vw,2.7rem)] font-black uppercase leading-none tracking-tight">
@@ -2292,24 +2708,24 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
             <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(230px,0.72fr)_minmax(310px,0.9fr)_minmax(460px,1.38fr)]">
               <section className="flex min-h-[250px] flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex h-full min-h-[210px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f8fafc_58%,_#e2e8f0_100%)]">
-                  <div className="text-center">
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-5 text-center">
                     {activeCartItem && activeVendas2ProductImageUrls.length ? (
                       activeVendas2ProductImageUrl ? (
                         <img
                           src={activeVendas2ProductImageUrl}
                           alt={`Imagem de ${activeCartItem.description || activeCartItem.product.name}`}
                           onError={() => setVendas2ProductImageIndex((current) => current + 1)}
-                          className="mx-auto h-36 w-36 rounded-[32px] border border-blue-100 bg-blue-50 object-contain shadow-inner"
+                          className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-blue-100 bg-blue-50 object-contain shadow-inner"
                         />
                       ) : (
                         <img
                           src="/produto-imagem-nao-disponivel.svg"
                           alt="Imagem não disponível"
-                          className="mx-auto h-36 w-36 rounded-[32px] border border-slate-200 bg-white object-contain shadow-inner"
+                          className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-slate-200 bg-white object-contain shadow-inner"
                         />
                       )
                     ) : (
-                      <div className="mx-auto flex h-36 w-36 items-center justify-center rounded-[32px] border border-blue-100 bg-blue-50 text-[#082a59] shadow-inner">
+                      <div className="mx-auto flex h-[240px] w-[240px] items-center justify-center rounded-[32px] border border-blue-100 bg-blue-50 text-[#082a59] shadow-inner">
                         <svg className="h-20 w-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" aria-hidden="true">
                           <path d="m3 7 9-4 9 4-9 4-9-4Z" />
                           <path d="m3 7 9 4 9-4v10l-9 4-9-4V7Z" />
@@ -2464,7 +2880,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                         tabIndex={0}
                         onClick={() => setSelectedCartLineId(item.lineId)}
                         onKeyDown={(event) => event.key === 'Enter' && setSelectedCartLineId(item.lineId)}
-                        className={`grid cursor-pointer grid-cols-[42px_minmax(170px,1fr)_78px_100px_100px_38px] items-center gap-2 border-b px-3 py-3 text-xs transition ${selected ? 'border-blue-200 bg-blue-50' : 'border-slate-100 hover:bg-slate-50'}`}
+                        className={`grid cursor-pointer grid-cols-[42px_minmax(170px,1fr)_78px_100px_100px_38px] items-center gap-2 border-b px-3 py-3 text-xs transition duration-150 ${selected ? 'border-blue-300 bg-blue-100 shadow-inner' : 'border-slate-100 odd:bg-white even:bg-slate-50 hover:border-blue-300 hover:bg-blue-100 hover:shadow-md'}`}
                       >
                         <div className="font-black text-blue-700">{item.itemNumber}</div>
                         <div className="min-w-0">
@@ -2521,7 +2937,9 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                 </button>
                 {cashSessionDetailHref ? <Link href={cashSessionDetailHref} className="flex min-h-16 items-center justify-center rounded-lg border border-slate-300 bg-white text-2xl font-black text-emerald-700 hover:bg-emerald-50" title={cashSessionButtonTitle}>$</Link> : <button type="button" disabled className="min-h-16 rounded-lg border border-slate-200 bg-slate-100 text-2xl font-black text-slate-400">$</button>}
               </div>
-              {!runtimeContext.embedded ? <ScreenNameCopy screenId={screenId} className="ml-auto mt-2 max-w-full justify-end rounded-xl bg-slate-50 px-3 py-1 text-right" originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx" auditText={auditText} sqlText={auditSql} /> : null}
+              {!runtimeContext.embedded ? (
+                <ScreenNameCopy screenId={screenId} className="ml-auto mt-2 max-w-full justify-end rounded-xl bg-slate-50 px-3 py-1 text-right" originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx" auditText={auditText} sqlText={auditSql} />
+              ) : null}
             </div>
           </section>
         </>
@@ -3894,13 +4312,170 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         </section>
       ) : null}
 
+      {vpSaleState ? (
+        <section className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl shadow-slate-950/35">
+            <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-[#061c3f] via-[#082a59] to-[#0b3d7a] px-5 py-4 text-white">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white">
+                  {runtimeContext.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={runtimeContext.logoUrl} alt="Logotipo" className="h-full w-full object-contain p-1" />
+                  ) : (
+                    <span className="text-xs font-black tracking-[0.16em] text-[#082a59]">MS</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[9px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                    {vpSaleState.phase === 'search' ? 'Venda a prazo · 1 parcela' : 'Confirmação da venda a prazo'}
+                  </div>
+                  <h2 className="mt-1 truncate text-xl font-black">
+                    {vpSaleState.phase === 'search' ? 'Selecionar cliente' : 'Confirmar venda'}
+                  </h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVpSaleState(null)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/10 text-lg text-white transition hover:bg-white/20"
+                title="Fechar"
+                aria-label="Fechar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto p-5">
+              {vpSaleState.phase === 'search' ? (
+                <>
+                  <p className="text-sm font-semibold leading-6 text-slate-600">
+                    Pesquise pelo nome, CPF/CNPJ, telefone ou e-mail e selecione um cliente cadastrado.
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <input
+                      autoFocus
+                      value={vpSaleState.search}
+                      onChange={(event) => setVpSaleState((current) => current ? { ...current, search: event.target.value } : current)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void performVPSearch(vpSaleState.search);
+                        }
+                      }}
+                      className={inputClass}
+                      placeholder="NOME, CPF/CNPJ, TELEFONE OU E-MAIL"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void performVPSearch(vpSaleState.search)}
+                      disabled={vpSaleState.isSearching}
+                      className="shrink-0 rounded-xl bg-blue-700 px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {vpSaleState.isSearching ? 'Buscando...' : 'Pesquisar'}
+                    </button>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {vpSaleState.results.map((person, index) => (
+                      <button
+                        type="button"
+                        key={`${person.id}:${index}`}
+                        onClick={() => void selectVPCustomer(person)}
+                        className={`w-full rounded-2xl border p-3 text-left transition hover:-translate-y-px hover:border-blue-400 hover:bg-blue-100 hover:shadow-md ${index % 2 === 0 ? 'border-blue-100 bg-blue-50/70' : 'border-slate-200 bg-white'}`}
+                      >
+                        <div className="truncate text-sm font-black uppercase text-slate-950">{person.name}</div>
+                        <div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                          {[person.document, person.phone, person.email, person.sourceType].filter(Boolean).join(' · ') || 'CADASTRO DE PESSOAS'}
+                        </div>
+                      </button>
+                    ))}
+                    {!vpSaleState.isSearching && !vpSaleState.results.length ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">
+                        Nenhum cliente cadastrado encontrado.
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">Cliente selecionado</div>
+                    <div className="mt-1 text-2xl font-black uppercase text-[#061c3f]">{vpSaleState.customer?.name}</div>
+                    <div className="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">{vpSaleState.customer?.document || 'DOCUMENTO NÃO INFORMADO'}</div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Valor da compra</div>
+                      <div className="mt-2 text-2xl font-black text-[#061c3f]">{formatCurrency(cartTotals.total)}</div>
+                    </div>
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                      <div className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">Total em aberto</div>
+                      <div className="mt-2 text-2xl font-black text-amber-800">{formatCurrency(vpSaleState.openAmount)}</div>
+                    </div>
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm sm:col-span-2">
+                      <div className="text-[10px] font-black uppercase tracking-[0.14em] text-rose-700">Parcela mais atrasada em aberto</div>
+                      <div className="mt-2 text-lg font-black uppercase text-rose-800">
+                        {vpSaleState.isLoadingSummary ? 'Consultando histórico...' : vpSaleState.oldestOpenDueDate ? formatDateLabel(vpSaleState.oldestOpenDueDate) : 'Nenhuma parcela em aberto'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold leading-6 text-slate-600">
+                    A venda será registrada como <span className="font-black text-[#061c3f]">PRAZO EM 1 PARCELA</span>, com vencimento em {formatDateLabel(getNextMonthDateInput())}.
+                  </div>
+                </>
+              )}
+            </div>
+
+            {vpSaleState.phase === 'confirm' ? (
+              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => setVpSaleState(null)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 transition hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmVPSale()}
+                  disabled={vpSaleState.isLoadingSummary || isSubmitting}
+                  className="rounded-xl bg-emerald-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {vpSaleState.isLoadingSummary || isSubmitting ? 'Aguarde...' : 'Confirmar venda'}
+                </button>
+              </div>
+            ) : null}
+            <div className="border-t border-slate-100 bg-white px-5 py-2">
+              <ScreenNameCopy
+                screenId={vpSaleState.phase === 'search' ? VP_CUSTOMER_SCREEN_ID : VP_CONFIRMATION_SCREEN_ID}
+                className="max-w-full justify-end rounded-xl bg-slate-50 px-2 py-1 text-right"
+                originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx"
+                auditText="Fluxo VP compartilhado entre as telas de vendas para venda a prazo em uma parcela, com seleção de cliente e confirmação do histórico em aberto."
+                sqlText={auditSql}
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {productLookupOpen && (
         <section className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
-          <div className="flex max-h-[86vh] w-full max-w-3xl flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-950/20">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+          <div className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 pb-4 pt-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm">
+                  {runtimeContext.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={runtimeContext.logoUrl} alt="Logotipo" className="h-full w-full object-contain p-1" />
+                  ) : (
+                    <span className="text-[10px] font-black tracking-[0.14em] text-blue-700">MS</span>
+                  )}
+                </div>
+                <div className="min-w-0">
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Pesquisa de produto</div>
                 <h2 className="mt-1 text-xl font-black text-slate-950">Selecionar produto</h2>
+                </div>
               </div>
               <button
                 type="button"
@@ -3913,7 +4488,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
               </button>
             </div>
 
-            <div className="mt-4 grid gap-2 lg:grid-cols-[1fr_auto]">
+            <div className="grid gap-2 px-5 pt-4 lg:grid-cols-[1fr_auto]">
               <input
                 className={inputClass}
                 value={productLookupSearch}
@@ -3921,18 +4496,29 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                 onKeyDown={handleProductLookupKeyDown}
                 placeholder="Pesquisar por nome, código interno, SKU ou barras"
               />
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-blue-700">
-                Qtd: {formatQuantityInput(productLookupQuantity)}
-              </div>
+              <label className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-blue-700">
+                <span className="shrink-0">Qtd:</span>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="any"
+                  inputMode="decimal"
+                  value={productLookupQuantity > 0 ? productLookupQuantity : ''}
+                  onChange={(event) => setProductLookupQuantity(Number(event.target.value) || 0)}
+                  onBlur={() => setProductLookupQuantity((current) => (current > 0 ? current : 1))}
+                  className="w-20 min-w-0 rounded-lg border border-blue-200 bg-white px-2 py-1 text-center text-sm font-black text-blue-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  aria-label="Quantidade do produto"
+                />
+              </label>
             </div>
 
-            <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-auto pr-1">
-              {productLookupResults.map((product) => (
+            <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-auto px-5 pb-4 pr-4">
+              {productLookupResults.map((product, index) => (
                 <button
                   type="button"
                   key={product.id}
                   onClick={() => selectLookupProduct(product)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+                  className={`w-full rounded-2xl border p-3 text-left shadow-sm transition duration-150 hover:-translate-y-px hover:border-blue-400 hover:bg-blue-100 hover:shadow-lg ${index % 2 === 0 ? 'border-blue-100 bg-blue-50/70' : 'border-slate-200 bg-white'}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -3956,6 +4542,15 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                   Nenhum produto encontrado.
                 </div>
               )}
+            </div>
+            <div className="border-t border-slate-100 bg-slate-50 px-5 py-2">
+              <ScreenNameCopy
+                screenId={PRODUCT_LOOKUP_SCREEN_ID}
+                className="max-w-full justify-end rounded-xl bg-white px-2 py-1 text-right"
+                originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx"
+                auditText="Popup de pesquisa de produtos da tela Vendas 2, com quantidade informada antes da seleção do produto."
+                sqlText={auditSql}
+              />
             </div>
           </div>
         </section>

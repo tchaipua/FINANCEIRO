@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -19,6 +20,8 @@ import {
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
   buildFinanceApiQueryString,
+  buildFinanceNavigationQueryString,
+  type BranchStockParameterMode,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
@@ -40,6 +43,8 @@ type ProductItem = {
   allowFraction: boolean;
   usesColorSize: boolean;
   usesLotControl: boolean;
+  usesExpirationControl?: boolean;
+  allowsNegativeStock?: boolean;
   currentStock: number;
   minimumStock: number;
   purchasePrice?: number | null;
@@ -64,6 +69,12 @@ type BranchInventoryConfig = {
   name?: string;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+  stockControlMode: BranchStockParameterMode;
+  stockIntegerQuantityMode: BranchStockParameterMode;
+  stockLotControlMode: BranchStockParameterMode;
+  stockExpirationControlMode: BranchStockParameterMode;
+  stockGridControlMode: BranchStockParameterMode;
+  stockNegativeControlMode: BranchStockParameterMode;
 };
 
 type ProductFormState = {
@@ -78,6 +89,8 @@ type ProductFormState = {
   allowFraction: boolean;
   usesColorSize: boolean;
   usesLotControl: boolean;
+  usesExpirationControl: boolean;
+  allowsNegativeStock: boolean;
   currentStock: string;
   minimumStock: string;
   purchasePrice: string;
@@ -87,6 +100,25 @@ type ProductFormState = {
   notes: string;
 };
 
+type ManualStockMovementState = {
+  product: ProductItem;
+  movementType: 'ENTRY' | 'EXIT';
+  operationId: string;
+  quantity: string;
+  notes: string;
+  colorName: string;
+  sizeCode: string;
+  lotNumber: string;
+  lotExpirationDate: string;
+};
+
+type ManualStockMovementResponse = {
+  id: string;
+  previousStock: number;
+  resultingStock: number;
+  message?: string;
+};
+
 type ProductGridColumnKey =
   | 'name'
   | 'internalCode'
@@ -94,7 +126,6 @@ type ProductGridColumnKey =
   | 'unitCode'
   | 'productType'
   | 'stock'
-  | 'status'
   | 'updatedAt';
 
 type ProductExportColumnKey =
@@ -104,7 +135,8 @@ type ProductExportColumnKey =
   | 'salePrice'
   | 'minimumStock'
   | 'notes'
-  | 'createdAt';
+  | 'createdAt'
+  | 'status';
 
 type ProductGridConfig = {
   order: ProductGridColumnKey[];
@@ -118,8 +150,19 @@ type ProductGridSort = {
   direction: ProductGridSortDirection;
 };
 type ProductColumnFilters = Record<ProductGridFilterKey, string>;
+type ProductFormTab = 'IDENTIFICATION' | 'CLASSIFICATION' | 'STOCK_PRICES' | 'FISCAL';
 
 const PRODUCT_SCREEN_ID = 'FINANCEIRO_PRODUTOS_LISTAGEM_GERAL';
+const EMBEDDED_PRODUCT_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_ESTOQUE';
+const PRODUCT_FORM_POPUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_ESTOQUE_CADASTRO_PRODUTO';
+const MANUAL_STOCK_ENTRY_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_ESTOQUE_ENTRADA_MANUAL';
+const MANUAL_STOCK_EXIT_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_ESTOQUE_SAIDA_MANUAL';
+const PRODUCT_FORM_TABS: Array<{ value: ProductFormTab; label: string }> = [
+  { value: 'IDENTIFICATION', label: 'Identificação' },
+  { value: 'CLASSIFICATION', label: 'Classificação' },
+  { value: 'STOCK_PRICES', label: 'Estoque e valores' },
+  { value: 'FISCAL', label: 'Fiscal e observações' },
+];
 const PRODUCT_GRID_STORAGE_PREFIX = 'financeiro:produtos:grid-columns:';
 const PRODUCT_EXPORT_STORAGE_PREFIX = 'financeiro:produtos:export-config:';
 const PRODUCT_GRID_FILTER_KEYS: ProductGridFilterKey[] = ['name', 'internalCode'];
@@ -154,11 +197,6 @@ const PRODUCT_GRID_COLUMNS: GridColumnDefinition<ProductItem, ProductGridColumnK
             item.allowFraction,
           )}`
         : 'SEM CONTROLE',
-  },
-  {
-    key: 'status',
-    label: 'Situação',
-    getValue: (item) => (item.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'),
   },
   {
     key: 'updatedAt',
@@ -227,6 +265,8 @@ const emptyFormState: ProductFormState = {
   allowFraction: false,
   usesColorSize: false,
   usesLotControl: false,
+  usesExpirationControl: false,
+  allowsNegativeStock: true,
   currentStock: '0',
   minimumStock: '0',
   purchasePrice: '',
@@ -296,6 +336,7 @@ type ProductAuditParams = {
   sourceSystem?: string | null;
   sourceTenantId?: string | null;
   companyName?: string | null;
+  quickSearch: string;
   nameFilter: string;
   internalCodeFilter: string;
   sortKey: ProductGridFilterKey | null;
@@ -305,6 +346,7 @@ type ProductAuditParams = {
 };
 
 function buildProductAuditSql(params: ProductAuditParams) {
+  const quickSearch = params.quickSearch.trim().toUpperCase();
   const nameFilter = params.nameFilter.trim().toUpperCase();
   const internalCodeFilter = params.internalCodeFilter.trim().toUpperCase();
   const status = String(params.status || 'ACTIVE').toUpperCase();
@@ -315,6 +357,7 @@ function buildProductAuditSql(params: ProductAuditParams) {
 -- :sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
 -- :sourceTenantId = ${toSqlLiteral(params.sourceTenantId || '')}
 -- :status = ${toSqlLiteral(status)}
+-- :quickSearch = ${toSqlLiteral(quickSearch)}
 -- :nameFilter = ${toSqlLiteral(nameFilter)}
 -- :internalCodeFilter = ${toSqlLiteral(internalCodeFilter)}
 -- :sortColumn = ${toSqlLiteral(sortColumn)}
@@ -346,6 +389,13 @@ WHERE CO.sourceSystem = ${toSqlLiteral(params.sourceSystem || '')}
     OR PR.status = ${toSqlLiteral(status)}
   )
   AND (
+    ${toSqlLiteral(quickSearch)} = ''
+    OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(quickSearch)}) || '%'
+    OR UPPER(COALESCE(PR.internalCode, '')) LIKE '%' || UPPER(${toSqlLiteral(quickSearch)}) || '%'
+    OR UPPER(COALESCE(PR.sku, '')) LIKE '%' || UPPER(${toSqlLiteral(quickSearch)}) || '%'
+    OR UPPER(COALESCE(PR.barcode, '')) LIKE '%' || UPPER(${toSqlLiteral(quickSearch)}) || '%'
+  )
+  AND (
     ${toSqlLiteral(nameFilter)} = ''
     OR UPPER(COALESCE(PR.name, '')) LIKE '%' || UPPER(${toSqlLiteral(nameFilter)}) || '%'
   )
@@ -359,6 +409,7 @@ ORDER BY ${sortColumn} ${sortDirection}, PR.name ASC;`;
 }
 
 function buildProductAuditText(params: ProductAuditParams) {
+  const quickSearch = params.quickSearch.trim().toUpperCase();
   const nameFilter = params.nameFilter.trim().toUpperCase();
   const internalCodeFilter = params.internalCodeFilter.trim().toUpperCase();
   const status = String(params.status || 'ACTIVE').toUpperCase();
@@ -379,6 +430,7 @@ FILTROS APLICADOS AGORA:
 - empresa/tenant atual (:sourceTenantId): ${formatTenantAuditValue(params.sourceTenantId, params.companyName)}
 - sistema origem (:sourceSystem): ${formatAuditValue(params.sourceSystem)}
 - status selecionado (:status): ${status}
+- pesquisa rápida por produto, código, SKU ou barras (:quickSearch): ${formatAuditValue(quickSearch)}
 - filtro por nome do produto (:nameFilter): ${formatAuditValue(nameFilter)}
 - filtro por código interno (:internalCodeFilter): ${formatAuditValue(internalCodeFilter)}
 - registros exibidos apos os filtros: ${params.displayedRowsCount}
@@ -431,8 +483,108 @@ function getInventorySituationClass(value: ProductItem['inventorySituation']) {
 const DEFAULT_BRANCH_INVENTORY_CONFIG: BranchInventoryConfig = {
   branchCode: 1,
   inventoryControlType: 'TRADITIONAL',
-  quantityPrecision: 'INTEGER_ONLY',
+  quantityPrecision: 'PRODUCT_DEFINED',
+  stockControlMode: 'BY_PRODUCT',
+  stockIntegerQuantityMode: 'BY_PRODUCT',
+  stockLotControlMode: 'BY_PRODUCT',
+  stockExpirationControlMode: 'BY_PRODUCT',
+  stockGridControlMode: 'BY_PRODUCT',
+  stockNegativeControlMode: 'BY_PRODUCT',
 };
+
+function resolveBranchBoolean(
+  mode: BranchStockParameterMode,
+  productValue: boolean,
+) {
+  if (mode === 'YES') return true;
+  if (mode === 'NO') return false;
+  return productValue;
+}
+
+function resolveBranchFractionPermission(
+  mode: BranchStockParameterMode,
+  productAllowsFraction: boolean,
+) {
+  if (mode === 'YES') return false;
+  if (mode === 'NO') return true;
+  return productAllowsFraction;
+}
+
+function applyBranchInventoryRules(
+  form: ProductFormState,
+  branch: BranchInventoryConfig,
+): ProductFormState {
+  return {
+    ...form,
+    tracksInventory: resolveBranchBoolean(branch.stockControlMode, form.tracksInventory),
+    allowFraction: resolveBranchFractionPermission(
+      branch.stockIntegerQuantityMode,
+      form.allowFraction,
+    ),
+    usesLotControl: resolveBranchBoolean(branch.stockLotControlMode, form.usesLotControl),
+    usesExpirationControl: resolveBranchBoolean(
+      branch.stockExpirationControlMode,
+      form.usesExpirationControl,
+    ),
+    usesColorSize: resolveBranchBoolean(branch.stockGridControlMode, form.usesColorSize),
+    allowsNegativeStock: resolveBranchBoolean(
+      branch.stockNegativeControlMode,
+      form.allowsNegativeStock,
+    ),
+  };
+}
+
+function StockParameterButton({
+  label,
+  value,
+  editable,
+  enabledText,
+  disabledText,
+  onToggle,
+}: {
+  label: string;
+  value: boolean;
+  editable: boolean;
+  enabledText: string;
+  disabledText: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={!editable}
+      className={`rounded-3xl border px-4 py-4 text-left transition ${
+        editable ? '' : 'cursor-not-allowed'
+      } ${
+        value
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:border-emerald-400'
+          : `border-rose-300 bg-rose-50 text-rose-800 ${
+              editable ? 'hover:border-rose-400 hover:bg-rose-100' : ''
+            }`
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-sm font-black uppercase tracking-[0.16em]">{label}</div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${
+            editable
+              ? 'bg-blue-100 text-blue-700'
+              : 'border border-slate-200 bg-white text-slate-500'
+          }`}
+        >
+          {editable ? 'NO PRODUTO' : 'NA FILIAL'}
+        </span>
+      </div>
+      <div className="mt-1 text-sm font-medium">{value ? enabledText : disabledText}</div>
+      {!editable ? (
+        <div className="mt-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+          Configuração bloqueada pela filial
+        </div>
+      ) : null}
+    </button>
+  );
+}
 
 function formatStock(value?: number | null, allowFraction = true) {
   const normalized = Number(value || 0);
@@ -460,6 +612,14 @@ function parseOptionalNumber(value: string) {
   return Number(parsed.toFixed(2));
 }
 
+function createManualStockOperationId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `manual-stock-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function parseStockNumber(value: string, allowFraction: boolean) {
   const parsed = parseOptionalNumber(value) ?? 0;
   if (!allowFraction && !Number.isInteger(parsed)) {
@@ -481,6 +641,8 @@ function buildProductForm(product: ProductItem): ProductFormState {
     allowFraction: Boolean(product.allowFraction),
     usesColorSize: Boolean(product.usesColorSize),
     usesLotControl: Boolean(product.usesLotControl),
+    usesExpirationControl: Boolean(product.usesExpirationControl),
+    allowsNegativeStock: Boolean(product.allowsNegativeStock),
     currentStock: formatOptionalNumberInput(product.currentStock),
     minimumStock: formatOptionalNumberInput(product.minimumStock),
     purchasePrice: formatOptionalNumberInput(product.purchasePrice),
@@ -835,6 +997,18 @@ function ProductGridConfigModal({
 export default function FinanceiroProdutosPage() {
   const runtimeContext = useFinanceRuntimeContext();
 
+  useEffect(() => {
+    if (!runtimeContext.embedded) return;
+
+    window.parent?.postMessage(
+      {
+        type: 'MSINFOR_SCREEN_CONTEXT',
+        screenId: EMBEDDED_PRODUCT_SCREEN_ID,
+      },
+      '*',
+    );
+  }, [runtimeContext.embedded]);
+
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [productColumnFilters, setProductColumnFilters] = useState<ProductColumnFilters>({
     ...DEFAULT_PRODUCT_COLUMN_FILTERS,
@@ -848,15 +1022,20 @@ export default function FinanceiroProdutosPage() {
   const [productGridSort, setProductGridSort] = useState<ProductGridSort>({
     ...DEFAULT_PRODUCT_GRID_SORT,
   });
+  const [quickSearch, setQuickSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<GridStatusFilterValue>('ACTIVE');
   const [productPageSize, setProductPageSize] = useState(10);
   const [productPage, setProductPage] = useState(1);
   const [selectedProductGridRowId, setSelectedProductGridRowId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [manualMovementSaving, setManualMovementSaving] = useState(false);
+  const [manualMovement, setManualMovement] = useState<ManualStockMovementState | null>(null);
+  const [manualMovementError, setManualMovementError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [productFormTab, setProductFormTab] = useState<ProductFormTab>('IDENTIFICATION');
   const [formState, setFormState] = useState<ProductFormState>(emptyFormState);
   const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -874,12 +1053,21 @@ export default function FinanceiroProdutosPage() {
     DEFAULT_BRANCH_INVENTORY_CONFIG,
   );
   const displayedProducts = useMemo(() => {
+    const normalizedQuickSearch = quickSearch.trim().toUpperCase();
+    const filteredProducts = normalizedQuickSearch
+      ? products.filter((product) =>
+          [product.name, product.internalCode, product.sku, product.barcode]
+            .filter(Boolean)
+            .some((value) => String(value).toUpperCase().includes(normalizedQuickSearch)),
+        )
+      : products;
+
     if (!productGridSort.key) {
-      return products;
+      return filteredProducts;
     }
 
     const directionMultiplier = productGridSort.direction === 'DESC' ? -1 : 1;
-    return [...products].sort((left, right) => {
+    return [...filteredProducts].sort((left, right) => {
       const compared = compareProductSortValues(
         getProductSortValue(left, productGridSort.key as ProductGridFilterKey),
         getProductSortValue(right, productGridSort.key as ProductGridFilterKey),
@@ -887,7 +1075,7 @@ export default function FinanceiroProdutosPage() {
 
       return compared * directionMultiplier;
     });
-  }, [productGridSort.direction, productGridSort.key, products]);
+  }, [productGridSort.direction, productGridSort.key, products, quickSearch]);
 
   const productTotalPages = Math.max(1, Math.ceil(displayedProducts.length / productPageSize));
   const currentProductPage = Math.min(productPage, productTotalPages);
@@ -905,6 +1093,7 @@ export default function FinanceiroProdutosPage() {
       sourceSystem: runtimeContext.sourceSystem,
       sourceTenantId: runtimeContext.sourceTenantId,
       companyName: displayedProducts[0]?.companyName || products[0]?.companyName,
+      quickSearch,
       nameFilter: productColumnFilters.name,
       internalCodeFilter: productColumnFilters.internalCode,
       sortKey: productGridSort.key,
@@ -924,6 +1113,7 @@ export default function FinanceiroProdutosPage() {
     productGridSort.direction,
     productGridSort.key,
     products,
+    quickSearch,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
     statusFilter,
@@ -978,7 +1168,11 @@ export default function FinanceiroProdutosPage() {
         branches.find((branch) => branch.branchCode === 1) ||
         branches[0];
 
-      setBranchInventoryConfig(currentBranch || DEFAULT_BRANCH_INVENTORY_CONFIG);
+      setBranchInventoryConfig(
+        currentBranch
+          ? { ...DEFAULT_BRANCH_INVENTORY_CONFIG, ...currentBranch }
+          : DEFAULT_BRANCH_INVENTORY_CONFIG,
+      );
     } catch {
       setBranchInventoryConfig(DEFAULT_BRANCH_INVENTORY_CONFIG);
     }
@@ -1001,7 +1195,7 @@ export default function FinanceiroProdutosPage() {
 
   useEffect(() => {
     setProductPage(1);
-  }, [productColumnFilters, productGridSort.direction, productGridSort.key, productPageSize, statusFilter]);
+  }, [productColumnFilters, productGridSort.direction, productGridSort.key, productPageSize, quickSearch, statusFilter]);
 
   useEffect(() => {
     if (productPage > productTotalPages) {
@@ -1164,24 +1358,29 @@ export default function FinanceiroProdutosPage() {
   }
 
   function openCreateModal() {
-    setFormState({
-      ...emptyFormState,
-      allowFraction: branchInventoryConfig.quantityPrecision === 'DECIMAL_ALLOWED',
-    });
+    setFormState(applyBranchInventoryRules(emptyFormState, branchInventoryConfig));
     setSuccessMessage(null);
     setErrorMessage(null);
+    setProductFormTab('IDENTIFICATION');
     setIsFormOpen(true);
   }
 
   function openEditModal(product: ProductItem) {
-    setFormState(buildProductForm(product));
+    setFormState(applyBranchInventoryRules(buildProductForm(product), branchInventoryConfig));
     setSuccessMessage(null);
     setErrorMessage(null);
+    setProductFormTab('IDENTIFICATION');
     setIsFormOpen(true);
   }
 
   async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!formState.name.trim()) {
+      setProductFormTab('IDENTIFICATION');
+      setErrorMessage('INFORME O NOME DO PRODUTO.');
+      return;
+    }
 
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
       setErrorMessage('Informe o tenant de origem para manter produtos no Financeiro.');
@@ -1193,9 +1392,8 @@ export default function FinanceiroProdutosPage() {
     setSuccessMessage(null);
 
     try {
-      const allowStockFraction =
-        branchInventoryConfig.quantityPrecision === 'DECIMAL_ALLOWED' ||
-        (branchInventoryConfig.quantityPrecision === 'PRODUCT_DEFINED' && formState.allowFraction);
+      const effectiveForm = applyBranchInventoryRules(formState, branchInventoryConfig);
+      const allowStockFraction = effectiveForm.allowFraction;
       const payload = {
         requestedBy: runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO',
         sourceSystem: runtimeContext.sourceSystem,
@@ -1207,20 +1405,16 @@ export default function FinanceiroProdutosPage() {
         barcode: formState.barcode || undefined,
         unitCode: formState.unitCode || undefined,
         productType: formState.productType || undefined,
-        tracksInventory: formState.tracksInventory,
+        tracksInventory: effectiveForm.tracksInventory,
         allowFraction: allowStockFraction,
-        usesColorSize:
-          branchInventoryConfig.inventoryControlType === 'COLOR_SIZE'
-            ? formState.usesColorSize
-            : false,
-        usesLotControl:
-          branchInventoryConfig.inventoryControlType === 'LOT'
-            ? formState.usesLotControl
-            : false,
-        currentStock: formState.tracksInventory
+        usesColorSize: effectiveForm.usesColorSize,
+        usesLotControl: effectiveForm.usesLotControl,
+        usesExpirationControl: effectiveForm.usesExpirationControl,
+        allowsNegativeStock: effectiveForm.allowsNegativeStock,
+        currentStock: effectiveForm.tracksInventory
           ? parseStockNumber(formState.currentStock, allowStockFraction)
           : 0,
-        minimumStock: formState.tracksInventory
+        minimumStock: effectiveForm.tracksInventory
           ? parseStockNumber(formState.minimumStock, allowStockFraction)
           : 0,
         purchasePrice: parseOptionalNumber(formState.purchasePrice),
@@ -1253,6 +1447,100 @@ export default function FinanceiroProdutosPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openManualStockMovement(product: ProductItem, movementType: 'ENTRY' | 'EXIT') {
+    if (product.status !== 'ACTIVE') {
+      setErrorMessage('O produto precisa estar ativo para movimentar o estoque.');
+      return;
+    }
+    if (!product.tracksInventory) {
+      setErrorMessage('O produto não possui controle de estoque.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setManualMovementError(null);
+    setManualMovement({
+      product,
+      movementType,
+      operationId: createManualStockOperationId(),
+      quantity: '',
+      notes: '',
+      colorName: '',
+      sizeCode: '',
+      lotNumber: '',
+      lotExpirationDate: '',
+    });
+  }
+
+  async function saveManualStockMovement() {
+    if (!manualMovement || !runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
+
+    setManualMovementSaving(true);
+    setManualMovementError(null);
+    try {
+      const quantity = parseStockNumber(
+        manualMovement.quantity,
+        manualMovement.product.allowFraction,
+      );
+      if (quantity <= 0) {
+        throw new Error('Informe uma quantidade maior que zero.');
+      }
+      if (manualMovement.notes.trim().length < 3) {
+        throw new Error('Informe o motivo da movimentação manual.');
+      }
+
+      const result = await requestJson<ManualStockMovementResponse>(
+        `/products/${manualMovement.product.id}/stock-movements`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            requestedBy:
+              runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO',
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            operationId: manualMovement.operationId,
+            movementType: manualMovement.movementType,
+            quantity,
+            notes: manualMovement.notes,
+            colorName: manualMovement.colorName || undefined,
+            sizeCode: manualMovement.sizeCode || undefined,
+            lotNumber: manualMovement.lotNumber || undefined,
+            lotExpirationDate: manualMovement.lotExpirationDate || undefined,
+          }),
+          fallbackMessage: 'Não foi possível registrar a movimentação manual.',
+        },
+      );
+
+      setManualMovement(null);
+      setSuccessMessage(
+        `${result.message || 'Movimentação registrada com sucesso.'} Saldo anterior: ${formatStock(
+          result.previousStock,
+          manualMovement.product.allowFraction,
+        )}; saldo atual: ${formatStock(
+          result.resultingStock,
+          manualMovement.product.allowFraction,
+        )}.`,
+      );
+      await loadProducts();
+    } catch (error) {
+      setManualMovementError(
+        getFriendlyRequestErrorMessage(error, 'Não foi possível registrar a movimentação manual.'),
+      );
+    } finally {
+      setManualMovementSaving(false);
+    }
+  }
+
+  function openProductStockHistory(product: ProductItem) {
+    const params = new URLSearchParams(
+      buildFinanceNavigationQueryString(runtimeContext).replace(/^\?/, ''),
+    );
+    params.set('productId', product.id);
+    params.set('productName', product.name);
+    window.location.assign(`/estoque/historico-movimentacao?${params.toString()}`);
   }
 
   async function handleStatusChange(product: ProductItem, action: 'activate' | 'inactivate') {
@@ -1311,14 +1599,24 @@ export default function FinanceiroProdutosPage() {
       ) : null}
 
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={openCreateModal}
-            className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+            title="Incluir novo produto"
+            aria-label="Incluir novo produto"
+            className={`${FINANCE_GRID_PAGE_LAYOUT.iconButton} h-12 w-12 shrink-0 text-2xl font-black`}
           >
-            Incluir
+            +
           </button>
+          <input
+            type="search"
+            value={quickSearch}
+            onChange={(event) => setQuickSearch(event.target.value)}
+            className={`${FINANCE_GRID_PAGE_LAYOUT.input} min-w-0 flex-1`}
+            placeholder="PESQUISAR PRODUTO, CÓDIGO, SKU OU CÓDIGO DE BARRAS"
+            aria-label="Pesquisar produtos"
+          />
         </div>
 
         {errorMessage ? (
@@ -1334,23 +1632,7 @@ export default function FinanceiroProdutosPage() {
         ) : null}
       </section>
 
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex h-[calc(100vh-18rem)] min-h-[520px] flex-col overflow-hidden`}>
-        <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-                Produtos encontrados
-              </div>
-              <div className="mt-1 text-xl font-black text-slate-900">
-                {loading ? 'Carregando...' : `${displayedProducts.length} registro(s)`}
-              </div>
-            </div>
-            <div className="text-sm font-medium text-slate-500">
-              Cadastro base do estoque por empresa financeira.
-            </div>
-          </div>
-        </div>
-
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex h-[calc(100vh-13rem)] min-h-[520px] flex-col overflow-hidden`}>
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="sticky top-0 z-20 bg-white shadow-[0_1px_0_rgba(226,232,240,1)]">
@@ -1452,24 +1734,6 @@ export default function FinanceiroProdutosPage() {
                       );
                     }
 
-                    if (column.key === 'status') {
-                      return (
-                        <td key={column.key} className="px-4 py-4 align-top">
-                          <span
-                            className={`inline-flex h-3 w-3 rounded-full ${
-                              product.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-rose-500'
-                            }`}
-                            title={product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
-                            aria-label={product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
-                          >
-                            <span className="sr-only">
-                              {product.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO'}
-                            </span>
-                          </span>
-                        </td>
-                      );
-                    }
-
                     return (
                       <td key={column.key} className="px-4 py-4 align-top text-sm font-semibold text-slate-700">
                         {column.getValue(product)}
@@ -1481,7 +1745,49 @@ export default function FinanceiroProdutosPage() {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => openEditModal(product)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openManualStockMovement(product, 'ENTRY');
+                        }}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-xl font-black text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
+                        title="Entrada manual de estoque"
+                        aria-label="Entrada manual de estoque"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openManualStockMovement(product, 'EXIT');
+                        }}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-xl font-black text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
+                        title="Saída manual de estoque"
+                        aria-label="Saída manual de estoque"
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openProductStockHistory(product);
+                        }}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-700 transition hover:bg-amber-100 hover:text-amber-900"
+                        title="Consultar histórico de movimentação"
+                        aria-label="Consultar histórico de movimentação"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 12a9 9 0 1 0 3-6.7" strokeLinecap="round" />
+                          <path d="M3 4v5h5M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEditModal(product);
+                        }}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-800"
                         title="Editar produto"
                       >
@@ -1543,16 +1849,31 @@ export default function FinanceiroProdutosPage() {
         <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
             <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
-                  Cadastro de produto
+              <div className="flex items-start gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  {runtimeContext.logoUrl ? (
+                    <img
+                      src={runtimeContext.logoUrl}
+                      alt={runtimeContext.companyName || 'Empresa'}
+                      className="h-full w-full object-contain p-1.5"
+                    />
+                  ) : (
+                    <span className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+                      {String(runtimeContext.companyName || 'FINANCEIRO').slice(0, 3).toUpperCase()}
+                    </span>
+                  )}
                 </div>
-                <h2 className="mt-1 text-2xl font-black text-slate-900">
-                  {formState.id ? 'Editar produto' : 'Novo produto'}
-                </h2>
-                <p className="mt-2 text-sm font-medium text-slate-500">
-                  Este cadastro base será reutilizado por estoque, notas de entrada e vendas.
-                </p>
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+                    Cadastro de produto
+                  </div>
+                  <h2 className="mt-1 text-2xl font-black text-slate-900">
+                    {formState.id ? 'Editar produto' : 'Novo produto'}
+                  </h2>
+                  <p className="mt-2 text-sm font-medium text-slate-500">
+                    Este cadastro base será reutilizado por estoque, notas de entrada e vendas.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -1564,7 +1885,40 @@ export default function FinanceiroProdutosPage() {
             </div>
 
             <form onSubmit={handleSaveProduct} className="min-h-0 flex-1 overflow-auto p-6">
+              <div
+                role="tablist"
+                aria-label="Etapas do cadastro de produto"
+                className="mb-6 grid gap-2 rounded-3xl border border-slate-200 bg-slate-100 p-2 sm:grid-cols-2 xl:grid-cols-4"
+              >
+                {PRODUCT_FORM_TABS.map((tab) => {
+                  const isActive = productFormTab === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setProductFormTab(tab.value)}
+                      className={`rounded-2xl px-4 py-3 text-xs font-black uppercase tracking-[0.14em] transition ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                          : 'bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-700'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {errorMessage ? (
+                <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  {errorMessage}
+                </div>
+              ) : null}
+
               <div className="grid gap-6">
+                {productFormTab === 'IDENTIFICATION' ? (
                 <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                   <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                     Identificação
@@ -1624,7 +1978,9 @@ export default function FinanceiroProdutosPage() {
                     </label>
                   </div>
                 </section>
+                ) : null}
 
+                {productFormTab === 'CLASSIFICATION' ? (
                 <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                   <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                     Classificação
@@ -1661,115 +2017,94 @@ export default function FinanceiroProdutosPage() {
                       </select>
                     </label>
 
-                    <button
-                      type="button"
-                      onClick={() =>
+                    <StockParameterButton
+                      label="Controlar quantidade do estoque"
+                      value={formState.tracksInventory}
+                      editable={branchInventoryConfig.stockControlMode === 'BY_PRODUCT'}
+                      enabledText="Sim, este produto movimenta estoque."
+                      disabledText="Não, apenas cadastro comercial/fiscal."
+                      onToggle={() =>
                         setFormState((current) => ({
                           ...current,
                           tracksInventory: !current.tracksInventory,
                         }))
                       }
-                      className={`rounded-3xl border px-4 py-4 text-left transition ${
-                        formState.tracksInventory
-                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                          : 'border-slate-200 bg-white text-slate-700'
-                      }`}
-                    >
-                      <div className="text-sm font-black uppercase tracking-[0.16em]">
-                        Controla estoque
-                      </div>
-                      <div className="mt-1 text-sm font-medium">
-                        {formState.tracksInventory ? 'Sim, este produto movimenta estoque.' : 'Não, apenas cadastro comercial/fiscal.'}
-                      </div>
-                    </button>
+                    />
 
-                    {branchInventoryConfig.quantityPrecision === 'PRODUCT_DEFINED' ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormState((current) => ({
-                            ...current,
-                            allowFraction: !current.allowFraction,
-                          }))
-                        }
-                        className={`rounded-3xl border px-4 py-4 text-left transition ${
-                          formState.allowFraction
-                            ? 'border-blue-300 bg-blue-50 text-blue-800'
-                            : 'border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        <div className="text-sm font-black uppercase tracking-[0.16em]">
-                          Permite fracionar
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {formState.allowFraction ? 'Sim, aceita quantidade fracionada.' : 'Não, trabalha com quantidade inteira.'}
-                        </div>
-                      </button>
-                    ) : (
-                      <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 text-left text-slate-700">
-                        <div className="text-sm font-black uppercase tracking-[0.16em]">
-                          Quantidade da filial
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {branchInventoryConfig.quantityPrecision === 'DECIMAL_ALLOWED'
-                            ? 'Esta filial trabalha com quantidade fracionada.'
-                            : 'Esta filial trabalha somente com quantidade inteira.'}
-                        </div>
-                      </div>
-                    )}
+                    <StockParameterButton
+                      label="Tratar apenas quantidade inteira"
+                      value={!formState.allowFraction}
+                      editable={branchInventoryConfig.stockIntegerQuantityMode === 'BY_PRODUCT'}
+                      enabledText="Sim, aceita somente quantidade inteira."
+                      disabledText="Não, permite quantidade fracionada."
+                      onToggle={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          allowFraction: !current.allowFraction,
+                        }))
+                      }
+                    />
 
-                    {branchInventoryConfig.inventoryControlType === 'COLOR_SIZE' ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormState((current) => ({
-                            ...current,
-                            usesColorSize: !current.usesColorSize,
-                            usesLotControl: false,
-                          }))
-                        }
-                        className={`rounded-3xl border px-4 py-4 text-left transition ${
-                          formState.usesColorSize
-                            ? 'border-indigo-300 bg-indigo-50 text-indigo-800'
-                            : 'border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        <div className="text-sm font-black uppercase tracking-[0.16em]">
-                          Trata cor/número
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {formState.usesColorSize ? 'Sim, este produto usa grade.' : 'Não, produto sem grade.'}
-                        </div>
-                      </button>
-                    ) : null}
+                    <StockParameterButton
+                      label="Controla lote"
+                      value={formState.usesLotControl}
+                      editable={branchInventoryConfig.stockLotControlMode === 'BY_PRODUCT'}
+                      enabledText="Sim, este produto controla lote."
+                      disabledText="Não, produto sem controle de lote."
+                      onToggle={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          usesLotControl: !current.usesLotControl,
+                        }))
+                      }
+                    />
 
-                    {branchInventoryConfig.inventoryControlType === 'LOT' ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormState((current) => ({
-                            ...current,
-                            usesLotControl: !current.usesLotControl,
-                            usesColorSize: false,
-                          }))
-                        }
-                        className={`rounded-3xl border px-4 py-4 text-left transition ${
-                          formState.usesLotControl
-                            ? 'border-amber-300 bg-amber-50 text-amber-800'
-                            : 'border-slate-200 bg-white text-slate-700'
-                        }`}
-                      >
-                        <div className="text-sm font-black uppercase tracking-[0.16em]">
-                          Trata por lote
-                        </div>
-                        <div className="mt-1 text-sm font-medium">
-                          {formState.usesLotControl ? 'Sim, este produto controla lote.' : 'Não, produto sem lote.'}
-                        </div>
-                      </button>
-                    ) : null}
+                    <StockParameterButton
+                      label="Controla validade"
+                      value={formState.usesExpirationControl}
+                      editable={branchInventoryConfig.stockExpirationControlMode === 'BY_PRODUCT'}
+                      enabledText="Sim, este produto controla validade."
+                      disabledText="Não, produto sem controle de validade."
+                      onToggle={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          usesExpirationControl: !current.usesExpirationControl,
+                        }))
+                      }
+                    />
+
+                    <StockParameterButton
+                      label="Controla grade"
+                      value={formState.usesColorSize}
+                      editable={branchInventoryConfig.stockGridControlMode === 'BY_PRODUCT'}
+                      enabledText="Sim, este produto usa grade."
+                      disabledText="Não, produto sem grade."
+                      onToggle={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          usesColorSize: !current.usesColorSize,
+                        }))
+                      }
+                    />
+
+                    <StockParameterButton
+                      label="Permite estoque negativo"
+                      value={formState.allowsNegativeStock}
+                      editable={branchInventoryConfig.stockNegativeControlMode === 'BY_PRODUCT'}
+                      enabledText="Sim, este produto pode ficar com saldo negativo."
+                      disabledText="Não, saída sem saldo será bloqueada."
+                      onToggle={() =>
+                        setFormState((current) => ({
+                          ...current,
+                          allowsNegativeStock: !current.allowsNegativeStock,
+                        }))
+                      }
+                    />
                   </div>
                 </section>
+                ) : null}
 
+                {productFormTab === 'STOCK_PRICES' ? (
                 <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                   <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                     Estoque e valores
@@ -1785,11 +2120,7 @@ export default function FinanceiroProdutosPage() {
                           setFormState((current) => ({ ...current, currentStock: event.target.value }))
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
-                        inputMode={
-                          branchInventoryConfig.quantityPrecision === 'INTEGER_ONLY'
-                            ? 'numeric'
-                            : 'decimal'
-                        }
+                        inputMode={formState.allowFraction ? 'decimal' : 'numeric'}
                         disabled={!formState.tracksInventory}
                       />
                     </label>
@@ -1804,11 +2135,7 @@ export default function FinanceiroProdutosPage() {
                           setFormState((current) => ({ ...current, minimumStock: event.target.value }))
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
-                        inputMode={
-                          branchInventoryConfig.quantityPrecision === 'INTEGER_ONLY'
-                            ? 'numeric'
-                            : 'decimal'
-                        }
+                        inputMode={formState.allowFraction ? 'decimal' : 'numeric'}
                         disabled={!formState.tracksInventory}
                       />
                     </label>
@@ -1840,7 +2167,9 @@ export default function FinanceiroProdutosPage() {
                     </label>
                   </div>
                 </section>
+                ) : null}
 
+                {productFormTab === 'FISCAL' ? (
                 <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                   <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                     Fiscal e observações
@@ -1886,6 +2215,7 @@ export default function FinanceiroProdutosPage() {
                     </label>
                   </div>
                 </section>
+                ) : null}
               </div>
 
               <div className="mt-6 flex flex-wrap justify-center gap-4">
@@ -1904,10 +2234,244 @@ export default function FinanceiroProdutosPage() {
                   {saving ? 'Salvando...' : 'Salvar produto'}
                 </button>
               </div>
+
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <ScreenNameCopy
+                  screenId={PRODUCT_FORM_POPUP_SCREEN_ID}
+                  className="justify-end"
+                  originText="Origem: Sistema Financeiro - C:/Sistemas/IA/Financeiro/frontend/src/app/produtos/page.tsx"
+                  auditText={`--- LOGICA DO POPUP ---
+Cadastro e manutenção do produto financeiro.
+
+OPERAÇÃO ATUAL:
+- ${formState.id ? 'ALTERAÇÃO DE PRODUTO EXISTENTE' : 'INCLUSÃO DE NOVO PRODUTO'}
+
+ABAS:
+- identificação
+- classificação
+- estoque e valores
+- fiscal e observações
+
+CONTEXTO:
+- empresa: ${formatTenantAuditValue(runtimeContext.sourceTenantId)}
+- filial: ${formatAuditValue(runtimeContext.sourceBranchCode, '1')}
+- produto: ${formatAuditValue(formState.name)}
+
+REGRAS:
+- textos são normalizados para uppercase pelo backend
+- o produto permanece isolado por empresa e filial
+- alterações são auditadas e não apagam o histórico de estoque`}
+                  sqlText={formState.id ? `UPDATE products
+SET name = ${toSqlLiteral(formState.name)},
+    internalCode = ${toSqlLiteral(formState.internalCode)},
+    sku = ${toSqlLiteral(formState.sku)},
+    barcode = ${toSqlLiteral(formState.barcode)},
+    unitCode = ${toSqlLiteral(formState.unitCode)},
+    updatedAt = CURRENT_TIMESTAMP
+WHERE id = ${toSqlLiteral(formState.id)}
+  AND canceledAt IS NULL;` : `INSERT INTO products (
+  name, internalCode, sku, barcode, unitCode, productType, createdAt, updatedAt
+) VALUES (
+  ${toSqlLiteral(formState.name)},
+  ${toSqlLiteral(formState.internalCode)},
+  ${toSqlLiteral(formState.sku)},
+  ${toSqlLiteral(formState.barcode)},
+  ${toSqlLiteral(formState.unitCode)},
+  ${toSqlLiteral(formState.productType)},
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+);`}
+                />
+              </div>
             </form>
           </div>
         </div>
       ) : null}
+
+      <AuditedPopupShell
+        isOpen={Boolean(manualMovement)}
+        screenId={
+          manualMovement?.movementType === 'EXIT'
+            ? MANUAL_STOCK_EXIT_SCREEN_ID
+            : MANUAL_STOCK_ENTRY_SCREEN_ID
+        }
+        title={manualMovement?.movementType === 'EXIT' ? 'Saída manual' : 'Entrada manual'}
+        eyebrow="Movimentação de estoque"
+        description="A operação altera o saldo e cria um novo registro permanente no histórico do produto."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        originText="Origem: Sistema Financeiro - C:/Sistemas/IA/Financeiro/frontend/src/app/produtos/page.tsx"
+        auditText={manualMovement ? `--- LOGICA DO POPUP ---
+Produto: ${manualMovement.product.name}
+Produto ID: ${manualMovement.product.id}
+Filial: ${runtimeContext.sourceBranchCode}
+Operação: ${manualMovement.movementType === 'ENTRY' ? 'ENTRADA MANUAL' : 'SAÍDA MANUAL'}
+Saldo exibido antes da confirmação: ${manualMovement.product.currentStock}
+
+REGRAS:
+- a quantidade deve respeitar a precisão do produto/filial
+- saída sem permissão de estoque negativo não pode superar o saldo
+- a atualização do saldo e a inclusão em stock_movements ocorrem na mesma transação
+- movimentos antigos nunca são editados ou apagados fisicamente` : ''}
+        sqlText={manualMovement ? `-- BASE LOGICA DA MOVIMENTACAO MANUAL
+UPDATE products
+SET currentStock = currentStock ${manualMovement.movementType === 'ENTRY' ? '+' : '-'} :quantity,
+    updatedBy = ${toSqlLiteral(runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO')}
+WHERE id = ${toSqlLiteral(manualMovement.product.id)}
+  AND companyId = :companyId;
+
+INSERT INTO stock_movements
+  (companyId, branchCode, productId, sourceType, sourceId, movementType,
+   quantity, previousStock, resultingStock, notes, occurredAt, createdBy, updatedBy)
+VALUES
+  (:companyId, ${toSqlLiteral(runtimeContext.sourceBranchCode)}, ${toSqlLiteral(manualMovement.product.id)},
+   'MANUAL_STOCK', ${toSqlLiteral(manualMovement.operationId)}, ${toSqlLiteral(manualMovement.movementType)},
+   :quantity, :previousStock, :resultingStock, :notes, CURRENT_TIMESTAMP,
+   ${toSqlLiteral(runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO')},
+   ${toSqlLiteral(runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO')});` : ''}
+        onClose={() => {
+          if (!manualMovementSaving) {
+            setManualMovement(null);
+            setManualMovementError(null);
+          }
+        }}
+        panelClassName="max-w-2xl"
+        footerActions={manualMovement ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setManualMovement(null);
+                setManualMovementError(null);
+              }}
+              disabled={manualMovementSaving}
+              className={FINANCE_GRID_PAGE_LAYOUT.footerActionButton}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void saveManualStockMovement()}
+              disabled={manualMovementSaving}
+              className={manualMovement.movementType === 'ENTRY'
+                ? FINANCE_GRID_PAGE_LAYOUT.primaryButton
+                : 'rounded-2xl bg-rose-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-rose-600/25 transition hover:bg-rose-700 disabled:opacity-50'}
+            >
+              {manualMovementSaving
+                ? 'Salvando...'
+                : manualMovement.movementType === 'ENTRY'
+                  ? 'Confirmar entrada'
+                  : 'Confirmar saída'}
+            </button>
+          </>
+        ) : null}
+      >
+        {manualMovement ? (
+          <div className="min-h-0 overflow-auto pr-1">
+            <div className={`rounded-2xl border p-4 ${
+              manualMovement.movementType === 'ENTRY'
+                ? 'border-emerald-200 bg-emerald-50'
+                : 'border-rose-200 bg-rose-50'
+            }`}>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                Produto selecionado
+              </div>
+              <div className="mt-1 text-lg font-black uppercase text-slate-950">
+                {manualMovement.product.name}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs font-bold uppercase tracking-[0.1em] text-slate-600">
+                <span>Código: {manualMovement.product.internalCode || '---'}</span>
+                <span>Saldo atual: {formatStock(manualMovement.product.currentStock, manualMovement.product.allowFraction)} {manualMovement.product.unitCode}</span>
+              </div>
+            </div>
+
+            {manualMovementError ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                {manualMovementError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  Quantidade
+                </span>
+                <input
+                  autoFocus
+                  type="number"
+                  min={manualMovement.product.allowFraction ? '0.001' : '1'}
+                  step={manualMovement.product.allowFraction ? 'any' : '1'}
+                  value={manualMovement.quantity}
+                  onChange={(event) => setManualMovement((current) => current ? { ...current, quantity: event.target.value } : current)}
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-full`}
+                  required
+                />
+              </label>
+
+              {manualMovement.product.usesColorSize ? (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Cor</span>
+                    <input
+                      value={manualMovement.colorName}
+                      onChange={(event) => setManualMovement((current) => current ? { ...current, colorName: event.target.value.toUpperCase() } : current)}
+                      className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-full`}
+                      required
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Número</span>
+                    <input
+                      value={manualMovement.sizeCode}
+                      onChange={(event) => setManualMovement((current) => current ? { ...current, sizeCode: event.target.value.toUpperCase() } : current)}
+                      className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-full`}
+                      required
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {manualMovement.product.usesLotControl ? (
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Lote</span>
+                  <input
+                    value={manualMovement.lotNumber}
+                    onChange={(event) => setManualMovement((current) => current ? { ...current, lotNumber: event.target.value.toUpperCase() } : current)}
+                    className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-full`}
+                    required
+                  />
+                </label>
+              ) : null}
+
+              {manualMovement.product.usesExpirationControl ? (
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Validade do lote</span>
+                  <input
+                    type="date"
+                    value={manualMovement.lotExpirationDate}
+                    onChange={(event) => setManualMovement((current) => current ? { ...current, lotExpirationDate: event.target.value } : current)}
+                    className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-full`}
+                    required
+                  />
+                </label>
+              ) : null}
+
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+                  Motivo da movimentação
+                </span>
+                <textarea
+                  value={manualMovement.notes}
+                  onChange={(event) => setManualMovement((current) => current ? { ...current, notes: event.target.value.toUpperCase() } : current)}
+                  className="min-h-24 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold uppercase text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                  placeholder="INFORME O MOTIVO"
+                  required
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
+      </AuditedPopupShell>
 
       <ProductGridConfigModal
         isOpen={isColumnConfigOpen}

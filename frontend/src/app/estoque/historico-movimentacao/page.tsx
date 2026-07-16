@@ -620,6 +620,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   const [appliedSearch, setAppliedSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ProductFilterItem | null>(null);
+  const [initialProductFilterReady, setInitialProductFilterReady] = useState(false);
   const [movementTypeFilter, setMovementTypeFilter] = useState<MovementTypeFilter>('ALL');
   const [selectedMovementId, setSelectedMovementId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -643,6 +644,19 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   );
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const productId = String(params.get('productId') || '').trim();
+    const productName = String(params.get('productName') || '').trim();
+    if (productId) {
+      setSelectedProduct({
+        id: productId,
+        name: productName || 'PRODUTO SELECIONADO',
+      });
+    }
+    setInitialProductFilterReady(true);
+  }, []);
+
+  useEffect(() => {
     if (!runtimeContext.embedded) return;
 
     window.parent?.postMessage(
@@ -655,6 +669,25 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
+    const handleEmbeddedBackNavigation = (event: MessageEvent) => {
+      const data = event.data as { type?: string; screenId?: string } | null;
+      if (event.source !== window.parent) return;
+      if (!data || data.type !== 'MSINFOR_FINANCEIRO_NAVIGATE_BACK') return;
+      if (data.screenId !== 'PRINCIPAL_FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO') return;
+
+      const params = new URLSearchParams(window.location.search);
+      params.delete('productId');
+      params.delete('productName');
+      const query = params.toString();
+
+      window.location.replace(`/produtos${query ? `?${query}` : ''}`);
+    };
+
+    window.addEventListener('message', handleEmbeddedBackNavigation);
+    return () => window.removeEventListener('message', handleEmbeddedBackNavigation);
+  }, []);
+
+  useEffect(() => {
     const storageKey = getMovementGridStorageKey(runtimeContext.sourceTenantId);
     const storedConfig = readStoredGridConfig(storageKey);
     setColumnOrder(storedConfig.order);
@@ -662,6 +695,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   }, [runtimeContext.sourceTenantId]);
 
   const loadMovements = useCallback(async () => {
+    if (!initialProductFilterReady) return;
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
       setMovements([]);
       return;
@@ -687,7 +721,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [appliedSearch, movementTypeFilter, runtimeContext, selectedProduct?.id]);
+  }, [appliedSearch, initialProductFilterReady, movementTypeFilter, runtimeContext, selectedProduct?.id]);
 
   const loadProducts = useCallback(async () => {
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId || !isProductModalOpen) {

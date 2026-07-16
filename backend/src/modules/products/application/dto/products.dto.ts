@@ -1,10 +1,12 @@
 import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
   Min,
+  MinLength,
 } from "class-validator";
 
 function transformBooleanInput(value: unknown) {
@@ -114,6 +116,50 @@ export class GetProductDto {
 
   @IsString()
   sourceTenantId!: string;
+}
+
+export class CreateManualStockMovementDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  operationId!: string;
+
+  @IsString()
+  @IsIn(["ENTRY", "EXIT"])
+  movementType!: "ENTRY" | "EXIT";
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.0001)
+  quantity!: number;
+
+  @IsString()
+  @MinLength(3)
+  notes!: string;
+
+  @IsOptional()
+  @IsString()
+  colorName?: string;
+
+  @IsOptional()
+  @IsString()
+  sizeCode?: string;
+
+  @IsOptional()
+  @IsString()
+  lotNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  lotExpirationDate?: string;
 }
 
 export class ChangeProductStatusDto {

@@ -123,6 +123,7 @@ Query string esperada:
 - `sourceBranchCode` opcional
 - `movementType` opcional: `ENTRY | EXIT | ALL`
 - `search` opcional
+- `productId` opcional; abre a consulta restrita ao produto selecionado no grid de estoque
 
 Regras:
 
@@ -130,6 +131,31 @@ Regras:
 - retornar movimentacoes mais recentes primeiro
 - nao alterar saldo e nao criar registros
 - correcoes futuras devem ocorrer por novas movimentacoes de ajuste/estorno
+
+### POST `/products/:productId/stock-movements`
+
+Uso:
+
+- registrar entrada ou saída manual de estoque por produto e filial
+- atualizar `products.currentStock` e `product_stock_balances`
+- criar novo registro append-only em `stock_movements`
+
+Body:
+
+- `sourceSystem`, `sourceTenantId` e `requestedBy`
+- `operationId` obrigatório e idempotente
+- `movementType`: `ENTRY | EXIT`
+- `quantity` maior que zero
+- `notes` obrigatório
+- `colorName + sizeCode` quando o produto usa grade
+- `lotNumber` e `lotExpirationDate` quando o produto usa lote/validade
+
+Regras:
+
+- saldo e histórico são gravados na mesma transação
+- saída respeita quantidade inteira/fracionada e bloqueio de estoque negativo
+- não altera nem apaga movimentos anteriores
+- o histórico continua ordenado por `occurredAt DESC, createdAt DESC`
 
 ## Sales
 
@@ -190,6 +216,8 @@ Regras:
 - estoque negativo so e permitido quando a regra efetiva da filial/produto permitir
 - filial com `allowSaleUnitPriceEdit = false` rejeita preco unitario diferente do produto, exceto produto generico
 - filial com `allowSaleItemDiscount = false` rejeita desconto por item
+- no fluxo `VP`, a confirmação envia explicitamente o cliente selecionado e uma cobrança `TERM` de uma parcela; após sucesso, a tela limpa carrinho, pesquisas, pagamento e cliente
+- venda, recebível, baixa de estoque e histórico com `previousStock` e `resultingStock` são persistidos na mesma transação; qualquer falha mantém a tela preenchida e deve ser exibida ao operador
 - venda confirmada nao apaga historico; cancelamento futuro deve gerar estorno operacional
 
 ### POST `/sales/:saleId/cancel`
@@ -220,6 +248,51 @@ Body resumido:
   "reason": "CANCELAMENTO AUTORIZADO"
 }
 ```
+
+## Customers
+
+### GET `/customers`
+
+Uso:
+
+- listar o cadastro de clientes/pagadores da empresa e filial atuais
+- em empresas com `sourceSystem = ESCOLA`, retornar pagadores sincronizados com tipo `ALUNO` ou `RESPONSAVEL` e clientes legados que estejam vinculados a títulos a receber
+- não transformar snapshots sem `payerPartyId`, como `CONSUMIDOR FINAL`, em cadastro de cliente
+- a seleção de cliente da venda a prazo (`VP`) deve consultar este endpoint, solicitar antes a sincronização da Escola quando estiver embarcada, carregar os clientes ativos ao abrir, filtrar enquanto o operador digita e preservar `externalEntityType + externalEntityId` ao concluir a venda
+
+### POST `/customers/sync`
+
+Uso:
+
+- sincronizar de forma idempotente os pagadores atuais da Escola antes da existência de títulos ou parcelas
+
+Regras:
+
+- habilitado somente para `sourceSystem = ESCOLA`
+- cria ou atualiza `parties` pela chave `companyId + branchCode + externalEntityType + externalEntityId`
+- registros escolares ausentes na carga completa são inativados logicamente
+
+### POST `/customers`
+
+Uso:
+
+- cadastrar cliente diretamente no Financeiro para empresas não escolares
+
+Regra:
+
+- bloqueado quando `sourceSystem = ESCOLA`
+
+### PATCH `/customers/:customerId`
+
+- atualiza somente clientes de cadastro local
+
+### POST `/customers/:customerId/activate`
+
+- reativa logicamente um cliente local
+
+### POST `/customers/:customerId/inactivate`
+
+- inativa logicamente um cliente local, preservando histórico e snapshots financeiros
 
 ## NFC-e
 

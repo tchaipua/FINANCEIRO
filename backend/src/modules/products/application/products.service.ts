@@ -10,6 +10,7 @@ import { ensureDefaultCompanyBranch } from "../../../common/company-branches";
 import { getFinanceContext } from "../../../common/finance-context";
 import {
   ChangeProductStatusDto,
+  CreateManualStockMovementDto,
   GetProductDto,
   ListProductsDto,
   ListStockMovementsDto,
@@ -42,7 +43,15 @@ type BranchInventoryConfig = {
   branchCode: number;
   inventoryControlType: string;
   quantityPrecision: string;
+  stockControlMode: BranchStockParameterMode;
+  stockIntegerQuantityMode: BranchStockParameterMode;
+  stockLotControlMode: BranchStockParameterMode;
+  stockExpirationControlMode: BranchStockParameterMode;
+  stockGridControlMode: BranchStockParameterMode;
+  stockNegativeControlMode: BranchStockParameterMode;
 };
+
+type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
 
 const PRODUCT_CODE_LABELS = {
   internalCode: "código interno",
@@ -69,6 +78,23 @@ export class ProductsService {
 
   private normalizeBoolean(value: boolean | undefined, fallback: boolean) {
     return typeof value === "boolean" ? value : fallback;
+  }
+
+  private normalizeBranchStockMode(value?: string | null): BranchStockParameterMode {
+    const normalized = String(value || "").trim().toUpperCase();
+    return normalized === "YES" || normalized === "NO" || normalized === "BY_PRODUCT"
+      ? normalized
+      : "BY_PRODUCT";
+  }
+
+  private resolveBranchBoolean(
+    mode: BranchStockParameterMode,
+    productValue: boolean | undefined,
+    fallback: boolean,
+  ) {
+    if (mode === "YES") return true;
+    if (mode === "NO") return false;
+    return this.normalizeBoolean(productValue, fallback);
   }
 
   private normalizeInternalCode(value?: string | null) {
@@ -118,6 +144,18 @@ export class ProductsService {
       branchCode: branch?.branchCode || DEFAULT_BRANCH_CODE,
       inventoryControlType: branch?.inventoryControlType || "TRADITIONAL",
       quantityPrecision: branch?.quantityPrecision || "INTEGER_ONLY",
+      stockControlMode: this.normalizeBranchStockMode(branch?.stockControlMode),
+      stockIntegerQuantityMode: this.normalizeBranchStockMode(
+        branch?.stockIntegerQuantityMode,
+      ),
+      stockLotControlMode: this.normalizeBranchStockMode(branch?.stockLotControlMode),
+      stockExpirationControlMode: this.normalizeBranchStockMode(
+        branch?.stockExpirationControlMode,
+      ),
+      stockGridControlMode: this.normalizeBranchStockMode(branch?.stockGridControlMode),
+      stockNegativeControlMode: this.normalizeBranchStockMode(
+        branch?.stockNegativeControlMode,
+      ),
     };
   }
 
@@ -137,6 +175,18 @@ export class ProductsService {
       branchCode,
       inventoryControlType: branch?.inventoryControlType || "TRADITIONAL",
       quantityPrecision: branch?.quantityPrecision || "INTEGER_ONLY",
+      stockControlMode: this.normalizeBranchStockMode(branch?.stockControlMode),
+      stockIntegerQuantityMode: this.normalizeBranchStockMode(
+        branch?.stockIntegerQuantityMode,
+      ),
+      stockLotControlMode: this.normalizeBranchStockMode(branch?.stockLotControlMode),
+      stockExpirationControlMode: this.normalizeBranchStockMode(
+        branch?.stockExpirationControlMode,
+      ),
+      stockGridControlMode: this.normalizeBranchStockMode(branch?.stockGridControlMode),
+      stockNegativeControlMode: this.normalizeBranchStockMode(
+        branch?.stockNegativeControlMode,
+      ),
     };
   }
 
@@ -217,33 +267,59 @@ export class ProductsService {
       inventoryControlType:
         branchConfig?.inventoryControlType || "TRADITIONAL",
       quantityPrecision: branchConfig?.quantityPrecision || "INTEGER_ONLY",
+      stockControlMode: branchConfig?.stockControlMode || "BY_PRODUCT",
+      stockIntegerQuantityMode:
+        branchConfig?.stockIntegerQuantityMode || "BY_PRODUCT",
+      stockLotControlMode: branchConfig?.stockLotControlMode || "BY_PRODUCT",
+      stockExpirationControlMode:
+        branchConfig?.stockExpirationControlMode || "BY_PRODUCT",
+      stockGridControlMode: branchConfig?.stockGridControlMode || "BY_PRODUCT",
+      stockNegativeControlMode:
+        branchConfig?.stockNegativeControlMode || "BY_PRODUCT",
     };
   }
 
   private buildNormalizedPayload(
     payload: SaveProductDto,
     branchConfig: BranchInventoryConfig,
+    allowsNegativeStockFallback = false,
   ): NormalizedProductPayload {
     const normalizedName = normalizeText(payload.name);
     if (!normalizedName) {
       throw new BadRequestException("Informe o nome do produto.");
     }
 
-    const usesColorSize =
-      branchConfig.inventoryControlType === "COLOR_SIZE"
-        ? this.normalizeBoolean(payload.usesColorSize, false)
-        : false;
-    const usesLotControl =
-      branchConfig.inventoryControlType === "LOT"
-        ? this.normalizeBoolean(payload.usesLotControl, false)
-        : false;
+    const tracksInventory = this.resolveBranchBoolean(
+      branchConfig.stockControlMode,
+      payload.tracksInventory,
+      true,
+    );
     const allowFraction =
-      branchConfig.quantityPrecision === "DECIMAL_ALLOWED"
-        ? true
-        : branchConfig.quantityPrecision === "PRODUCT_DEFINED"
-          ? this.normalizeBoolean(payload.allowFraction, false)
-          : false;
-    const tracksInventory = this.normalizeBoolean(payload.tracksInventory, true);
+      branchConfig.stockIntegerQuantityMode === "YES"
+        ? false
+        : branchConfig.stockIntegerQuantityMode === "NO"
+          ? true
+          : this.normalizeBoolean(payload.allowFraction, false);
+    const usesColorSize = this.resolveBranchBoolean(
+      branchConfig.stockGridControlMode,
+      payload.usesColorSize,
+      false,
+    );
+    const usesLotControl = this.resolveBranchBoolean(
+      branchConfig.stockLotControlMode,
+      payload.usesLotControl,
+      false,
+    );
+    const usesExpirationControl = this.resolveBranchBoolean(
+      branchConfig.stockExpirationControlMode,
+      payload.usesExpirationControl,
+      false,
+    );
+    const allowsNegativeStock = this.resolveBranchBoolean(
+      branchConfig.stockNegativeControlMode,
+      payload.allowsNegativeStock,
+      allowsNegativeStockFallback,
+    );
 
     return {
       name: normalizedName,
@@ -256,12 +332,8 @@ export class ProductsService {
       allowFraction,
       usesColorSize: tracksInventory ? usesColorSize : false,
       usesLotControl: tracksInventory ? usesLotControl : false,
-      usesExpirationControl: tracksInventory
-        ? this.normalizeBoolean(payload.usesExpirationControl, false)
-        : false,
-      allowsNegativeStock: tracksInventory
-        ? this.normalizeBoolean(payload.allowsNegativeStock, false)
-        : false,
+      usesExpirationControl: tracksInventory ? usesExpirationControl : false,
+      allowsNegativeStock: tracksInventory ? allowsNegativeStock : false,
       currentStock: this.normalizeStockQuantity(
         payload.currentStock,
         allowFraction,
@@ -398,12 +470,16 @@ export class ProductsService {
           ? "VENDA"
           : sourceType === "SALE_CANCEL"
           ? "CANCELAMENTO DE VENDA"
+          : sourceType === "MANUAL_STOCK"
+          ? "MOVIMENTAÇÃO MANUAL"
           : sourceImport
           ? "NF-E"
           : "SISTEMA",
       sourceDocument:
         sourceType === "SALE" || sourceType === "SALE_CANCEL"
           ? `VENDA ${movement.sourceId || ""}`.trim()
+          : sourceType === "MANUAL_STOCK"
+          ? movement.sourceId || null
           : sourceImport?.invoiceNumber
           ? `NF-E ${sourceImport.invoiceNumber}${sourceImport.series ? `/${sourceImport.series}` : ""}`
           : null,
@@ -676,6 +752,18 @@ export class ProductsService {
           branchCode: branch.branchCode,
           inventoryControlType: branch.inventoryControlType,
           quantityPrecision: branch.quantityPrecision,
+          stockControlMode: this.normalizeBranchStockMode(branch.stockControlMode),
+          stockIntegerQuantityMode: this.normalizeBranchStockMode(
+            branch.stockIntegerQuantityMode,
+          ),
+          stockLotControlMode: this.normalizeBranchStockMode(branch.stockLotControlMode),
+          stockExpirationControlMode: this.normalizeBranchStockMode(
+            branch.stockExpirationControlMode,
+          ),
+          stockGridControlMode: this.normalizeBranchStockMode(branch.stockGridControlMode),
+          stockNegativeControlMode: this.normalizeBranchStockMode(
+            branch.stockNegativeControlMode,
+          ),
         },
       ]),
     );
@@ -788,10 +876,198 @@ export class ProductsService {
     );
   }
 
+  async createManualStockMovement(
+    productId: string,
+    payload: CreateManualStockMovementDto,
+  ) {
+    const { company, product } = await this.loadScopedProduct(
+      productId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const branchCode = this.currentBranchCode() || DEFAULT_BRANCH_CODE;
+
+    if (product.status !== "ACTIVE" || product.canceledAt) {
+      throw new BadRequestException("O produto precisa estar ativo para movimentar o estoque.");
+    }
+    if (![0, branchCode].includes(Number(product.branchCode || DEFAULT_BRANCH_CODE))) {
+      throw new BadRequestException("O produto pertence a outra filial.");
+    }
+    if (!product.tracksInventory) {
+      throw new BadRequestException("O produto não possui controle de estoque.");
+    }
+
+    const movementType = normalizeText(payload.movementType);
+    if (movementType !== "ENTRY" && movementType !== "EXIT") {
+      throw new BadRequestException("Informe entrada ou saída para a movimentação manual.");
+    }
+
+    const quantity = this.normalizeStockQuantity(
+      payload.quantity,
+      Boolean(product.allowFraction),
+      "A quantidade movimentada",
+    );
+    if (quantity <= 0) {
+      throw new BadRequestException("Informe uma quantidade maior que zero.");
+    }
+
+    const operationId = normalizeText(payload.operationId);
+    const requestedBy = normalizeText(payload.requestedBy) || "FINANCEIRO";
+    const reason = normalizeText(payload.notes);
+    const colorName = normalizeText(payload.colorName);
+    const sizeCode = normalizeText(payload.sizeCode);
+    const lotNumber = normalizeText(payload.lotNumber);
+    const lotExpirationDate = payload.lotExpirationDate
+      ? new Date(`${String(payload.lotExpirationDate).slice(0, 10)}T12:00:00.000Z`)
+      : null;
+
+    if (!operationId) {
+      throw new BadRequestException("A operação manual não possui identificador.");
+    }
+    if (!reason || reason.length < 3) {
+      throw new BadRequestException("Informe o motivo da movimentação manual.");
+    }
+    if (product.usesColorSize && (!colorName || !sizeCode)) {
+      throw new BadRequestException("Informe a cor e o número do produto.");
+    }
+    if (product.usesLotControl && !lotNumber) {
+      throw new BadRequestException("Informe o lote do produto.");
+    }
+    if (product.usesExpirationControl && (!lotExpirationDate || Number.isNaN(lotExpirationDate.getTime()))) {
+      throw new BadRequestException("Informe uma validade de lote válida.");
+    }
+
+    const variantKey = [
+      product.usesColorSize ? `COR:${colorName}` : "COR:GERAL",
+      product.usesColorSize ? `NUM:${sizeCode}` : "NUM:GERAL",
+      product.usesLotControl ? `LOTE:${lotNumber}` : "LOTE:GERAL",
+    ].join("|");
+
+    const createdMovement = await this.prisma.$transaction(async (tx: any) => {
+      const existingMovement = await tx.stockMovement.findFirst({
+        where: {
+          companyId: company.id,
+          sourceType: "MANUAL_STOCK",
+          sourceId: operationId,
+          canceledAt: null,
+        },
+        include: { product: true, sourceImport: true },
+      });
+      if (existingMovement) return existingMovement;
+
+      const currentProduct = await tx.product.findFirst({
+        where: {
+          id: product.id,
+          companyId: company.id,
+          status: "ACTIVE",
+          canceledAt: null,
+        },
+      });
+      if (!currentProduct) {
+        throw new NotFoundException("Produto não encontrado ou inativo.");
+      }
+
+      const previousStock = roundMoney(Number(currentProduct.currentStock || 0));
+      const stockDelta = movementType === "ENTRY" ? quantity : -quantity;
+      const resultingStock = roundMoney(previousStock + stockDelta);
+      const existingBalance = await tx.productStockBalance.findFirst({
+        where: {
+          companyId: company.id,
+          branchCode,
+          productId: currentProduct.id,
+          variantKey,
+          canceledAt: null,
+        },
+      });
+      const usesDetailedStock = Boolean(product.usesColorSize || product.usesLotControl);
+      const previousBalance = roundMoney(
+        Number(existingBalance?.quantity ?? (usesDetailedStock ? 0 : previousStock)),
+      );
+      const resultingBalance = roundMoney(previousBalance + stockDelta);
+
+      if (
+        movementType === "EXIT" &&
+        !product.allowsNegativeStock &&
+        (resultingStock < 0 || resultingBalance < 0)
+      ) {
+        throw new BadRequestException(
+          `Estoque insuficiente. Saldo atual: ${usesDetailedStock ? previousBalance : previousStock}.`,
+        );
+      }
+
+      await tx.product.update({
+        where: { id: currentProduct.id },
+        data: {
+          currentStock: resultingStock,
+          updatedBy: requestedBy,
+        },
+      });
+
+      await tx.productStockBalance.upsert({
+        where: {
+          companyId_productId_branchCode_variantKey: {
+            companyId: company.id,
+            productId: currentProduct.id,
+            branchCode,
+            variantKey,
+          },
+        },
+        create: {
+          companyId: company.id,
+          branchCode,
+          productId: currentProduct.id,
+          variantKey,
+          colorName,
+          sizeCode,
+          lotNumber,
+          lotExpirationDate,
+          quantity: resultingBalance,
+          reservedQuantity: 0,
+          createdBy: requestedBy,
+          updatedBy: requestedBy,
+        },
+        update: {
+          colorName,
+          sizeCode,
+          lotNumber,
+          lotExpirationDate,
+          quantity: resultingBalance,
+          updatedBy: requestedBy,
+        },
+      });
+
+      return tx.stockMovement.create({
+        data: {
+          companyId: company.id,
+          branchCode,
+          productId: currentProduct.id,
+          sourceType: "MANUAL_STOCK",
+          sourceId: operationId,
+          movementType,
+          quantity,
+          previousStock,
+          resultingStock,
+          notes: normalizeText(
+            `${movementType === "ENTRY" ? "ENTRADA" : "SAÍDA"} MANUAL - ${reason}`,
+          ),
+          occurredAt: new Date(),
+          createdBy: requestedBy,
+          updatedBy: requestedBy,
+        },
+        include: { product: true, sourceImport: true },
+      });
+    });
+
+    return {
+      ...this.mapStockMovement(createdMovement),
+      message: `${movementType === "ENTRY" ? "Entrada" : "Saída"} manual registrada com sucesso.`,
+    };
+  }
+
   async create(payload: SaveProductDto) {
     const company = await this.resolveOrCreateCompany(payload);
     const branchConfig = await this.loadCurrentBranchConfig(company.id);
-    const normalizedPayload = this.buildNormalizedPayload(payload, branchConfig);
+    const normalizedPayload = this.buildNormalizedPayload(payload, branchConfig, true);
 
     await this.ensureNoDuplicateProduct(company.id, normalizedPayload);
 
@@ -826,7 +1102,11 @@ export class ProductsService {
       payload.sourceTenantId,
     );
     const branchConfig = await this.loadCurrentBranchConfig(product.companyId);
-    const normalizedPayload = this.buildNormalizedPayload(payload, branchConfig);
+    const normalizedPayload = this.buildNormalizedPayload(
+      payload,
+      branchConfig,
+      Boolean(product.allowsNegativeStock),
+    );
 
     await this.ensureNoDuplicateProduct(
       product.companyId,

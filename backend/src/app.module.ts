@@ -11,6 +11,7 @@ import { FiscalCertificatesModule } from "./modules/fiscal-certificates/fiscal-c
 import { SalesModule } from "./modules/sales/sales.module";
 import { FinanceContextMiddleware } from "./common/finance-context.middleware";
 import { FiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documents.module";
+import { CustomersModule } from "./modules/customers/customers.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { FiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documen
     FiscalCertificatesModule,
     FiscalDocumentsModule,
     SalesModule,
+    CustomersModule,
   ],
 })
 export class AppModule implements NestModule {

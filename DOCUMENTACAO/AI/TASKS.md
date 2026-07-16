@@ -27,6 +27,9 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - criar modulo de cobranca
 - ampliar importacao automatica com manifestacao do destinatario e tratamento de resumos DF-e
 - acompanhar patch oficial do Next moderno para remover alerta residual de `postcss` interno sem downgrade para Next 9
+- concluido: cadastro híbrido de clientes com consulta/sincronização exclusiva para Escola e cadastro local para as demais empresas
+- concluido: barra compacta do cadastro de produtos com botão `+`, pesquisa rápida no grid e remoção do resumo redundante acima da listagem
+- concluido: entrada e saída manual por produto com histórico append-only, saldo anterior/final, idempotência e consulta do histórico já filtrada pelo produto
 
 ## NFC-e
 
