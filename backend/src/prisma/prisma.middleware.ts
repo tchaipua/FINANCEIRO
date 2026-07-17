@@ -28,6 +28,11 @@ const BRANCH_MODELS = [
   "Sale",
   "SaleItem",
   "SalePayment",
+  "SuperTefConfiguration",
+  "SuperTefTerminal",
+  "SuperTefCheckout",
+  "SuperTefCheckoutRoute",
+  "SuperTefAuditEvent",
 ];
 
 function modelSupportsBranchScope(model?: string | null) {

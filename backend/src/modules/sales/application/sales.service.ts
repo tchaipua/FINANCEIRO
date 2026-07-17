@@ -19,9 +19,11 @@ import {
   normalizeBranchCode,
 } from "../../../common/branch.constants";
 import { getFinanceContext } from "../../../common/finance-context";
+import { getSuperTefCardApplicationError } from "../../../common/supertef-payment.utils";
 import {
   CancelSaleDto,
   CheckSalePixStatusDto,
+  CreateSalePixIntentDto,
   CreateSaleReturnDto,
   CreateSaleDto,
   GetSaleDto,
@@ -501,6 +503,250 @@ export class SalesService {
     });
   }
 
+  private async loadSicoobPixBank(companyId: string) {
+    const banks = await this.prisma.bankAccount.findMany({
+      where: {
+        companyId,
+        status: "ACTIVE",
+        canceledAt: null,
+        billingProvider: "SICOOB",
+      },
+      select: {
+        id: true,
+        bankName: true,
+        pixKey: true,
+        billingApiClientId: true,
+        billingCertificateBase64: true,
+        billingCertificatePassword: true,
+      },
+      take: 2,
+    });
+    if (banks.length !== 1) {
+      throw new BadRequestException(
+        banks.length
+          ? "Há mais de um banco Sicoob ativo. Defina uma única conta emissora para o PIX da venda."
+          : "Nenhuma conta Sicoob ativa foi encontrada para emitir o PIX da venda.",
+      );
+    }
+    const bank = banks[0];
+    if (
+      !bank.billingApiClientId ||
+      !bank.billingCertificateBase64 ||
+      !bank.billingCertificatePassword
+    ) {
+      throw new BadRequestException(
+        "A conta Sicoob não possui Client ID e certificado configurados.",
+      );
+    }
+    return {
+      ...bank,
+      billingApiClientId: bank.billingApiClientId!,
+      billingCertificateBase64: bank.billingCertificateBase64!,
+      billingCertificatePassword: bank.billingCertificatePassword!,
+    };
+  }
+
+  async createPixIntent(payload: CreateSalePixIntentDto) {
+    const company = await this.resolveCompany(payload);
+    const branchCode = this.currentBranchCode(payload.sourceBranchCode);
+    const operationId = String(payload.operationId || "").trim();
+    const amount = roundMoney(Number(payload.amount || 0));
+    if (!operationId || amount <= 0) {
+      throw new BadRequestException("Informe a operação e o valor do PIX.");
+    }
+
+    const existing = await this.prisma.salePixIntent.findUnique({
+      where: {
+        companyId_branchCode_operationId: {
+          companyId: company.id,
+          branchCode,
+          operationId,
+        },
+      },
+    });
+    if (existing) {
+      if (Math.abs(Number(existing.amount) - amount) > 0.01) {
+        throw new BadRequestException(
+          "A operação PIX já existe com outro valor.",
+        );
+      }
+      if (existing.pixCopyPaste && ["ISSUED", "PAID"].includes(existing.status)) {
+        return {
+          intentId: existing.id,
+          amount: Number(existing.amount),
+          pixCopyPaste: existing.pixCopyPaste,
+          ourNumber: existing.txid,
+          status: existing.status,
+        };
+      }
+      if (["APPLIED", "CANCELED"].includes(existing.status)) {
+        throw new BadRequestException(
+          "A operação PIX informada já foi concluída ou cancelada.",
+        );
+      }
+    }
+
+    const bank = await this.loadSicoobPixBank(company.id);
+    const id = existing?.id || randomUUID();
+    const txid = existing?.txid || `PIX${id.replace(/-/g, "").toUpperCase()}`;
+    if (!existing) {
+      await this.prisma.salePixIntent.create({
+        data: {
+          id,
+          companyId: company.id,
+          branchCode,
+          sourceSystem: normalizeText(payload.sourceSystem)!,
+          sourceTenantId: normalizeText(payload.sourceTenantId)!,
+          operationId,
+          amount,
+          status: "CREATED",
+          bankAccountId: bank.id,
+          bankAccountLabel: bank.bankName,
+          txid,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+    }
+
+    const config = {
+      clientId: bank.billingApiClientId,
+      certificateBase64: bank.billingCertificateBase64,
+      certificatePassword: bank.billingCertificatePassword,
+      pixKey: bank.pixKey || "",
+    };
+    try {
+      const charge = await this.sicoobPixService.createImmediateCharge(config, {
+        amount,
+        description: "PAGAMENTO DE VENDA",
+        txid,
+      });
+      const qr = charge.pixCopyPaste
+        ? { pixCopyPaste: charge.pixCopyPaste, responseJson: charge.responseJson }
+        : await this.sicoobPixService.getQrCode(config, Number(charge.locationId));
+      const updated = await this.prisma.salePixIntent.update({
+        where: { id },
+        data: {
+          status: "ISSUED",
+          pixCopyPaste: qr.pixCopyPaste,
+          providerPayloadJson: charge.payloadJson,
+          providerResponseJson: qr.responseJson,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+      return {
+        intentId: updated.id,
+        amount: Number(updated.amount),
+        pixCopyPaste: updated.pixCopyPaste,
+        ourNumber: updated.txid,
+        status: updated.status,
+      };
+    } catch (error) {
+      await this.prisma.salePixIntent.update({
+        where: { id },
+        data: {
+          status: "ERROR",
+          providerResponseJson: serializeJson({
+            message: error instanceof Error ? error.message : String(error),
+          }),
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+      throw error;
+    }
+  }
+
+  async checkPixIntentStatus(
+    intentId: string,
+    payload: CheckSalePixStatusDto,
+  ) {
+    const company = await this.resolveCompany(payload);
+    const intent = await this.prisma.salePixIntent.findFirst({
+      where: {
+        id: String(intentId || "").trim(),
+        companyId: company.id,
+        sourceSystem: normalizeText(payload.sourceSystem)!,
+        sourceTenantId: normalizeText(payload.sourceTenantId)!,
+        canceledAt: null,
+      },
+    });
+    if (!intent) throw new NotFoundException("OPERAÇÃO PIX NÃO ENCONTRADA.");
+    if (["PAID", "APPLIED"].includes(intent.status)) {
+      return { paid: true, intentId: intent.id, status: intent.status };
+    }
+    if (intent.status !== "ISSUED") {
+      return { paid: false, intentId: intent.id, status: intent.status };
+    }
+
+    const bank = await this.loadSicoobPixBank(company.id);
+    if (bank.id !== intent.bankAccountId) {
+      throw new BadRequestException("A conta emissora deste PIX não está mais ativa.");
+    }
+    const charge = await this.sicoobPixService.getImmediateCharge(
+      {
+        clientId: bank.billingApiClientId,
+        certificateBase64: bank.billingCertificateBase64,
+        certificatePassword: bank.billingCertificatePassword,
+        pixKey: bank.pixKey || "",
+      },
+      intent.txid,
+    );
+    if (charge.status !== "CONCLUIDA") {
+      return { paid: false, intentId: intent.id, status: charge.status || "ATIVA" };
+    }
+    await this.prisma.salePixIntent.updateMany({
+      where: { id: intent.id, companyId: company.id, status: "ISSUED" },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+        providerResponseJson: charge.responseJson,
+        updatedBy: payload.requestedBy || "PIX_SICOOB",
+      },
+    });
+    return { paid: true, intentId: intent.id, status: "PAID" };
+  }
+
+  async cancelPixIntent(intentId: string, payload: CancelSaleDto) {
+    const company = await this.resolveCompany(payload);
+    const intent = await this.prisma.salePixIntent.findFirst({
+      where: {
+        id: String(intentId || "").trim(),
+        companyId: company.id,
+        sourceSystem: normalizeText(payload.sourceSystem)!,
+        sourceTenantId: normalizeText(payload.sourceTenantId)!,
+        canceledAt: null,
+      },
+    });
+    if (!intent) throw new NotFoundException("OPERAÇÃO PIX NÃO ENCONTRADA.");
+    if (["PAID", "APPLIED"].includes(intent.status)) {
+      throw new BadRequestException("O PIX já foi pago e não pode ser cancelado.");
+    }
+    if (intent.status === "ISSUED") {
+      const bank = await this.loadSicoobPixBank(company.id);
+      await this.sicoobPixService.cancelImmediateCharge(
+        {
+          clientId: bank.billingApiClientId,
+          certificateBase64: bank.billingCertificateBase64,
+          certificatePassword: bank.billingCertificatePassword,
+          pixKey: bank.pixKey || "",
+        },
+        intent.txid,
+      );
+    }
+    const canceledAt = new Date();
+    await this.prisma.salePixIntent.update({
+      where: { id: intent.id },
+      data: {
+        status: "CANCELED",
+        canceledAt,
+        canceledBy: payload.requestedBy || payload.cashierUserId || null,
+        updatedBy: payload.requestedBy || payload.cashierUserId || null,
+      },
+    });
+    return { canceled: true, intentId: intent.id };
+  }
+
   private async ensureCustomerParty(tx: any, companyId: string, branchCode: number, payload: CreateSaleDto) {
     const customer = payload.customer;
     const normalizedName =
@@ -893,13 +1139,35 @@ export class SalesService {
       ...payment,
       paymentMethod: this.normalizePaymentMethod(payment.paymentMethod),
       amount: roundMoney(Number(payment.amount || 0)),
+      superTefPaymentId:
+        String(payment.superTefPaymentId || "").trim() || undefined,
     }));
-
-    const hasImmediatePayment = normalizedPayments.some((payment) =>
-      this.isImmediatePayment(payment.paymentMethod),
+    const pixIntentId = String(payload.pixIntentId || "").trim();
+    const prepaidPixPayments = normalizedPayments.filter(
+      (payment) => payment.paymentMethod === "PIX" && payment.amount > 0,
     );
+    if (pixIntentId && prepaidPixPayments.length !== 1) {
+      throw new BadRequestException(
+        "O PIX confirmado precisa corresponder a uma única forma PIX da venda.",
+      );
+    }
+    for (const payment of normalizedPayments.filter((item) =>
+      ["CREDIT_CARD", "DEBIT_CARD"].includes(item.paymentMethod),
+    )) {
+      if (!payment.superTefPaymentId) {
+        throw new BadRequestException(
+          "AUTORIZE O PAGAMENTO NO SUPERTEF ANTES DE FINALIZAR A VENDA.",
+        );
+      }
+    }
+
+    const isPaidAtCheckout = (payment: SalePaymentDto & { paymentMethod: string }) =>
+      this.isImmediatePayment(payment.paymentMethod) ||
+      (Boolean(pixIntentId) && payment.paymentMethod === "PIX");
+    const hasImmediatePayment = normalizedPayments.some(isPaidAtCheckout);
     const hasDeferredPayment = normalizedPayments.some((payment) =>
-      this.isDeferredPayment(payment.paymentMethod),
+      this.isDeferredPayment(payment.paymentMethod) &&
+      !(Boolean(pixIntentId) && payment.paymentMethod === "PIX"),
     );
     const hasBoletoPayment = normalizedPayments.some(
       (payment) => payment.paymentMethod === "BOLETO" && payment.amount > 0,
@@ -1099,7 +1367,7 @@ export class SalesService {
 
     const paidAmount = roundMoney(
       normalizedPayments
-        .filter((payment) => this.isImmediatePayment(payment.paymentMethod))
+        .filter(isPaidAtCheckout)
         .reduce((total, payment) => total + payment.amount, 0),
     );
     const receivableAmount = roundMoney(totalAmount - paidAmount);
@@ -1129,7 +1397,33 @@ export class SalesService {
       );
     }
 
-    const deferredInstallments = this.expandDeferredPayments(normalizedPayments);
+    let pixIntent: any = null;
+    if (pixIntentId) {
+      pixIntent = await this.prisma.salePixIntent.findFirst({
+        where: {
+          id: pixIntentId,
+          companyId: company.id,
+          branchCode,
+          sourceSystem: normalizeText(payload.sourceSystem)!,
+          sourceTenantId: normalizeText(payload.sourceTenantId)!,
+          status: "PAID",
+          appliedSaleId: null,
+          canceledAt: null,
+        },
+      });
+      const pixAmount = roundMoney(Number(prepaidPixPayments[0]?.amount || 0));
+      if (!pixIntent || Math.abs(Number(pixIntent.amount) - pixAmount) > 0.01) {
+        throw new BadRequestException(
+          "O PIX ainda não foi confirmado, já foi utilizado ou possui outro valor.",
+        );
+      }
+    }
+
+    const deferredInstallments = this.expandDeferredPayments(
+      normalizedPayments.filter(
+        (payment) => !(pixIntentId && payment.paymentMethod === "PIX"),
+      ),
+    );
     const deferredTotal = roundMoney(
       deferredInstallments.reduce((total, installment) => total + installment.amount, 0),
     );
@@ -1182,6 +1476,29 @@ export class SalesService {
           updatedBy: normalizedRequestedBy,
         },
       });
+
+      if (pixIntent) {
+        const applied = await tx.salePixIntent.updateMany({
+          where: {
+            id: pixIntent.id,
+            companyId: company.id,
+            branchCode,
+            status: "PAID",
+            appliedSaleId: null,
+          },
+          data: {
+            status: "APPLIED",
+            appliedSaleId: sale.id,
+            appliedAt: sale.confirmedAt,
+            updatedBy: normalizedRequestedBy,
+          },
+        });
+        if (applied.count !== 1) {
+          throw new BadRequestException(
+            "O PIX confirmado já foi aplicado em outra venda.",
+          );
+        }
+      }
 
       for (const item of normalizedItems) {
         const currentProduct = await tx.product.findFirst({
@@ -1357,7 +1674,7 @@ export class SalesService {
         });
 
         for (const payment of normalizedPayments.filter((item) =>
-          this.isImmediatePayment(item.paymentMethod),
+          isPaidAtCheckout(item),
         )) {
           await tx.cashMovement.create({
             data: {
@@ -1483,9 +1800,29 @@ export class SalesService {
       }
 
       for (const payment of normalizedPayments.filter((item) =>
-        this.isImmediatePayment(item.paymentMethod),
+        isPaidAtCheckout(item),
       )) {
-        await tx.salePayment.create({
+        let superTefPayment: any = null;
+        if (["CREDIT_CARD", "DEBIT_CARD"].includes(payment.paymentMethod)) {
+          superTefPayment = await tx.superTefPayment.findUnique({
+            where: { id: payment.superTefPaymentId },
+          });
+          const validationError = getSuperTefCardApplicationError(
+            superTefPayment,
+            {
+              companyId: company.id,
+              branchCode,
+              paymentMethod: payment.paymentMethod as
+                | "CREDIT_CARD"
+                | "DEBIT_CARD",
+              amount: payment.amount,
+              requiredPurpose: "SALE",
+            },
+          );
+          if (validationError) throw new BadRequestException(validationError);
+        }
+
+        const createdSalePayment = await tx.salePayment.create({
           data: {
             companyId: company.id,
             branchCode,
@@ -1494,12 +1831,47 @@ export class SalesService {
             amount: payment.amount,
             cardInstallmentCount: payment.cardInstallmentCount || null,
             cashSessionId: openCashSession?.id || null,
+            bankAccountId:
+              payment.paymentMethod === "PIX" ? pixIntent?.bankAccountId || null : null,
+            bankAccountLabel:
+              payment.paymentMethod === "PIX" ? pixIntent?.bankAccountLabel || null : null,
+            superTefPaymentId: superTefPayment?.id || null,
             status: "PAID",
             notes: normalizeText(payment.notes),
             createdBy: normalizedRequestedBy,
             updatedBy: normalizedRequestedBy,
           },
         });
+        if (superTefPayment) {
+          await tx.superTefPayment.update({
+            where: { id: superTefPayment.id },
+            data: {
+              appliedEntityType: "SALE_PAYMENT",
+              appliedEntityId: createdSalePayment.id,
+              appliedAt: sale.confirmedAt,
+              updatedBy: normalizedRequestedBy,
+            },
+          });
+          await tx.superTefAuditEvent.create({
+            data: {
+              companyId: company.id,
+              branchCode,
+              entityType: "PAYMENT",
+              entityId: superTefPayment.id,
+              action: "APPLIED_TO_SALE",
+              summary: normalizeText(
+                `PAGAMENTO APLICADO À VENDA ${sale.saleNumber}`,
+              )!,
+              metadataJson: JSON.stringify({
+                saleId: sale.id,
+                salePaymentId: createdSalePayment.id,
+              }),
+              occurredAt: sale.confirmedAt,
+              performedBy: normalizedRequestedBy,
+              createdBy: normalizedRequestedBy,
+            },
+          });
+        }
       }
 
       for (const installment of deferredInstallments) {

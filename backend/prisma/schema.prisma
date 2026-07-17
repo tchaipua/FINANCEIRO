@@ -45,6 +45,8 @@ model Company {
   bankReturnImportItems   BankReturnImportItem[]
   bankStatementImports    BankStatementImport[]
   bankStatementMovements  BankStatementMovement[]
+  bankDdaRecords          BankDdaRecord[]
+  bankDdaAuditEvents      BankDdaAuditEvent[]
   cashSessions            CashSession[]
   cashMovements           CashMovement[]
   settlements             InstallmentSettlement[]
@@ -56,7 +58,15 @@ model Company {
   saleItems               SaleItem[]
   saleReturnItems         SaleReturnItem[]
   salePayments            SalePayment[]
+  salePixIntents          SalePixIntent[]
+  receivablePixIntents    ReceivablePixIntent[]
   screenParameters        ScreenParameter[]
+  superTefConfigurations  SuperTefConfiguration[]
+  superTefTerminals       SuperTefTerminal[]
+  superTefCheckouts       SuperTefCheckout[]
+  superTefCheckoutRoutes  SuperTefCheckoutRoute[]
+  superTefPayments        SuperTefPayment[]
+  superTefAuditEvents     SuperTefAuditEvent[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
@@ -114,6 +124,199 @@ model ScreenParameter {
   @@unique([companyId, branchId, screenId])
   @@index([companyId, branchId, screenId, canceledAt])
   @@map("screen_parameters")
+}
+
+model SuperTefConfiguration {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  provider                String    @default("SUPERTEF")
+  status                  String    @default("INACTIVE")
+  environment             String    @default("HOMOLOGATION")
+  clientKey               String
+  accessTokenEncrypted    String
+  tokenFingerprint        String
+  tokenHint               String
+  printReceipt            Boolean   @default(true)
+  operationTimeoutSeconds Int       @default(120)
+  pollIntervalSeconds     Int       @default(4)
+  lastConnectionTestAt    DateTime?
+  lastConnectionStatus    String?
+  lastConnectionMessage   String?
+  lastPosSyncAt           DateTime?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  terminals SuperTefTerminal[]
+  payments  SuperTefPayment[]
+
+  @@unique([companyId, branchCode, provider])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("supertef_configurations")
+}
+
+model SuperTefTerminal {
+  id                String    @id @default(uuid())
+  configurationId   String
+  companyId         String
+  branchCode        Int       @default(1)
+  providerPosId     Int
+  operationalStatus String    @default("ACTIVE")
+  providerStatus    Int?
+  name              String
+  brand             String?
+  model             String?
+  bank              String?
+  providerClientId  Int?
+  providerCreatedAt DateTime?
+  providerUpdatedAt DateTime?
+  activatedAt       DateTime?
+  lastSeenAt        DateTime?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  configuration  SuperTefConfiguration   @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  checkoutRoutes SuperTefCheckoutRoute[]
+  payments       SuperTefPayment[]
+
+  @@unique([configurationId, providerPosId])
+  @@index([companyId, branchCode, operationalStatus, canceledAt])
+  @@map("supertef_terminals")
+}
+
+model SuperTefCheckout {
+  id         String    @id @default(uuid())
+  companyId  String
+  branchCode Int       @default(1)
+  code       String
+  name       String
+  status     String    @default("ACTIVE")
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  updatedAt  DateTime  @updatedAt
+  updatedBy  String?
+  canceledAt DateTime?
+  canceledBy String?
+
+  company  Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  routes   SuperTefCheckoutRoute[]
+  payments SuperTefPayment[]
+
+  @@unique([companyId, branchCode, code])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("supertef_checkouts")
+}
+
+model SuperTefCheckoutRoute {
+  id         String    @id @default(uuid())
+  companyId  String
+  branchCode Int       @default(1)
+  checkoutId String
+  terminalId String
+  priority   Int
+  status     String    @default("ACTIVE")
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  updatedAt  DateTime  @updatedAt
+  updatedBy  String?
+  canceledAt DateTime?
+  canceledBy String?
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  checkout SuperTefCheckout @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  terminal SuperTefTerminal @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+
+  @@unique([checkoutId, terminalId])
+  @@index([companyId, branchCode, checkoutId, status, priority])
+  @@index([companyId, branchCode, terminalId, status])
+  @@map("supertef_checkout_routes")
+}
+
+model SuperTefAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  entityType   String
+  entityId     String?
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now())
+  performedBy  String?
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, branchCode, entityType, entityId])
+  @@map("supertef_audit_events")
+}
+
+model SuperTefPayment {
+  id                      String    @id @default(uuid())
+  configurationId         String
+  companyId               String
+  branchCode              Int       @default(1)
+  terminalId              String
+  checkoutId              String?
+  operationId             String
+  providerPaymentUniqueId String?
+  providerPaymentStatus   Int?
+  status                  String    @default("PENDING_SEND")
+  transactionType         String
+  installmentType         Int       @default(1)
+  installmentCount        Int       @default(1)
+  amount                  Float
+  orderId                 String
+  description             String
+  purpose                 String    @default("MANUAL")
+  businessReference       String?
+  printReceipt            Boolean   @default(true)
+  paymentMessage          String?
+  paymentOrderJson        String?
+  paymentDataJson         String?
+  terminalLockKey         String?   @unique
+  requestedAt             DateTime  @default(now())
+  lastPolledAt            DateTime?
+  completedAt             DateTime?
+  appliedEntityType       String?
+  appliedEntityId         String?
+  appliedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
+
+  configuration SuperTefConfiguration   @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  terminal      SuperTefTerminal        @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  checkout      SuperTefCheckout?       @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  salePayments  SalePayment[]
+  settlements   InstallmentSettlement[]
+
+  @@unique([companyId, branchCode, operationId])
+  @@unique([configurationId, providerPaymentUniqueId])
+  @@index([companyId, branchCode, status, requestedAt])
+  @@index([companyId, branchCode, terminalId, status])
+  @@index([companyId, branchCode, purpose, businessReference])
+  @@index([companyId, branchCode, appliedEntityType, appliedEntityId])
+  @@map("supertef_payments")
 }
 
 model Product {
@@ -597,6 +800,7 @@ model SalePayment {
   bankAccountId           String?
   bankAccountLabel        String?
   receivableInstallmentId String?
+  superTefPaymentId       String?   @unique
   status                  String    @default("REGISTERED")
   notes                   String?
   createdAt               DateTime  @default(now())
@@ -606,14 +810,86 @@ model SalePayment {
   canceledAt              DateTime?
   canceledBy              String?
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sale        Sale         @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale            Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  cashSession     CashSession?     @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  superTefPayment SuperTefPayment? @relation(fields: [superTefPaymentId], references: [id], onDelete: Restrict)
 
   @@index([companyId, paymentMethod, createdAt])
   @@index([saleId])
   @@index([cashSessionId])
   @@map("sale_payments")
+}
+
+model SalePixIntent {
+  id                   String    @id @default(uuid())
+  companyId            String
+  branchCode           Int       @default(1)
+  sourceSystem         String
+  sourceTenantId       String
+  operationId          String
+  amount               Float
+  status               String    @default("CREATED")
+  bankAccountId        String?
+  bankAccountLabel     String?
+  txid                 String
+  pixCopyPaste         String?
+  providerPayloadJson  String?
+  providerResponseJson String?
+  paidAt               DateTime?
+  appliedSaleId        String?   @unique
+  appliedAt            DateTime?
+  expiresAt            DateTime?
+  createdAt            DateTime  @default(now())
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt
+  updatedBy            String?
+  canceledAt           DateTime?
+  canceledBy           String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, operationId])
+  @@unique([companyId, txid])
+  @@index([companyId, branchCode, status, createdAt])
+  @@map("sale_pix_intents")
+}
+
+model ReceivablePixIntent {
+  id                   String    @id @default(uuid())
+  companyId            String
+  branchCode           Int
+  sourceSystem         String
+  sourceTenantId       String
+  operationId          String
+  settlementGroupId    String
+  installmentIdsJson   String
+  amount               Float
+  status               String    @default("CREATED")
+  bankAccountId        String
+  bankAccountLabel     String
+  txid                 String
+  pixCopyPaste         String?
+  providerPayloadJson  String?
+  providerResponseJson String?
+  paidAt               DateTime?
+  appliedAt            DateTime?
+  expiresAt            DateTime?
+  createdAt            DateTime  @default(now())
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt
+  updatedBy            String?
+  canceledAt           DateTime?
+  canceledBy           String?
+
+  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  settlements InstallmentSettlement[]
+
+  @@unique([companyId, branchCode, operationId])
+  @@unique([companyId, txid])
+  @@unique([companyId, settlementGroupId])
+  @@index([companyId, branchCode, status, createdAt])
+  @@map("receivable_pix_intents")
 }
 
 model NfceProfile {
@@ -867,10 +1143,76 @@ model BankAccount {
   bankReturnImportItems  BankReturnImportItem[]
   bankStatementImports   BankStatementImport[]
   bankStatementMovements BankStatementMovement[]
+  bankDdaRecords         BankDdaRecord[]
 
   @@unique([companyId, branchCode, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
   @@index([companyId, status, bankName])
   @@map("bank_accounts")
+}
+
+model BankDdaRecord {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  bankAccountId       String
+  externalId          String
+  dueDate             String?
+  issueDate           String?
+  beneficiaryName     String
+  beneficiaryDocument String?
+  payerName           String?
+  payerDocument       String?
+  documentNumber      String?
+  digitableLine       String?
+  barcode             String?
+  amount              Float
+  status              String    @default("OPEN")
+  bankStatus          String?
+  rawPayloadJson      String?
+  firstSeenAt         DateTime  @default(now())
+  lastSeenAt          DateTime  @default(now())
+  statusChangedAt     DateTime?
+  statusChangedBy     String?
+  paidAt              DateTime?
+  localNotes          String?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  auditEvents BankDdaAuditEvent[]
+
+  @@unique([bankAccountId, externalId])
+  @@index([companyId, branchCode, status, dueDate])
+  @@index([companyId, bankAccountId, lastSeenAt])
+  @@map("bank_dda_records")
+}
+
+model BankDdaAuditEvent {
+  id              String   @id @default(uuid())
+  companyId       String
+  branchCode      Int      @default(1)
+  bankDdaRecordId String
+  action          String
+  summary         String
+  beforeJson      String?
+  afterJson       String?
+  metadataJson    String?
+  occurredAt      DateTime @default(now())
+  performedBy     String?
+  createdAt       DateTime @default(now())
+  createdBy       String?
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankDdaRecord BankDdaRecord @relation(fields: [bankDdaRecordId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, bankDdaRecordId, occurredAt])
+  @@map("bank_dda_audit_events")
 }
 
 model Party {
@@ -1112,33 +1454,37 @@ model CashMovement {
 }
 
 model InstallmentSettlement {
-  id                  String    @id @default(uuid())
-  companyId           String
-  branchCode          Int       @default(1)
-  installmentId       String
-  cashSessionId       String
-  settlementGroupId   String?
-  receivedAmount      Float
-  discountAmount      Float     @default(0)
-  interestAmount      Float     @default(0)
-  penaltyAmount       Float     @default(0)
-  paymentMethod       String
-  bankAccountId       String?
-  bankAccountLabel    String?
-  bankMovementGroupId String?
-  settledAt           DateTime  @default(now())
-  requestedBy         String?
-  notes               String?
-  createdAt           DateTime  @default(now())
-  createdBy           String?
-  updatedAt           DateTime  @updatedAt
-  updatedBy           String?
-  canceledAt          DateTime?
-  canceledBy          String?
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  installmentId         String
+  cashSessionId         String
+  settlementGroupId     String?
+  receivedAmount        Float
+  discountAmount        Float     @default(0)
+  interestAmount        Float     @default(0)
+  penaltyAmount         Float     @default(0)
+  paymentMethod         String
+  bankAccountId         String?
+  bankAccountLabel      String?
+  bankMovementGroupId   String?
+  superTefPaymentId     String?
+  receivablePixIntentId String?
+  settledAt             DateTime  @default(now())
+  requestedBy           String?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
 
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   installment           ReceivableInstallment  @relation(fields: [installmentId], references: [id], onDelete: Restrict)
   cashSession           CashSession            @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  superTefPayment       SuperTefPayment?       @relation(fields: [superTefPaymentId], references: [id], onDelete: Restrict)
+  receivablePixIntent   ReceivablePixIntent?   @relation(fields: [receivablePixIntentId], references: [id], onDelete: Restrict)
   bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemSettlement")
 
   @@index([companyId, settledAt])
@@ -1146,6 +1492,8 @@ model InstallmentSettlement {
   @@index([companyId, bankAccountId, bankMovementGroupId])
   @@index([installmentId])
   @@index([cashSessionId])
+  @@index([superTefPaymentId])
+  @@index([receivablePixIntentId])
   @@map("installment_settlements")
 }
 

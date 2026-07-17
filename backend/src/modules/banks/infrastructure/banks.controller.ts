@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { BanksService } from "../application/banks.service";
 import {
   ChangeBankStatusDto,
+  ChangeBankDdaStatusDto,
   GetBankDto,
   GetBankDdaDto,
   GetBankStatementDto,
@@ -44,6 +45,30 @@ export class BanksController {
     @Query() query: GetBankDdaDto,
   ) {
     return this.banksService.getOpenDda(bankId, query);
+  }
+
+  @Post(":bankId/dda/:ddaId/close")
+  @ApiOperation({
+    summary: "Baixa um DDA apenas no controle local do Financeiro",
+  })
+  closeDdaLocally(
+    @Param("bankId") bankId: string,
+    @Param("ddaId") ddaId: string,
+    @Body() payload: ChangeBankDdaStatusDto,
+  ) {
+    return this.banksService.closeDdaLocally(bankId, ddaId, payload);
+  }
+
+  @Post(":bankId/dda/:ddaId/cancel")
+  @ApiOperation({
+    summary: "Cancela um DDA apenas no controle local do Financeiro",
+  })
+  cancelDdaLocally(
+    @Param("bankId") bankId: string,
+    @Param("ddaId") ddaId: string,
+    @Body() payload: ChangeBankDdaStatusDto,
+  ) {
+    return this.banksService.cancelDdaLocally(bankId, ddaId, payload);
   }
 
   @Get(":bankId/statement/saved")

@@ -4,6 +4,7 @@ import { SalesService } from "../application/sales.service";
 import {
   CancelSaleDto,
   CheckSalePixStatusDto,
+  CreateSalePixIntentDto,
   CreateSaleReturnDto,
   CreateSaleDto,
   GetSaleDto,
@@ -46,6 +47,30 @@ export class SalesController {
   })
   create(@Body() payload: CreateSaleDto) {
     return this.salesService.create(payload);
+  }
+
+  @Post("pix-intents")
+  @ApiOperation({ summary: "Emite o PIX antes de iniciar cartão e confirmar a venda" })
+  createPixIntent(@Body() payload: CreateSalePixIntentDto) {
+    return this.salesService.createPixIntent(payload);
+  }
+
+  @Post("pix-intents/:intentId/status")
+  @ApiOperation({ summary: "Consulta a confirmação do PIX pré-venda" })
+  checkPixIntentStatus(
+    @Param("intentId") intentId: string,
+    @Body() payload: CheckSalePixStatusDto,
+  ) {
+    return this.salesService.checkPixIntentStatus(intentId, payload);
+  }
+
+  @Post("pix-intents/:intentId/cancel")
+  @ApiOperation({ summary: "Cancela o PIX pré-venda ainda não aplicado" })
+  cancelPixIntent(
+    @Param("intentId") intentId: string,
+    @Body() payload: CancelSaleDto,
+  ) {
+    return this.salesService.cancelPixIntent(intentId, payload);
   }
 
   @Post(":saleId/pix-qrcode")

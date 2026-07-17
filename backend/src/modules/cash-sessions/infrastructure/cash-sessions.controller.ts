@@ -6,6 +6,7 @@ import {
   CloseCurrentCashSessionDto,
   CreateCustomerCreditDto,
   CreateCashMovementDto,
+  CreateReceivablePixIntentDto,
   CurrentCashSessionQueryDto,
   ListInstallmentSettlementHistoryDto,
   ListCustomerCreditsDto,
@@ -13,6 +14,7 @@ import {
   OpenCashSessionDto,
   ReverseSettlementGroupDto,
   ReverseManualSettlementDto,
+  ReceivablePixIntentContextDto,
   SettleCashInstallmentDto,
   SettleManualInstallmentDto,
 } from "../application/dto/cash-sessions.dto";
@@ -146,6 +148,30 @@ export class CashSessionsController {
       installmentId,
       payload,
     );
+  }
+
+  @Post("receivables/pix-intents")
+  @ApiOperation({ summary: "Emite PIX Sicoob antes da baixa de recebíveis" })
+  createReceivablePixIntent(@Body() payload: CreateReceivablePixIntentDto) {
+    return this.cashSessionsService.createReceivablePixIntent(payload);
+  }
+
+  @Post("receivables/pix-intents/:intentId/status")
+  @ApiOperation({ summary: "Consulta a confirmação bancária do PIX de recebíveis" })
+  checkReceivablePixIntentStatus(
+    @Param("intentId") intentId: string,
+    @Body() payload: ReceivablePixIntentContextDto,
+  ) {
+    return this.cashSessionsService.checkReceivablePixIntentStatus(intentId, payload);
+  }
+
+  @Post("receivables/pix-intents/:intentId/cancel")
+  @ApiOperation({ summary: "Cancela o PIX de recebíveis ainda não pago" })
+  cancelReceivablePixIntent(
+    @Param("intentId") intentId: string,
+    @Body() payload: ReceivablePixIntentContextDto,
+  ) {
+    return this.cashSessionsService.cancelReceivablePixIntent(intentId, payload);
   }
 
   @Post("receivables/installments/:installmentId/reverse-latest-settlement")

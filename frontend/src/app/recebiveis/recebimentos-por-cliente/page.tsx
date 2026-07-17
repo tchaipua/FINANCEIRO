@@ -669,13 +669,13 @@ export default function FinanceiroRecebimentosPorClientePage() {
     });
   }
 
-  function openSelectedManualSettlement() {
-    const installmentIds = customerDetailModal?.selectedInstallmentIds || [];
+  function openManualSettlement(installmentIds: string[]) {
     if (!installmentIds.length) {
-      setCustomerDetailModal((current) => current ? {
-        ...current,
-        error: 'Selecione ao menos uma parcela em aberto para dar baixa.',
-      } : current);
+      setAlert({
+        type: 'warning',
+        title: 'Nenhuma parcela em aberto',
+        message: 'Este cliente não possui parcelas disponíveis para baixa.',
+      });
       return;
     }
 
@@ -686,6 +686,19 @@ export default function FinanceiroRecebimentosPorClientePage() {
         installmentIds.join(','),
       )}`,
     );
+  }
+
+  function openSelectedManualSettlement() {
+    const installmentIds = customerDetailModal?.selectedInstallmentIds || [];
+    if (!installmentIds.length) {
+      setCustomerDetailModal((current) => current ? {
+        ...current,
+        error: 'Selecione ao menos uma parcela em aberto para dar baixa.',
+      } : current);
+      return;
+    }
+
+    openManualSettlement(installmentIds);
   }
 
   function renderColumnHeader(column: GridColumnDefinition<CustomerReceivableRow, CustomerGridColumnKey>) {
@@ -798,7 +811,7 @@ export default function FinanceiroRecebimentosPorClientePage() {
                     {renderColumnHeader(column)}
                   </th>
                 ))}
-                <th className="w-48 px-4 py-3 text-center">Ações</th>
+                <th className="w-60 px-4 py-3 text-center">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -840,7 +853,7 @@ export default function FinanceiroRecebimentosPorClientePage() {
                       )}
                     </td>
                   ))}
-                  <td className="w-48 px-3 py-4 text-center">
+                  <td className="w-60 px-3 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button
                         type="button"
@@ -865,6 +878,18 @@ export default function FinanceiroRecebimentosPorClientePage() {
                         className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-emerald-700 transition hover:bg-emerald-100"
                       >
                         Parcelas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openManualSettlement(row.installmentIds);
+                        }}
+                        title={`Dar baixa no valor em aberto de ${row.customerName}`}
+                        aria-label={`Dar baixa no valor em aberto de ${row.customerName}`}
+                        className="rounded-xl border border-blue-200 bg-blue-600 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-white transition hover:bg-blue-700"
+                      >
+                        Dar baixa
                       </button>
                     </div>
                   </td>
@@ -915,7 +940,7 @@ export default function FinanceiroRecebimentosPorClientePage() {
                   ) : null}
                 </td>
               ))}
-              <td className={`${FINANCE_GRID_PAGE_LAYOUT.gridTotalsCell} w-48`} />
+              <td className={`${FINANCE_GRID_PAGE_LAYOUT.gridTotalsCell} w-60`} />
             </tr>
           </tfoot>
         </table>

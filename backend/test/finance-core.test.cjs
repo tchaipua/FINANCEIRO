@@ -41,9 +41,11 @@ const {
 } = require("../dist/modules/receivables/application/bank-return.utils.js");
 
 async function resetDatabase(prisma) {
+  await prisma.superTefAuditEvent.deleteMany();
   await prisma.fiscalDocumentAttempt.deleteMany();
   await prisma.fiscalDocument.deleteMany();
   await prisma.nfceProfile.deleteMany();
+  await prisma.salePixIntent.deleteMany();
   await prisma.salePayment.deleteMany();
   await prisma.saleReturnItem.deleteMany();
   await prisma.saleReturn.deleteMany();
@@ -59,11 +61,19 @@ async function resetDatabase(prisma) {
   await prisma.productStockBalance.deleteMany();
   await prisma.product.deleteMany();
   await prisma.supplier.deleteMany();
+  await prisma.bankDdaAuditEvent.deleteMany();
+  await prisma.bankDdaRecord.deleteMany();
   await prisma.bankStatementMovement.deleteMany();
   await prisma.bankStatementImport.deleteMany();
   await prisma.bankReturnImportItem.deleteMany();
   await prisma.bankReturnImport.deleteMany();
   await prisma.installmentSettlement.deleteMany();
+  await prisma.receivablePixIntent.deleteMany();
+  await prisma.superTefPayment.deleteMany();
+  await prisma.superTefCheckoutRoute.deleteMany();
+  await prisma.superTefCheckout.deleteMany();
+  await prisma.superTefTerminal.deleteMany();
+  await prisma.superTefConfiguration.deleteMany();
   await prisma.cashMovement.deleteMany();
   await prisma.customerCreditMovement.deleteMany();
   await prisma.customerCredit.deleteMany();
@@ -322,6 +332,109 @@ async function main() {
 
     assert.equal(activatedBank.status, "ACTIVE");
     assert.equal(activatedBank.canceledAt, null);
+
+    await prisma.bankAccount.update({
+      where: { id: createdBank.id },
+      data: {
+        billingProvider: "SICOOB",
+        billingApiClientId: "CLIENTE_DDA_TESTE",
+        billingCertificateBase64: "CERTIFICADO_DDA_TESTE",
+        billingCertificatePassword: "SENHA_DDA_TESTE",
+      },
+    });
+    const ddaBanksService = new BanksService(prisma, undefined, {
+      downloadOpenDda: async () => ({
+        accountNumber: 987651,
+        scope: "dda.write dda.read",
+        rawCount: 2,
+        openCount: 2,
+        pulledAt: "2026-07-17T20:00:00.000Z",
+        items: [
+          {
+            id: "DDA_TESTE_001",
+            dueDate: "2026-07-20",
+            issueDate: "2026-07-10",
+            beneficiaryName: "FORNECEDOR DDA UM",
+            beneficiaryDocument: "11222333000155",
+            payerName: "ESCOLA BANCOS",
+            payerDocument: "11222333000144",
+            documentNumber: "DOC-DDA-001",
+            digitableLine: "00190000090123456789012345678901234567890123",
+            amount: 150.75,
+            status: "EM ABERTO",
+          },
+          {
+            id: "DDA_TESTE_002",
+            dueDate: "2026-07-25",
+            beneficiaryName: "FORNECEDOR DDA DOIS",
+            documentNumber: "DOC-DDA-002",
+            amount: 89.9,
+            status: "EM ABERTO",
+          },
+        ],
+      }),
+    });
+    const ddaContext = {
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      sourceBranchCode: 1,
+    };
+    const synchronizedDdas = await ddaBanksService.getOpenDda(
+      createdBank.id,
+      ddaContext,
+    );
+    assert.equal(synchronizedDdas.items.length, 2);
+    assert.ok(synchronizedDdas.items.every((item) => item.status === "OPEN"));
+
+    await assert.rejects(
+      ddaBanksService.closeDdaLocally(
+        createdBank.id,
+        synchronizedDdas.items[0].id,
+        ddaContext,
+      ),
+      /INFORME A DATA DO PAGAMENTO/,
+    );
+
+    const closedDda = await ddaBanksService.closeDdaLocally(
+      createdBank.id,
+      synchronizedDdas.items[0].id,
+      {
+        ...ddaContext,
+        paymentDate: "2026-07-17",
+        notes: "PAGO FORA DO BANCO",
+      },
+    );
+    const canceledDda = await ddaBanksService.cancelDdaLocally(
+      createdBank.id,
+      synchronizedDdas.items[1].id,
+      { ...ddaContext, notes: "TITULO DESCONSIDERADO" },
+    );
+    assert.equal(closedDda.status, "CLOSED");
+    assert.equal(closedDda.paidAt.slice(0, 10), "2026-07-17");
+    assert.equal(canceledDda.status, "CANCELED");
+
+    const synchronizedAgain = await ddaBanksService.getOpenDda(
+      createdBank.id,
+      ddaContext,
+    );
+    assert.deepEqual(
+      synchronizedAgain.items.map((item) => item.status).sort(),
+      ["CANCELED", "CLOSED"],
+    );
+    const ddaAuditCount = await prisma.bankDdaAuditEvent.count({
+      where: { companyId: createdBank.companyId },
+    });
+    assert.equal(ddaAuditCount, 6);
+
+    await assert.rejects(
+      ddaBanksService.closeDdaLocally(
+        createdBank.id,
+        synchronizedDdas.items[0].id,
+        { ...ddaContext, sourceTenantId: "OUTRO_TENANT" },
+      ),
+      /EMPRESA FINANCEIRA NÃO ENCONTRADA/,
+    );
 
     const statementBanksService = new BanksService(prisma, {
       downloadStatement: async () => ({
@@ -671,6 +784,49 @@ async function main() {
     assert.equal(settlement.penaltyAmount, 17);
     assert.equal(settlement.receivedAmount, 878.33);
 
+    await assert.rejects(
+      () => cashSessionsService.settleManualInstallment(
+        secondInstallment.id,
+        {
+          requestedBy: "CODEX",
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+          cashierUserId: "USR_CAIXA_001",
+          cashierDisplayName: "CAIXA TESTE",
+          paymentMethod: "PIX",
+          bankAccountId: boletoBank.id,
+        },
+      ),
+      /CONFIRME O PAGAMENTO PIX NO SICOOB/,
+    );
+
+    const receivablePixCompany = await prisma.company.findUnique({
+      where: {
+        sourceSystem_sourceTenantId: {
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_ESCOLA_TESTE",
+        },
+      },
+    });
+    const receivablePixIntent = await prisma.receivablePixIntent.create({
+      data: {
+        companyId: receivablePixCompany.id,
+        branchCode: 1,
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        operationId: "PIX-RECEIVABLE-TEST-001",
+        settlementGroupId: "BAIXA-PIX-TEST-001",
+        installmentIdsJson: JSON.stringify([secondInstallment.id]),
+        amount: 150,
+        status: "PAID",
+        bankAccountId: boletoBank.id,
+        bankAccountLabel: boletoBank.bankName,
+        txid: "PIXRECEIVABLETEST001000000000000",
+        paidAt: new Date(),
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+    });
     const pixSettlement = await cashSessionsService.settleManualInstallment(
       secondInstallment.id,
       {
@@ -680,7 +836,9 @@ async function main() {
         cashierUserId: "USR_CAIXA_001",
         cashierDisplayName: "CAIXA TESTE",
         paymentMethod: "PIX",
+        settlementGroupId: receivablePixIntent.settlementGroupId,
         bankAccountId: boletoBank.id,
+        receivablePixIntentId: receivablePixIntent.id,
         receivedAt: "2026-05-10T10:00:00.000Z",
         notes: "RECEBIMENTO PIX",
       },
@@ -689,6 +847,10 @@ async function main() {
     assert.equal(pixSettlement.status, "PAID");
     assert.equal(pixSettlement.receivedAmount, 150);
     assert.equal(pixSettlement.paymentMethod, "PIX");
+    const appliedReceivablePix = await prisma.receivablePixIntent.findUnique({
+      where: { id: receivablePixIntent.id },
+    });
+    assert.equal(appliedReceivablePix.status, "APPLIED");
 
     const currentSession = await cashSessionsService.getCurrent({
       sourceSystem: "ESCOLA",
@@ -1071,6 +1233,68 @@ async function main() {
     assert.equal(genericSale.totalAmount, 35.5);
     assert.equal(genericSaleItem.productNameSnapshot, "TAXA AVULSA TESTE");
     assert.equal(genericSaleItem.unitCost, 12.3);
+
+    const paidPixIntent = await prisma.salePixIntent.create({
+      data: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        operationId: "PIX-ORDER-TEST-001",
+        amount: 5,
+        status: "PAID",
+        txid: "PIXORDERTEST00100000000000000000",
+        paidAt: new Date(),
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
+      },
+    });
+    const pixSale = await salesService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+      saleChannel: "TEST",
+      cashierUserId: "USR_CAIXA_001",
+      cashierDisplayName: "CAIXA TESTE",
+      pixIntentId: paidPixIntent.id,
+      items: [{
+        productId: genericProduct.id,
+        description: "VENDA PIX CONFIRMADO",
+        quantity: 1,
+        unitCost: 1,
+        unitPrice: 5,
+      }],
+      payments: [{ paymentMethod: "PIX", amount: 5 }],
+    });
+    const appliedPixIntent = await prisma.salePixIntent.findUnique({
+      where: { id: paidPixIntent.id },
+    });
+    assert.equal(pixSale.paidAmount, 5);
+    assert.equal(pixSale.receivableAmount, 0);
+    assert.equal(appliedPixIntent.status, "APPLIED");
+    assert.equal(appliedPixIntent.appliedSaleId, pixSale.id);
+    await assert.rejects(
+      () => salesService.create({
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        sourceBranchCode: 1,
+        saleChannel: "TEST",
+        cashierUserId: "USR_CAIXA_001",
+        cashierDisplayName: "CAIXA TESTE",
+        pixIntentId: paidPixIntent.id,
+        items: [{
+          productId: genericProduct.id,
+          description: "REUSO PIX BLOQUEADO",
+          quantity: 1,
+          unitCost: 1,
+          unitPrice: 5,
+        }],
+        payments: [{ paymentMethod: "PIX", amount: 5 }],
+      }),
+      /ainda não foi confirmado, já foi utilizado ou possui outro valor/,
+    );
 
     const gridProduct = await prisma.product.create({
       data: {

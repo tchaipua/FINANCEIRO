@@ -10,16 +10,19 @@ import {
   normalizeText,
   parseIsoDate,
   roundMoney,
+  serializeJson,
 } from "../../../common/finance-core.utils";
 import {
   buildInstallmentSettlementSuggestion,
   resolveFinancialRuleSettings,
 } from "../../../common/manual-settlement.utils";
+import { getSuperTefCardApplicationError } from "../../../common/supertef-payment.utils";
 import {
   CancelCashMovementDto,
   CloseCurrentCashSessionDto,
   CreateCustomerCreditDto,
   CreateCashMovementDto,
+  CreateReceivablePixIntentDto,
   CurrentCashSessionQueryDto,
   ListInstallmentSettlementHistoryDto,
   ListCustomerCreditsDto,
@@ -27,9 +30,11 @@ import {
   OpenCashSessionDto,
   ReverseSettlementGroupDto,
   ReverseManualSettlementDto,
+  ReceivablePixIntentContextDto,
   SettleCashInstallmentDto,
   SettleManualInstallmentDto,
 } from "./dto/cash-sessions.dto";
+import { SicoobPixService } from "../../sales/application/sicoob-pix.service";
 
 const CASH_SESSION_PAYMENT_METHOD_METADATA = {
   CASH: {
@@ -127,7 +132,10 @@ function isValidBrazilDocument(value: string | null | undefined) {
 
 @Injectable()
 export class CashSessionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sicoobPixService: SicoobPixService,
+  ) {}
 
   private buildInstallmentFinancialSettingsSnapshot(installment: any) {
     return resolveFinancialRuleSettings({
@@ -412,6 +420,278 @@ export class CashSessionsService {
       id: bank.id,
       label: this.buildBankAccountLabel(bank),
     };
+  }
+
+  private async loadAutomaticPixBank(companyId: string, bankAccountId: string) {
+    const bank = await this.prisma.bankAccount.findFirst({
+      where: {
+        id: String(bankAccountId || "").trim(),
+        companyId,
+        status: "ACTIVE",
+        canceledAt: null,
+        billingProvider: "SICOOB",
+      },
+    });
+    if (!bank) {
+      throw new BadRequestException(
+        "Selecione uma conta Sicoob ativa para gerar o PIX.",
+      );
+    }
+    if (
+      !bank.billingApiClientId ||
+      !bank.billingCertificateBase64 ||
+      !bank.billingCertificatePassword ||
+      !bank.pixKey
+    ) {
+      throw new BadRequestException(
+        "A conta Sicoob selecionada não possui Client ID, certificado e chave PIX configurados.",
+      );
+    }
+    return {
+      ...bank,
+      label: this.buildBankAccountLabel(bank),
+      billingApiClientId: bank.billingApiClientId!,
+      billingCertificateBase64: bank.billingCertificateBase64!,
+      billingCertificatePassword: bank.billingCertificatePassword!,
+      pixKey: bank.pixKey!,
+    };
+  }
+
+  async createReceivablePixIntent(payload: CreateReceivablePixIntentDto) {
+    const company = await this.resolveCompany(
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const operationId = String(payload.operationId || "").trim();
+    const settlementGroupId = normalizeText(payload.settlementGroupId);
+    const installmentIds = Array.from(
+      new Set((payload.installmentIds || []).map((id) => String(id || "").trim()).filter(Boolean)),
+    );
+    const amount = roundMoney(Number(payload.amount || 0));
+    if (!operationId || !settlementGroupId || !installmentIds.length || amount <= 0) {
+      throw new BadRequestException("Informe a operação, o grupo, as parcelas e o valor do PIX.");
+    }
+
+    const installments = await this.prisma.receivableInstallment.findMany({
+      where: {
+        id: { in: installmentIds },
+        companyId: company.id,
+        status: "OPEN",
+        openAmount: { gt: 0 },
+        canceledAt: null,
+      },
+      select: { id: true, branchCode: true },
+    });
+    if (installments.length !== installmentIds.length) {
+      throw new BadRequestException(
+        "Uma ou mais parcelas do PIX não estão abertas neste tenant.",
+      );
+    }
+    const branchCodes = Array.from(new Set(installments.map((item) => item.branchCode)));
+    if (branchCodes.length !== 1) {
+      throw new BadRequestException("O PIX deve conter parcelas de uma única filial.");
+    }
+    const branchCode = branchCodes[0];
+    const existing = await this.prisma.receivablePixIntent.findUnique({
+      where: {
+        companyId_branchCode_operationId: {
+          companyId: company.id,
+          branchCode,
+          operationId,
+        },
+      },
+    });
+    if (existing) {
+      const existingInstallmentIds = (() => {
+        try {
+          return JSON.parse(existing.installmentIdsJson) as string[];
+        } catch {
+          return [];
+        }
+      })();
+      if (
+        existing.settlementGroupId !== settlementGroupId ||
+        existing.bankAccountId !== String(payload.bankAccountId || "").trim() ||
+        JSON.stringify([...existingInstallmentIds].sort()) !==
+          JSON.stringify([...installmentIds].sort()) ||
+        Math.abs(Number(existing.amount) - amount) > 0.01
+      ) {
+        throw new BadRequestException("A operação PIX já existe com outros dados.");
+      }
+      if (existing.pixCopyPaste && ["ISSUED", "PAID", "APPLIED"].includes(existing.status)) {
+        return {
+          intentId: existing.id,
+          amount: Number(existing.amount),
+          pixCopyPaste: existing.pixCopyPaste,
+          ourNumber: existing.txid,
+          status: existing.status,
+        };
+      }
+      if (existing.status === "CANCELED") {
+        throw new BadRequestException("A operação PIX informada foi cancelada.");
+      }
+    }
+
+    const bank = await this.loadAutomaticPixBank(company.id, payload.bankAccountId);
+    const id = existing?.id || randomUUID();
+    const txid = existing?.txid || `REC${id.replace(/-/g, "").toUpperCase()}`;
+    if (!existing) {
+      await this.prisma.receivablePixIntent.create({
+        data: {
+          id,
+          companyId: company.id,
+          branchCode,
+          sourceSystem: normalizeText(payload.sourceSystem)!,
+          sourceTenantId: normalizeText(payload.sourceTenantId)!,
+          operationId,
+          settlementGroupId,
+          installmentIdsJson: JSON.stringify(installmentIds),
+          amount,
+          status: "CREATED",
+          bankAccountId: bank.id,
+          bankAccountLabel: bank.label,
+          txid,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdBy: payload.requestedBy || null,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+    }
+
+    const config = {
+      clientId: bank.billingApiClientId,
+      certificateBase64: bank.billingCertificateBase64,
+      certificatePassword: bank.billingCertificatePassword,
+      pixKey: bank.pixKey,
+    };
+    try {
+      const charge = await this.sicoobPixService.createImmediateCharge(config, {
+        amount,
+        description: "RECEBIMENTO DE PARCELAS",
+        txid,
+      });
+      const qr = charge.pixCopyPaste
+        ? { pixCopyPaste: charge.pixCopyPaste, responseJson: charge.responseJson }
+        : await this.sicoobPixService.getQrCode(config, Number(charge.locationId));
+      const updated = await this.prisma.receivablePixIntent.update({
+        where: { id },
+        data: {
+          status: "ISSUED",
+          pixCopyPaste: qr.pixCopyPaste,
+          providerPayloadJson: charge.payloadJson,
+          providerResponseJson: qr.responseJson,
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+      return {
+        intentId: updated.id,
+        amount: Number(updated.amount),
+        pixCopyPaste: updated.pixCopyPaste,
+        ourNumber: updated.txid,
+        status: updated.status,
+      };
+    } catch (error) {
+      await this.prisma.receivablePixIntent.update({
+        where: { id },
+        data: {
+          status: "ERROR",
+          providerResponseJson: serializeJson({
+            message: error instanceof Error ? error.message : String(error),
+          }),
+          updatedBy: payload.requestedBy || null,
+        },
+      });
+      throw error;
+    }
+  }
+
+  async checkReceivablePixIntentStatus(
+    intentId: string,
+    payload: ReceivablePixIntentContextDto,
+  ) {
+    const company = await this.resolveCompany(payload.sourceSystem, payload.sourceTenantId);
+    const intent = await this.prisma.receivablePixIntent.findFirst({
+      where: {
+        id: String(intentId || "").trim(),
+        companyId: company.id,
+        sourceSystem: normalizeText(payload.sourceSystem)!,
+        sourceTenantId: normalizeText(payload.sourceTenantId)!,
+        canceledAt: null,
+      },
+    });
+    if (!intent) throw new NotFoundException("OPERAÇÃO PIX NÃO ENCONTRADA.");
+    if (["PAID", "APPLIED"].includes(intent.status)) {
+      return { paid: true, intentId: intent.id, status: intent.status };
+    }
+    if (intent.status !== "ISSUED") {
+      return { paid: false, intentId: intent.id, status: intent.status };
+    }
+    const bank = await this.loadAutomaticPixBank(company.id, intent.bankAccountId);
+    const charge = await this.sicoobPixService.getImmediateCharge(
+      {
+        clientId: bank.billingApiClientId,
+        certificateBase64: bank.billingCertificateBase64,
+        certificatePassword: bank.billingCertificatePassword,
+        pixKey: bank.pixKey,
+      },
+      intent.txid,
+    );
+    if (charge.status !== "CONCLUIDA") {
+      return { paid: false, intentId: intent.id, status: charge.status || "ATIVA" };
+    }
+    await this.prisma.receivablePixIntent.updateMany({
+      where: { id: intent.id, companyId: company.id, status: "ISSUED" },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+        providerResponseJson: charge.responseJson,
+        updatedBy: payload.requestedBy || "PIX_SICOOB",
+      },
+    });
+    return { paid: true, intentId: intent.id, status: "PAID" };
+  }
+
+  async cancelReceivablePixIntent(
+    intentId: string,
+    payload: ReceivablePixIntentContextDto,
+  ) {
+    const company = await this.resolveCompany(payload.sourceSystem, payload.sourceTenantId);
+    const intent = await this.prisma.receivablePixIntent.findFirst({
+      where: {
+        id: String(intentId || "").trim(),
+        companyId: company.id,
+        sourceSystem: normalizeText(payload.sourceSystem)!,
+        sourceTenantId: normalizeText(payload.sourceTenantId)!,
+        canceledAt: null,
+      },
+    });
+    if (!intent) throw new NotFoundException("OPERAÇÃO PIX NÃO ENCONTRADA.");
+    if (["PAID", "APPLIED"].includes(intent.status)) {
+      throw new BadRequestException("O PIX já foi pago e não pode ser cancelado.");
+    }
+    if (intent.status === "ISSUED") {
+      const bank = await this.loadAutomaticPixBank(company.id, intent.bankAccountId);
+      await this.sicoobPixService.cancelImmediateCharge(
+        {
+          clientId: bank.billingApiClientId,
+          certificateBase64: bank.billingCertificateBase64,
+          certificatePassword: bank.billingCertificatePassword,
+          pixKey: bank.pixKey,
+        },
+        intent.txid,
+      );
+    }
+    const canceledAt = new Date();
+    await this.prisma.receivablePixIntent.update({
+      where: { id: intent.id },
+      data: {
+        status: "CANCELED",
+        canceledAt,
+        canceledBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+    return { canceled: true, intentId: intent.id };
   }
 
   async list(query: ListCashSessionsDto) {
@@ -1775,6 +2055,23 @@ export class CashSessionsService {
     const paymentMethod = this.resolvePaymentMethodMetadata(
       payload.paymentMethod,
     );
+    const isSuperTefCard = ["CREDIT_CARD", "DEBIT_CARD"].includes(
+      paymentMethod.code,
+    );
+    const superTefPaymentId =
+      String(payload.superTefPaymentId || "").trim() || null;
+    if (isSuperTefCard && !superTefPaymentId) {
+      throw new BadRequestException(
+        "AUTORIZE O PAGAMENTO NO SUPERTEF ANTES DE BAIXAR A PARCELA.",
+      );
+    }
+    const receivablePixIntentId =
+      String(payload.receivablePixIntentId || "").trim() || null;
+    if (paymentMethod.code === "PIX" && !receivablePixIntentId) {
+      throw new BadRequestException(
+        "CONFIRME O PAGAMENTO PIX NO SICOOB ANTES DE BAIXAR A PARCELA.",
+      );
+    }
     const pixBankAccount =
       paymentMethod.code === "PIX"
         ? await this.resolvePixBankAccount(company.id, payload.bankAccountId)
@@ -1897,6 +2194,89 @@ export class CashSessionsService {
     }
 
     const settlement = await this.prisma.$transaction(async (tx: any) => {
+      let superTefPayment: any = null;
+      let receivablePixIntent: any = null;
+      if (isSuperTefCard) {
+        superTefPayment = await tx.superTefPayment.findUnique({
+          where: { id: superTefPaymentId },
+        });
+        const validationError = getSuperTefCardApplicationError(
+          superTefPayment,
+          {
+            companyId: company.id,
+            branchCode: installment.branchCode,
+            paymentMethod: paymentMethod.code as
+              | "CREDIT_CARD"
+              | "DEBIT_CARD",
+            requiredPurpose: "RECEIVABLE",
+            allowedAppliedEntityType: "INSTALLMENT_SETTLEMENT_GROUP",
+            allowedAppliedEntityId: settlementGroupId,
+          },
+        );
+        if (validationError) throw new BadRequestException(validationError);
+        const appliedAmount = await tx.installmentSettlement.aggregate({
+          where: {
+            superTefPaymentId: superTefPayment.id,
+            canceledAt: null,
+          },
+          _sum: { receivedAmount: true },
+        });
+        if (
+          roundMoney(
+            Number(appliedAmount._sum.receivedAmount || 0) + receivedAmount,
+          ) >
+          roundMoney(Number(superTefPayment.amount || 0)) + 0.01
+        ) {
+          throw new BadRequestException(
+            "AS BAIXAS SUPERAM O VALOR APROVADO NO SUPERTEF.",
+          );
+        }
+      }
+      if (paymentMethod.code === "PIX") {
+        receivablePixIntent = await tx.receivablePixIntent.findFirst({
+          where: {
+            id: receivablePixIntentId,
+            companyId: company.id,
+            branchCode: installment.branchCode,
+            settlementGroupId,
+            bankAccountId: pixBankAccount?.id,
+            status: { in: ["PAID", "APPLIED"] },
+            canceledAt: null,
+          },
+        });
+        let allowedInstallmentIds: string[] = [];
+        try {
+          allowedInstallmentIds = JSON.parse(
+            String(receivablePixIntent?.installmentIdsJson || "[]"),
+          );
+        } catch {
+          allowedInstallmentIds = [];
+        }
+        if (
+          !receivablePixIntent ||
+          !allowedInstallmentIds.includes(installment.id)
+        ) {
+          throw new BadRequestException(
+            "O PIX não está confirmado ou não pertence a esta parcela, tenant e filial.",
+          );
+        }
+        const appliedAmount = await tx.installmentSettlement.aggregate({
+          where: {
+            receivablePixIntentId: receivablePixIntent.id,
+            canceledAt: null,
+          },
+          _sum: { receivedAmount: true },
+        });
+        if (
+          roundMoney(Number(appliedAmount._sum.receivedAmount || 0) + receivedAmount) >
+          roundMoney(Number(receivablePixIntent.amount || 0)) + 0.01
+        ) {
+          throw new BadRequestException(
+            "AS BAIXAS SUPERAM O VALOR CONFIRMADO NO PIX.",
+          );
+        }
+      }
+
       const createdSettlement = await tx.installmentSettlement.create({
         data: {
           companyId: company.id,
@@ -1912,6 +2292,8 @@ export class CashSessionsService {
           bankAccountId: pixBankAccount?.id || null,
           bankAccountLabel: pixBankAccount?.label || null,
           bankMovementGroupId,
+          superTefPaymentId: superTefPayment?.id || null,
+          receivablePixIntentId: receivablePixIntent?.id || null,
           settledAt,
           requestedBy: payload.requestedBy || null,
           notes: normalizeText(payload.notes),
@@ -1944,6 +2326,44 @@ export class CashSessionsService {
           updatedBy: payload.requestedBy || null,
         },
       });
+      if (receivablePixIntent?.status === "PAID") {
+        await tx.receivablePixIntent.update({
+          where: { id: receivablePixIntent.id },
+          data: {
+            status: "APPLIED",
+            appliedAt: settledAt,
+            updatedBy: payload.requestedBy || null,
+          },
+        });
+      }
+      if (superTefPayment && !superTefPayment.appliedAt) {
+        await tx.superTefPayment.update({
+          where: { id: superTefPayment.id },
+          data: {
+            appliedEntityType: "INSTALLMENT_SETTLEMENT_GROUP",
+            appliedEntityId: settlementGroupId,
+            appliedAt: settledAt,
+            updatedBy: payload.requestedBy || null,
+          },
+        });
+        await tx.superTefAuditEvent.create({
+          data: {
+            companyId: company.id,
+            branchCode: installment.branchCode,
+            entityType: "PAYMENT",
+            entityId: superTefPayment.id,
+            action: "APPLIED_TO_RECEIVABLE",
+            summary: "PAGAMENTO APLICADO AO RECEBIMENTO DE PARCELAS",
+            metadataJson: JSON.stringify({
+              settlementGroupId,
+              firstSettlementId: createdSettlement.id,
+            }),
+            occurredAt: settledAt,
+            performedBy: payload.requestedBy || null,
+            createdBy: payload.requestedBy || null,
+          },
+        });
+      }
 
       const cashSessionUpdateData: any = {
         totalReceivedAmount: {

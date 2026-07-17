@@ -15,6 +15,7 @@
     "prisma:migrate": "prisma migrate dev",
     "test:core": "npm run build && node test/finance-core.test.cjs",
     "test:nfce": "npm run build && ts-node test/nfce-core.test.ts && node test/nfce-flow.test.cjs",
+    "test:supertef": "npm run build && ts-node test/supertef-core.test.ts",
     "test:nfce:homologation": "ts-node scripts/nfce-homologation-smoke.ts",
     "sefaz:cadastro": "ts-node scripts/sefaz-cadastro-query.ts"
   },

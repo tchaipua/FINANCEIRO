@@ -78,6 +78,16 @@ export class GetBankDdaDto extends GetBankDto {
   cashierDisplayName?: string;
 }
 
+export class ChangeBankDdaStatusDto extends GetBankDdaDto {
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 export class GetBankStatementDto {
   @IsString()
   sourceSystem!: string;

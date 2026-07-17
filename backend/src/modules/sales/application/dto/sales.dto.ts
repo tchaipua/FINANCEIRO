@@ -148,6 +148,10 @@ export class SalePaymentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  superTefPaymentId?: string;
 }
 
 export class CreateSaleDto {
@@ -225,6 +229,36 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  pixIntentId?: string;
+}
+
+export class CreateSalePixIntentDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsString()
+  operationId!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
 }
 
 export class IssueSalePixQrDto {

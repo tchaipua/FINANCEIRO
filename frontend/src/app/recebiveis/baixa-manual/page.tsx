@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import QRCode from 'qrcode';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { requestJson } from '@/app/lib/api';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
 
 type ManualPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CHECK' | 'CUSTOMER_CREDIT';
 
@@ -17,6 +19,7 @@ type BankItem = {
   branchDigit?: string | null;
   accountNumber: string;
   accountDigit?: string | null;
+  billingProvider?: string | null;
 };
 
 type InstallmentItem = {
@@ -92,9 +95,27 @@ type SettlementPreviewState = {
   isPartial: boolean;
 };
 
+type SuperTefSettlementAuthorization = {
+  paymentId: string;
+  settlementGroupId: string;
+  paymentMethod: 'CREDIT_CARD' | 'DEBIT_CARD';
+  amount: number;
+};
+
+type ReceivablePixIntentState = {
+  intentId: string;
+  amount: number;
+  pixCopyPaste: string;
+  imageUrl: string;
+  ourNumber?: string | null;
+  settlementGroupId: string;
+  bankMovementGroupId: string;
+};
+
 const SCREEN_ID = 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL';
 const CONFIRMATION_SCREEN_ID = 'POPUP_FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CONFIRMACAO';
 const COMPLETION_SCREEN_ID = 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_SUCESSO';
+const PIX_QR_SCREEN_ID = 'POPUP_FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_PIX_SICOOB_QRCODE';
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 
 const PAYMENT_METHOD_OPTIONS: Array<{
@@ -329,6 +350,11 @@ export default function FinanceiroManualSettlementPage() {
   const [selectedBankId, setSelectedBankId] = useState('');
   const [selectedCustomerCreditId, setSelectedCustomerCreditId] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<ManualPaymentMethod>('CASH');
+  const [superTefAuthorization, setSuperTefAuthorization] =
+    useState<SuperTefSettlementAuthorization | null>(null);
+  const [receivablePixIntent, setReceivablePixIntent] =
+    useState<ReceivablePixIntentState | null>(null);
+  const pixFinalizationRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alert, setAlert] = useState<AlertState | null>(null);
@@ -441,7 +467,14 @@ export default function FinanceiroManualSettlementPage() {
       setSelectedBankId('');
     }
 
-    if (selectedBankId && !banks.some((bank) => bank.id === selectedBankId)) {
+    if (
+      selectedBankId &&
+      !banks.some(
+        (bank) =>
+          bank.id === selectedBankId &&
+          String(bank.billingProvider || '').toUpperCase() === 'SICOOB',
+      )
+    ) {
       setSelectedBankId('');
     }
   }, [banks, selectedBankId, selectedPaymentMethod]);
@@ -616,7 +649,11 @@ export default function FinanceiroManualSettlementPage() {
     });
   }
 
-  async function executeConfirmedSettlement() {
+  async function executeConfirmedSettlement(confirmedPix?: {
+    intentId: string;
+    settlementGroupId: string;
+    bankMovementGroupId: string;
+  }) {
     if (
       !runtimeContext.sourceSystem ||
       !runtimeContext.sourceTenantId ||
@@ -657,14 +694,88 @@ export default function FinanceiroManualSettlementPage() {
         )
       : new Map<string, { receivedAmount: number; interestAmount: number; penaltyAmount: number }>();
     const bankMovementGroupId = selectedPaymentMethod === 'PIX'
-      ? createBankMovementGroupId(selectedPaymentMethod)
+      ? confirmedPix?.bankMovementGroupId || createBankMovementGroupId(selectedPaymentMethod)
       : undefined;
-    const settlementGroupId = createSettlementGroupId();
+    const reusableSuperTefAuthorization =
+      superTefAuthorization &&
+      superTefAuthorization.paymentMethod === selectedPaymentMethod &&
+      Math.abs(superTefAuthorization.amount - effectiveReceivedAmount) <= 0.01
+        ? superTefAuthorization
+        : null;
+    const settlementGroupId =
+      confirmedPix?.settlementGroupId ||
+      reusableSuperTefAuthorization?.settlementGroupId ||
+      createSettlementGroupId();
     const receivedAt = new Date().toISOString();
 
     try {
       setIsSubmitting(true);
       setAlert(null);
+
+      if (selectedPaymentMethod === 'PIX' && !confirmedPix) {
+        const issuedPix = await requestJson<{
+          intentId: string;
+          amount: number;
+          pixCopyPaste: string;
+          ourNumber?: string | null;
+        }>('/receivables/pix-intents', {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            requestedBy: runtimeContext.cashierUserId || undefined,
+            operationId: globalThis.crypto?.randomUUID?.() || `PIX-${Date.now()}`,
+            settlementGroupId,
+            bankAccountId: selectedBankId,
+            installmentIds: orderedInstallments.map((item) => item.id),
+            amount: effectiveReceivedAmount,
+          }),
+          fallbackMessage: 'O Sicoob não confirmou a emissão do PIX.',
+        });
+        const imageUrl = await QRCode.toDataURL(issuedPix.pixCopyPaste, {
+          errorCorrectionLevel: 'M',
+          margin: 2,
+          width: 280,
+        });
+        setReceivablePixIntent({
+          ...issuedPix,
+          imageUrl,
+          settlementGroupId,
+          bankMovementGroupId: bankMovementGroupId!,
+        });
+        return;
+      }
+
+      let superTefPaymentId =
+        reusableSuperTefAuthorization?.paymentId || undefined;
+      if (
+        !superTefPaymentId &&
+        (selectedPaymentMethod === 'CREDIT_CARD' ||
+          selectedPaymentMethod === 'DEBIT_CARD')
+      ) {
+        const authorized = await authorizeSuperTefCardPayment({
+          runtimeContext,
+          paymentMethod: selectedPaymentMethod,
+          amount: effectiveReceivedAmount,
+          installmentCount: 1,
+          purpose: 'RECEIVABLE',
+          businessReference: settlementGroupId,
+          description: 'RECEBIMENTO DE PARCELAS',
+          onStatus: (message) =>
+            setAlert({
+              type: 'warning',
+              title: 'Aguardando cartão no emulador',
+              message,
+            }),
+        });
+        superTefPaymentId = authorized.id;
+        setSuperTefAuthorization({
+          paymentId: authorized.id,
+          settlementGroupId,
+          paymentMethod: selectedPaymentMethod,
+          amount: effectiveReceivedAmount,
+        });
+      }
 
       let successCount = 0;
       const failureMessages: string[] = [];
@@ -702,6 +813,9 @@ export default function FinanceiroManualSettlementPage() {
                   selectedPaymentMethod === 'CUSTOMER_CREDIT'
                     ? selectedCustomerCredit?.id
                     : undefined,
+                superTefPaymentId,
+                receivablePixIntentId:
+                  selectedPaymentMethod === 'PIX' ? confirmedPix?.intentId : undefined,
                 receivedAt,
                 discountAmount: installmentDiscountAmount,
                 interestAmount: installmentInterestAmount,
@@ -733,6 +847,7 @@ export default function FinanceiroManualSettlementPage() {
       }
 
       if (failureMessages.length === 0) {
+        setSuperTefAuthorization(null);
         setInstallments([]);
         setSettlementPreview(null);
         setCompletionState({
@@ -771,6 +886,104 @@ export default function FinanceiroManualSettlementPage() {
         type: 'error',
         title: 'Nenhuma parcela foi baixada',
         message: failureMessages[0] || 'Não foi possível registrar a baixa das parcelas selecionadas.',
+      });
+    } catch (error) {
+      setAlert({
+        type: 'error',
+        title: selectedPaymentMethod === 'PIX' ? 'Erro no PIX' : 'Erro ao processar baixa',
+        message: getFriendlyRequestErrorMessage(
+          error,
+          selectedPaymentMethod === 'PIX'
+            ? 'Não foi possível emitir ou confirmar o PIX no Sicoob.'
+            : 'Não foi possível processar a baixa.',
+        ),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!receivablePixIntent) return;
+    pixFinalizationRef.current = false;
+    let disposed = false;
+
+    const checkPayment = async () => {
+      if (pixFinalizationRef.current) return;
+      try {
+        const result = await requestJson<{ paid: boolean }>(
+          `/receivables/pix-intents/${receivablePixIntent.intentId}/status`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              sourceSystem: runtimeContext.sourceSystem,
+              sourceTenantId: runtimeContext.sourceTenantId,
+              requestedBy: runtimeContext.cashierUserId || undefined,
+            }),
+          },
+        );
+        if (!result.paid || disposed) return;
+
+        pixFinalizationRef.current = true;
+        const confirmedPix = {
+          intentId: receivablePixIntent.intentId,
+          settlementGroupId: receivablePixIntent.settlementGroupId,
+          bankMovementGroupId: receivablePixIntent.bankMovementGroupId,
+        };
+        setReceivablePixIntent(null);
+        setAlert({
+          type: 'success',
+          title: 'PIX confirmado',
+          message: 'Pagamento confirmado pelo Sicoob. Aplicando a baixa nas parcelas.',
+        });
+        await executeConfirmedSettlement(confirmedPix);
+      } catch {
+        // A cobrança permanece em consulta até confirmação, cancelamento ou fechamento.
+      }
+    };
+
+    void checkPayment();
+    const timer = window.setInterval(() => void checkPayment(), 5000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    receivablePixIntent,
+    runtimeContext.cashierUserId,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+  ]);
+
+  async function cancelReceivablePixPayment() {
+    if (!receivablePixIntent || isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      await requestJson(
+        `/receivables/pix-intents/${receivablePixIntent.intentId}/cancel`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            requestedBy: runtimeContext.cashierUserId || undefined,
+          }),
+        },
+      );
+      setReceivablePixIntent(null);
+      setAlert({
+        type: 'warning',
+        title: 'PIX cancelado',
+        message: 'A cobrança PIX foi cancelada e nenhuma parcela recebeu baixa.',
+      });
+    } catch (error) {
+      setAlert({
+        type: 'error',
+        title: 'Erro ao cancelar PIX',
+        message: getFriendlyRequestErrorMessage(
+          error,
+          'Não foi possível cancelar a cobrança PIX.',
+        ),
       });
     } finally {
       setIsSubmitting(false);
@@ -1059,7 +1272,10 @@ export default function FinanceiroManualSettlementPage() {
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setSelectedPaymentMethod(option.value)}
+                      onClick={() => {
+                        setSelectedPaymentMethod(option.value);
+                        setSuperTefAuthorization(null);
+                      }}
                       disabled={isSubmitting}
                       className={`rounded-2xl border px-3 py-2 text-left transition ${
                         isSelected
@@ -1085,14 +1301,16 @@ export default function FinanceiroManualSettlementPage() {
                     className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500"
                   >
                     <option value="">SELECIONE O BANCO</option>
-                    {banks.map((bank) => (
+                    {banks
+                      .filter((bank) => String(bank.billingProvider || '').toUpperCase() === 'SICOOB')
+                      .map((bank) => (
                       <option key={bank.id} value={bank.id}>
                         {buildBankLabel(bank)}
                       </option>
                     ))}
                   </select>
                   <div className="mt-2 text-xs font-semibold text-slate-500">
-                    O movimento em aberto será gerado para a conta bancária selecionada.
+                    O QR Code será emitido pelo Sicoob e a baixa ocorrerá somente após a confirmação bancária.
                   </div>
                 </label>
               ) : null}
@@ -1138,6 +1356,78 @@ export default function FinanceiroManualSettlementPage() {
           <div className="text-[11px] font-black uppercase tracking-[0.18em]">{alert.title}</div>
           <div className="mt-2">{alert.message}</div>
         </section>
+      ) : null}
+
+      {receivablePixIntent ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <section className={`${cardClass} w-full max-w-xl overflow-hidden`}>
+            <div className="flex items-center gap-4 bg-gradient-to-r from-[#061c3f] via-[#082a59] to-[#0b3d7a] px-6 py-5 text-white">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white">
+                {companyLogoUrl ? (
+                  <img
+                    src={companyLogoUrl}
+                    alt={`Logo de ${runtimeContext.companyName || 'ESCOLA'}`}
+                    className="h-full w-full object-contain p-2"
+                  />
+                ) : (
+                  <span className="text-sm font-black uppercase tracking-[0.2em] text-[#153a6a]">
+                    {String(runtimeContext.companyName || 'ESCOLA').slice(0, 3).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-200">
+                  PIX Sicoob
+                </div>
+                <h2 className="mt-1 text-xl font-black">Aguardando pagamento</h2>
+                <p className="mt-1 text-xs font-semibold text-blue-100">
+                  A baixa será realizada automaticamente após a confirmação bancária.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-6 text-center">
+              <div className="text-3xl font-black text-slate-950">
+                {formatCurrency(receivablePixIntent.amount)}
+              </div>
+              <div className="mx-auto mt-5 flex w-fit rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                <img
+                  src={receivablePixIntent.imageUrl}
+                  alt="QR Code PIX Sicoob"
+                  className="h-56 w-56"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(receivablePixIntent.pixCopyPaste)}
+                className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-blue-700 transition hover:bg-blue-100"
+              >
+                Copiar PIX copia e cola
+              </button>
+              {receivablePixIntent.ourNumber ? (
+                <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  TXID: {receivablePixIntent.ourNumber}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => void cancelReceivablePixPayment()}
+                disabled={isSubmitting}
+                className="rounded-2xl border border-rose-200 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+              >
+                Cancelar PIX
+              </button>
+              <ScreenNameCopy
+                screenId={PIX_QR_SCREEN_ID}
+                className="justify-end"
+                auditText="PIX de recebíveis emitido pelo Sicoob; baixa condicionada à confirmação bancária."
+              />
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {settlementPreview ? (

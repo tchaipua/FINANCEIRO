@@ -1,5 +1,7 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsIn,
   IsOptional,
@@ -236,6 +238,47 @@ export class SettleManualInstallmentDto extends BaseSettleInstallmentDto {
   @IsOptional()
   @IsString()
   customerCreditId?: string;
+
+  @IsOptional()
+  @IsString()
+  superTefPaymentId?: string;
+
+  @IsOptional()
+  @IsString()
+  receivablePixIntentId?: string;
+}
+
+export class ReceivablePixIntentContextDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+}
+
+export class CreateReceivablePixIntentDto extends ReceivablePixIntentContextDto {
+  @IsString()
+  operationId!: string;
+
+  @IsString()
+  settlementGroupId!: string;
+
+  @IsString()
+  bankAccountId!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  installmentIds!: string[];
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
 }
 
 export const INSTALLMENT_SETTLEMENT_HISTORY_STATUSES = ["ACTIVE", "INACTIVE", "ALL"] as const;

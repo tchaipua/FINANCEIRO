@@ -12,6 +12,7 @@ import {
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
+import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
 
 type ProductItem = {
   id: string;
@@ -79,6 +80,7 @@ type PaymentRow = {
   installmentCount: string;
   cardInstallmentCount: string;
   notes: string;
+  superTefPaymentId?: string;
 };
 
 type PaymentAmountModalState = {
@@ -188,12 +190,14 @@ type FinancialCustomersLookupResponse = {
 };
 
 type PixQrCodeState = {
-  saleId: string;
+  intentId: string;
   saleNumber: string;
   amount: number;
   pixCopyPaste: string;
   imageUrl: string;
   ourNumber?: string | null;
+  customer: CustomerState;
+  paymentRows: PaymentRow[];
 };
 
 type QuickCashSaleState = {
@@ -255,6 +259,7 @@ type VpSaleState = {
 type SubmitSaleOptions = {
   customerOverride?: CustomerState;
   paymentRowsOverride?: PaymentRow[];
+  pixIntentIdOverride?: string;
 };
 
 const SCREEN_ID = 'FINANCEIRO_VENDAS_PDV_GERAL';
@@ -867,6 +872,7 @@ function buildSalePayload(params: {
           ? Number.parseInt(payment.cardInstallmentCount || '1', 10)
           : undefined,
       notes: payment.notes || undefined,
+      superTefPaymentId: payment.superTefPaymentId || undefined,
     })),
     discountAmount: parseDecimal(saleDiscount),
     notes: notes || undefined,
@@ -968,6 +974,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const [errorMessage, setErrorMessage] = useState('');
   const [successSale, setSuccessSale] = useState<CreatedSale | null>(null);
   const [pixQrCode, setPixQrCode] = useState<PixQrCodeState | null>(null);
+  const [paidPixIntent, setPaidPixIntent] = useState<{ id: string; amount: number } | null>(null);
+  const pixFinalizationRef = useRef(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
 
   const screenId = visualVariant === 'v2'
@@ -1761,26 +1769,12 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     setIsSearchingCustomerPeople(false);
   }, [saleDraftStorageKey]);
 
-  useEffect(() => {
-    if (!pixQrCode) return;
-    let disposed = false;
-    const checkPayment = async () => {
-      try {
-        const result = await requestJson<{ paid: boolean; nfce?: CreatedSale['nfce'] }>(`/sales/${pixQrCode.saleId}/pix-qrcode/status`, { method: 'POST', body: JSON.stringify({ sourceSystem: runtimeContext.sourceSystem, sourceTenantId: runtimeContext.sourceTenantId, requestedBy: runtimeContext.cashierUserId || undefined }) });
-        if (result.paid && !disposed) { setPixQrCode(null); clearSale(); setCheckoutOpen(true); setCheckoutFeedback({ type: 'success', title: 'VENDA SALVA COM SUCESSO !!!', message: result.nfce?.status === 'AUTHORIZED' ? `Venda ${pixQrCode.saleNumber} confirmada após o pagamento PIX e NFC-e autorizada.` : `Venda ${pixQrCode.saleNumber} confirmada após o pagamento PIX. ${result.nfce?.statusMessage || ''}`.trim(), closeCheckoutOnOk: true }); await loadData(); }
-      } catch { /* nova consulta em seguida */ }
-    };
-    void checkPayment();
-    const timer = window.setInterval(() => void checkPayment(), 5000);
-    return () => { disposed = true; window.clearInterval(timer); };
-  }, [clearSale, loadData, pixQrCode, runtimeContext.cashierUserId, runtimeContext.sourceSystem, runtimeContext.sourceTenantId]);
-
   const cancelPixPayment = useCallback(async () => {
     if (!pixQrCode) return;
     setIsSubmitting(true);
     try {
-      await requestJson(`/sales/${pixQrCode.saleId}/pix-qrcode/cancel`, { method: 'POST', body: JSON.stringify({ sourceSystem: runtimeContext.sourceSystem, sourceTenantId: runtimeContext.sourceTenantId, cashierUserId: runtimeContext.cashierUserId || undefined, cashierDisplayName: runtimeContext.cashierDisplayName || undefined, requestedBy: runtimeContext.cashierUserId || undefined, reason: 'CANCELAMENTO DO PAGAMENTO PIX' }) });
-      setPixQrCode(null); setCheckoutTab('payment'); setCheckoutOpen(true); await loadData();
+      await requestJson(`/sales/pix-intents/${pixQrCode.intentId}/cancel`, { method: 'POST', body: JSON.stringify({ sourceSystem: runtimeContext.sourceSystem, sourceTenantId: runtimeContext.sourceTenantId, cashierUserId: runtimeContext.cashierUserId || undefined, cashierDisplayName: runtimeContext.cashierDisplayName || undefined, requestedBy: runtimeContext.cashierUserId || undefined, reason: 'CANCELAMENTO DO PAGAMENTO PIX' }) });
+      setPixQrCode(null); setPaidPixIntent(null); setCheckoutTab('payment'); setCheckoutOpen(true); await loadData();
     } catch (error) { setCheckoutFeedback({ type: 'error', title: 'ERRO AO CANCELAR PIX !!!', message: getFriendlyRequestErrorMessage(error, 'Não foi possível cancelar o pagamento PIX.') }); setCheckoutOpen(true); }
     finally { setIsSubmitting(false); }
   }, [loadData, pixQrCode, runtimeContext.cashierDisplayName, runtimeContext.cashierUserId, runtimeContext.sourceSystem, runtimeContext.sourceTenantId]);
@@ -2522,64 +2516,107 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       setCheckoutFeedback(null);
 
       try {
+        const pixPayment = effectivePaymentRows.find(
+          (payment) => payment.paymentMethod === 'PIX' && parseDecimal(payment.amount) > 0,
+        );
+        const pixAmount = parseDecimal(pixPayment?.amount || '0');
+        const effectivePixIntentId = options?.pixIntentIdOverride
+          || (paidPixIntent && Math.abs(paidPixIntent.amount - pixAmount) <= 0.01
+            ? paidPixIntent.id
+            : undefined);
+
+        if (pixPayment && !effectivePixIntentId) {
+          const issuedPix = await requestJson<{
+            intentId: string;
+            amount: number;
+            pixCopyPaste: string;
+            ourNumber?: string | null;
+          }>('/sales/pix-intents', {
+            method: 'POST',
+            body: JSON.stringify({
+              sourceSystem: runtimeContext.sourceSystem,
+              sourceTenantId: runtimeContext.sourceTenantId,
+              sourceBranchCode: runtimeContext.sourceBranchCode,
+              requestedBy: runtimeContext.cashierUserId || undefined,
+              operationId: globalThis.crypto?.randomUUID?.() || `PIX-${Date.now()}`,
+              amount: pixAmount,
+            }),
+            fallbackMessage: 'O Sicoob não confirmou a emissão do PIX.',
+          });
+          const imageUrl = await QRCode.toDataURL(issuedPix.pixCopyPaste, {
+            errorCorrectionLevel: 'M',
+            margin: 2,
+            width: 280,
+          });
+          setPixQrCode({
+            ...issuedPix,
+            saleNumber: 'EM PREPARAÇÃO',
+            imageUrl,
+            customer: effectiveCustomer,
+            paymentRows: effectivePaymentRows,
+          });
+          setCheckoutOpen(false);
+          return null;
+        }
+
+        let authorizedPaymentRows = effectivePaymentRows;
+        for (const payment of effectivePaymentRows.filter(
+          (item) =>
+            ['CREDIT_CARD', 'DEBIT_CARD'].includes(item.paymentMethod) &&
+            parseDecimal(item.amount) > 0 &&
+            !item.superTefPaymentId,
+        )) {
+          const authorized = await authorizeSuperTefCardPayment({
+            runtimeContext,
+            paymentMethod: payment.paymentMethod as
+              | 'CREDIT_CARD'
+              | 'DEBIT_CARD',
+            amount: parseDecimal(payment.amount),
+            installmentCount:
+              payment.paymentMethod === 'CREDIT_CARD'
+                ? Number.parseInt(payment.cardInstallmentCount || '1', 10)
+                : 1,
+            purpose: 'SALE',
+            businessReference: `VENDA-${Date.now()}`,
+            description: 'PAGAMENTO DE VENDA',
+            onStatus: (message) =>
+              setCheckoutFeedback({
+                type: 'success',
+                title: 'AGUARDANDO CARTÃO NO EMULADOR',
+                message,
+              }),
+          });
+          authorizedPaymentRows = authorizedPaymentRows.map((item) =>
+            item.id === payment.id
+              ? { ...item, superTefPaymentId: authorized.id }
+              : item,
+          );
+        }
+        if (!options?.paymentRowsOverride) {
+          setPaymentRows(authorizedPaymentRows);
+        }
+
         const payload = buildSalePayload({
           runtimeContext,
           saleChannel,
           customer: effectiveCustomer,
           cartItems,
-          paymentRows: effectivePaymentRows,
+          paymentRows: authorizedPaymentRows,
           saleDiscount,
           notes,
           allowSaleItemDiscount: branchSaleConfig.allowSaleItemDiscount,
         });
         const created = await requestJson<CreatedSale>('/sales', {
           method: 'POST',
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            pixIntentId: effectivePixIntentId,
+          }),
           fallbackMessage: 'Não foi possível confirmar a venda.',
         });
 
-        const pixPayment = effectivePaymentRows.find(
-          (payment) => payment.paymentMethod === 'PIX' && parseDecimal(payment.amount) > 0,
-        );
-        if (pixPayment) {
-          try {
-            const issuedPix = await requestJson<{
-              saleNumber: string;
-              amount: number;
-              pixCopyPaste: string;
-              ourNumber?: string | null;
-            }>(`/sales/${created.id}/pix-qrcode`, {
-              method: 'POST',
-              body: JSON.stringify({
-                sourceSystem: runtimeContext.sourceSystem,
-                sourceTenantId: runtimeContext.sourceTenantId,
-                requestedBy: runtimeContext.cashierUserId || undefined,
-              }),
-              fallbackMessage: 'O Sicoob não confirmou a emissão do PIX.',
-            });
-            const imageUrl = await QRCode.toDataURL(issuedPix.pixCopyPaste, {
-              errorCorrectionLevel: 'M',
-              margin: 2,
-              width: 280,
-            });
-            setPixQrCode({ ...issuedPix, saleId: created.id, imageUrl });
-            setCheckoutOpen(false);
-            return created;
-          } catch (error) {
-            clearSale();
-            setSuccessSale(created);
-            setCheckoutFeedback({
-              type: 'error',
-              title: 'VENDA CONFIRMADA — PIX PENDENTE !!!',
-              message: `A venda ${created.saleNumber} foi confirmada, mas o QR Code não foi emitido. ${getFriendlyRequestErrorMessage(error, 'Verifique a configuração do Sicoob antes de gerar o PIX.')} Não confirme a venda novamente.`,
-              closeCheckoutOnOk: true,
-            });
-            await loadData();
-            return created;
-          }
-        }
-
         clearSale();
+        setPaidPixIntent(null);
         setSuccessSale(created);
         setCheckoutFeedback({
           type: 'success',
@@ -2608,6 +2645,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       loadData,
       notes,
       paymentRows,
+      paidPixIntent,
       runtimeContext,
       saleChannel,
       saleDiscount,
@@ -2615,6 +2653,60 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       cartTotals.total,
     ],
   );
+
+  useEffect(() => {
+    if (!pixQrCode) return;
+    pixFinalizationRef.current = false;
+    let disposed = false;
+
+    const checkPayment = async () => {
+      if (pixFinalizationRef.current) return;
+      try {
+        const result = await requestJson<{ paid: boolean }>(
+          `/sales/pix-intents/${pixQrCode.intentId}/status`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              sourceSystem: runtimeContext.sourceSystem,
+              sourceTenantId: runtimeContext.sourceTenantId,
+              requestedBy: runtimeContext.cashierUserId || undefined,
+            }),
+          },
+        );
+        if (!result.paid || disposed) return;
+
+        pixFinalizationRef.current = true;
+        setPaidPixIntent({ id: pixQrCode.intentId, amount: pixQrCode.amount });
+        setPixQrCode(null);
+        setCheckoutOpen(true);
+        setCheckoutFeedback({
+          type: 'success',
+          title: 'PIX CONFIRMADO — AGUARDANDO CARTÃO',
+          message: 'PIX recebido. Agora passe o cartão de crédito ou débito no emulador.',
+        });
+        await submitSale({
+          customerOverride: pixQrCode.customer,
+          paymentRowsOverride: pixQrCode.paymentRows,
+          pixIntentIdOverride: pixQrCode.intentId,
+        });
+      } catch {
+        // A cobrança continua sendo consultada enquanto estiver aberta.
+      }
+    };
+
+    void checkPayment();
+    const timer = window.setInterval(() => void checkPayment(), 5000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    pixQrCode,
+    runtimeContext.cashierUserId,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+    submitSale,
+  ]);
 
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -2725,12 +2817,16 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                         />
                       )
                     ) : (
-                      <div className="mx-auto flex h-[240px] w-[240px] items-center justify-center rounded-[32px] border border-blue-100 bg-blue-50 text-[#082a59] shadow-inner">
-                        <svg className="h-20 w-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.35" aria-hidden="true">
-                          <path d="m3 7 9-4 9 4-9 4-9-4Z" />
-                          <path d="m3 7 9 4 9-4v10l-9 4-9-4V7Z" />
-                          <path d="M12 11v10" />
-                        </svg>
+                      <div className="flex flex-col items-center justify-center gap-4 text-center">
+                        <img
+                          src="/logo-msinfor.jpg"
+                          alt="Logotipo da tela de login"
+                          className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-blue-100 bg-white object-contain p-5 shadow-inner"
+                        />
+                        <div className="text-3xl font-black uppercase leading-[0.95] tracking-[0.12em] text-emerald-600">
+                          <div>CAIXA</div>
+                          <div>LIBERADO</div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4305,7 +4401,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                 screenId={PIX_QR_CODE_SCREEN_ID}
                 className="max-w-full justify-end rounded-xl bg-white px-2 py-1 text-right"
                 originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx"
-                auditText="QR Code PIX emitido pelo Sicoob para parcela aberta de venda."
+                auditText="QR Code PIX pré-venda emitido pelo Sicoob; cartão somente após a confirmação."
               />
             </div>
           </div>
@@ -4349,30 +4445,16 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
               {vpSaleState.phase === 'search' ? (
                 <>
                   <p className="text-sm font-semibold leading-6 text-slate-600">
-                    Pesquise pelo nome, CPF/CNPJ, telefone ou e-mail e selecione um cliente cadastrado.
+                    Digite o nome, CPF/CNPJ, telefone ou e-mail e selecione um cliente cadastrado.
                   </p>
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4">
                     <input
                       autoFocus
                       value={vpSaleState.search}
                       onChange={(event) => setVpSaleState((current) => current ? { ...current, search: event.target.value } : current)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          void performVPSearch(vpSaleState.search);
-                        }
-                      }}
                       className={inputClass}
                       placeholder="NOME, CPF/CNPJ, TELEFONE OU E-MAIL"
                     />
-                    <button
-                      type="button"
-                      onClick={() => void performVPSearch(vpSaleState.search)}
-                      disabled={vpSaleState.isSearching}
-                      className="shrink-0 rounded-xl bg-blue-700 px-4 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-lg shadow-blue-900/20 transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {vpSaleState.isSearching ? 'Buscando...' : 'Pesquisar'}
-                    </button>
                   </div>
                   <div className="mt-4 space-y-2">
                     {vpSaleState.results.map((person, index) => (

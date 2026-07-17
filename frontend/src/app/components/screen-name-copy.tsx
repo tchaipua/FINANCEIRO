@@ -424,6 +424,22 @@ WHERE RI.canceledAt IS NULL
   AND (:companyId IS NULL OR RI.companyId = :companyId)
 ORDER BY RI.dueDate ASC, PA.name ASC;`,
   },
+  POPUP_FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_PIX_SICOOB_QRCODE: {
+    originText: buildFinanceOriginText('recebiveis/baixa-manual/page.tsx'),
+    auditText: `--- LOGICA DA TELA ---
+Popup do QR Code PIX Sicoob para recebimento de parcelas.
+
+TABELAS PRINCIPAIS:
+- receivable_pix_intents (RPI) - intencao PIX, txid, valor e confirmacao bancaria
+- receivable_installments (RI) - parcelas autorizadas para a intencao
+- installment_settlements (IS) - baixas aplicadas somente apos o PIX pago
+
+REGRAS:
+- isolamento por empresa, filial e tenant
+- somente status PAID ou APPLIED permite baixar
+- valor acumulado das baixas nao pode superar o PIX confirmado
+- uma intencao pertence a um unico settlementGroupId`,
+  },
   FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_SUCESSO: {
     originText: buildFinanceOriginText('recebiveis/baixa-manual/page.tsx'),
     auditText: `--- LOGICA DA TELA ---

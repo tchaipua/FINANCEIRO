@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
@@ -14,6 +15,7 @@ type MenuItem = {
   description: string;
   title?: string;
   image: string;
+  adminOnly?: boolean;
 };
 
 const MENU_ITEMS: MenuItem[] = [
@@ -104,6 +106,16 @@ const MENU_ITEMS: MenuItem[] = [
     hostPath: '/principal/financeiro/vendas-2',
     description: 'Novo fluxo de vendas com consulta visual e foto dos produtos.',
     image: '/principal-financeiro/vendas.svg?v=1',
+    adminOnly: true,
+  },
+  {
+    id: 'msinfor',
+    label: 'MSINFOR',
+    href: '/msinfor',
+    hostPath: '/principal/financeiro/msinfor',
+    description: 'Central de integracoes e servicos compartilhados do Financeiro.',
+    image: '/logo-msinfor.jpg',
+    adminOnly: true,
   },
 ];
 
@@ -194,7 +206,7 @@ export default function FinanceiroHomePage() {
 
       <section className={`${cardClass} p-6`}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {MENU_ITEMS.filter((item) => item.id !== 'vendas-2' || runtimeContext.userRole === 'ADMIN').map((item) => {
+          {MENU_ITEMS.filter((item) => !item.adminOnly || runtimeContext.userRole === 'ADMIN').map((item) => {
             const shouldReturnToHost = runtimeContext.embedded && hostBaseUrl;
             const href = shouldReturnToHost
               ? `${hostBaseUrl}${item.hostPath}`
@@ -211,6 +223,28 @@ export default function FinanceiroHomePage() {
           })}
         </div>
       </section>
+
+      {!runtimeContext.embedded ? (
+        <section className={`${cardClass} px-6 py-4`}>
+          <ScreenNameCopy
+            screenId="FINANCEIRO_PORTAL"
+            className="justify-end"
+            originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/page.tsx"
+            auditText={`Portal compartilhado do Financeiro.
+
+Contexto atual:
+- sistema de origem: ${runtimeContext.sourceSystem || 'NÃO INFORMADO'}
+- tenant de origem: ${runtimeContext.sourceTenantId || 'NÃO INFORMADO'}
+- filial: ${runtimeContext.sourceBranchCode}
+- perfil: ${runtimeContext.userRole || 'NÃO INFORMADO'}
+
+Regra de acesso:
+- o card MSINFOR é exibido somente para perfil ADMIN
+- cada card preserva sourceSystem + sourceTenantId durante a navegação`}
+            sqlText="-- PORTAL DE NAVEGAÇÃO: ESTA TELA NÃO CONSULTA DADOS PERSISTIDOS."
+          />
+        </section>
+      ) : null}
 
     </div>
   );

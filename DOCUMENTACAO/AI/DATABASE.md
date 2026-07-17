@@ -349,3 +349,109 @@ Regras:
 - toda consulta e mutação respeita `companyId` e `branchCode`
 - inativação usa `canceledAt` e `canceledBy`; não existe exclusão física
 - títulos e parcelas mantêm seus snapshots históricos mesmo após atualização ou inativação do cliente
+
+## Intenções PIX de venda
+
+### `sale_pix_intents`
+
+Registra a cobrança PIX antes da confirmação da venda.
+
+- isolamento por `companyId`, `branchCode`, `sourceSystem` e `sourceTenantId`
+- `operationId` garante idempotência da emissão
+- estados principais: `CREATED`, `ISSUED`, `PAID`, `APPLIED`, `CANCELED` e `ERROR`
+- `appliedSaleId` é único e impede reutilização do PIX
+- QR Code, `txid`, conta emissora, respostas do provedor e campos de auditoria ficam preservados
+- não há exclusão física; cancelamento usa estado e campos `canceledAt/canceledBy`
+
+### `receivable_pix_intents`
+
+Registra o PIX automático usado na baixa de parcelas.
+
+- guarda tenant, filial, conta Sicoob, `txid`, QR Code, valor e `settlementGroupId`
+- `installmentIdsJson` limita quais parcelas podem consumir o pagamento
+- estados: `CREATED`, `ISSUED`, `PAID`, `APPLIED`, `CANCELED` e `ERROR`
+- `installment_settlements.receivablePixIntentId` preserva o vínculo auditável
+- o valor acumulado das liquidações vinculadas não pode superar o pagamento confirmado
+
+## Integração SuperTEF
+
+### `supertef_configurations`
+
+Configuração única por `companyId + branchCode + provider`.
+
+Regras:
+
+- o token da Software House fica somente em `accessTokenEncrypted`, usando AES-256-GCM
+- a API e o frontend nunca devolvem o token descriptografado
+- `tokenFingerprint` e `tokenHint` permitem identificar troca de credencial sem expor o segredo
+- ambiente, impressão, timeout, intervalo de consulta e situação ativa pertencem à empresa/filial
+- testes de conexão e sincronizações guardam data, situação e mensagem sem conteúdo secreto
+
+### `supertef_terminals`
+
+Espelho operacional das POS retornadas pelo SuperTEF.
+
+Regras:
+
+- identificação externa única por configuração e `providerPosId`
+- os campos externos `chave` e `token` não são persistidos
+- `operationalStatus` é local e pode marcar a máquina como `OUT_OF_SERVICE`
+- máquina não é apagada quando para de funcionar
+
+### `supertef_checkouts` e `supertef_checkout_routes`
+
+Cadastro dos pontos de venda físicos e suas prioridades.
+
+Regras:
+
+- a primeira rota ativa é a POS preferencial
+- as demais rotas são alternativas ordenadas
+- um checkout pode compartilhar alternativas com outros checkouts
+- rotas removidas e checkouts inativados usam cancelamento lógico
+- o futuro despachante de pagamentos deve ignorar POS fora de serviço e permitir somente uma cobrança simultânea por POS
+
+### `supertef_audit_events`
+
+Trilha append-only de toda mutação do módulo.
+
+Regras:
+
+- registra empresa, filial, usuário, ação, entidade, data e snapshots seguros
+- nunca armazena token, chave de ativação da POS ou outro segredo
+- eventos não são editados nem excluídos
+
+### `supertef_payments`
+
+Registro auditável das solicitações de débito e crédito enviadas ao SuperTEF.
+
+Regras:
+
+- toda operação pertence a `companyId + branchCode`
+- `operationId` é idempotente dentro da empresa/filial
+- `terminalLockKey` impede mais de uma cobrança simultânea na mesma POS
+- a trava é liberada somente quando o provedor retorna pagamento pago, rejeitado ou quando o envio falha
+- `providerPaymentUniqueId`, situação, pedido, valor e retorno operacional são preservados
+- token e chave de ativação da POS nunca são armazenados no pagamento
+- pagamento original não é apagado; estorno futuro deve criar operação própria e preservar o histórico
+- `purpose` distingue teste manual, venda e recebimento
+- `appliedEntityType + appliedEntityId + appliedAt` impedem reutilização
+- `sale_payments.superTefPaymentId` vincula uma autorização à venda
+- `installment_settlements.superTefPaymentId` permite uma autorização por grupo de parcelas
+
+### `bank_dda_records`
+
+Espelho persistente dos títulos DDA consultados por conta bancária.
+
+Regras:
+
+- isolamento por empresa, filial e conta
+- unicidade por `bankAccountId + externalId`
+- situação local `OPEN | CLOSED | CANCELED`
+- `paidAt` registra a data informada na baixa local
+- `bankStatus` preserva separadamente o estado recebido do banco
+- baixa e cancelamento são locais e não representam operação bancária
+- registros não são excluídos fisicamente
+
+### `bank_dda_audit_events`
+
+Trilha append-only de sincronização, baixa local e cancelamento local dos DDAs, com usuário, data e snapshots anterior/posterior.

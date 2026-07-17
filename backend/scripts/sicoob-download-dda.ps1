@@ -228,8 +228,11 @@ try {
   )
 
   $client = New-HttpClient -Certificate $certificate
-  $dataInicial = (Get-Date).Date.AddYears(-1).ToString('yyyy-MM-dd')
-  $dataFinal = (Get-Date).Date.AddYears(1).ToString('yyyy-MM-dd')
+  # O endpoint do Sicoob aceita no maximo 60 dias por consulta.
+  # A janela inclui 30 dias anteriores, o dia atual e 29 dias futuros.
+  $referenceDate = (Get-Date).Date
+  $dataInicial = $referenceDate.AddDays(-30).ToString('yyyy-MM-dd')
+  $dataFinal = $referenceDate.AddDays(29).ToString('yyyy-MM-dd')
   $scopeCandidates = @(
     'pagamentos_boletos_consultar',
     'openid pagamentos',

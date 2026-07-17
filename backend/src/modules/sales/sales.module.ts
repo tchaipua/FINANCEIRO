@@ -8,5 +8,6 @@ import { FiscalDocumentsModule } from "../fiscal-documents/fiscal-documents.modu
   imports: [FiscalDocumentsModule],
   controllers: [SalesController],
   providers: [SalesService, SicoobPixService],
+  exports: [SicoobPixService],
 })
 export class SalesModule {}

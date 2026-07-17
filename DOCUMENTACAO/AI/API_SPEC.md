@@ -731,3 +731,188 @@ Body resumido:
   "reason": "LANÇAMENTO INCORRETO"
 }
 ```
+
+## PIX pré-venda
+
+### `POST /sales/pix-intents`
+
+Emite uma cobrança PIX antes da autorização de cartão. Exige tenant, filial, `operationId` idempotente e valor.
+
+### `POST /sales/pix-intents/:intentId/status`
+
+Consulta o Sicoob. Somente a confirmação bancária altera a intenção para `PAID`.
+
+### `POST /sales/pix-intents/:intentId/cancel`
+
+Cancela uma cobrança ainda não paga nem aplicada.
+
+### Aplicação na venda
+
+- `POST /sales` recebe `pixIntentId` quando houver PIX pré-confirmado.
+- a intenção deve ser `PAID`, do mesmo tenant/filial e ter o mesmo valor da forma PIX.
+- a intenção é consumida uma única vez e muda para `APPLIED` na mesma transação da venda.
+- em pagamento misto, a ordem obrigatória é PIX confirmado, cartão aprovado no SuperTEF e confirmação transacional da venda.
+
+## PIX para baixa de recebíveis
+
+### `POST /receivables/pix-intents`
+
+Emite uma cobrança PIX Sicoob para um grupo de parcelas abertas. Exige conta Sicoob ativa, `settlementGroupId`, IDs das parcelas e valor.
+
+### `POST /receivables/pix-intents/:intentId/status`
+
+Consulta o Sicoob e altera a intenção para `PAID` somente após confirmação bancária.
+
+### `POST /receivables/pix-intents/:intentId/cancel`
+
+Cancela uma cobrança ainda não paga nem aplicada.
+
+### Aplicação na baixa
+
+- `POST /receivables/installments/:installmentId/settle-manual` exige `receivablePixIntentId` para `paymentMethod=PIX`.
+- a intenção deve pertencer ao mesmo tenant, filial, conta, grupo e conjunto de parcelas.
+- a soma das baixas não pode superar o valor PIX confirmado.
+- sem confirmação `PAID`, nenhuma parcela ou caixa é alterado.
+
+## SuperTEF
+
+Todos os endpoints abaixo exigem:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `sourceBranchCode`
+- contexto integrador com `userRole = ADMIN`
+
+### GET `/supertef/configuration`
+
+Consulta a configuração da empresa/filial. O token nunca é devolvido; a resposta contém somente `tokenConfigured`, `tokenHint` e `tokenFingerprint`.
+
+### PUT `/supertef/configuration`
+
+Cria ou atualiza a configuração protegida.
+
+Campos próprios:
+
+- `clientKey`
+- `accessToken`, obrigatório somente no primeiro cadastro ou na troca
+- `environment`: `HOMOLOGATION | PRODUCTION`
+- `active`
+- `printReceipt`
+- `operationTimeoutSeconds`: 30 a 300
+- `pollIntervalSeconds`: 2 a 15
+
+O token é criptografado com AES-256-GCM antes da persistência.
+
+### POST `/supertef/test-connection`
+
+Testa o token por `GET https://api.supertef.com.br/api/pos`, registra sucesso/falha e não grava dados secretos na auditoria.
+
+### GET `/supertef/terminals`
+
+Lista as POS sincronizadas da empresa/filial.
+
+### POST `/supertef/terminals/sync`
+
+Sincroniza as POS ativadas no SuperTEF. Os campos externos `chave` e `token` não são persistidos.
+
+### PATCH `/supertef/terminals/:terminalId/status`
+
+Altera a situação operacional local entre:
+
+- `ACTIVE`
+- `OUT_OF_SERVICE`
+
+A máquina permanece no histórico e nos vínculos; o roteamento operacional deve ignorar POS fora de serviço.
+
+### GET `/supertef/checkouts`
+
+Lista checkouts ativos com POS preferencial e alternativas ordenadas.
+
+### POST `/supertef/checkouts`
+
+Cria checkout e prioridades de POS.
+
+### PATCH `/supertef/checkouts/:checkoutId`
+
+Atualiza identificação e prioridades. A primeira POS é a preferencial.
+
+### POST `/supertef/checkouts/:checkoutId/inactivate`
+
+Inativa logicamente checkout e rotas, sem exclusão física.
+
+### GET `/supertef/audit`
+
+Lista a trilha append-only da configuração, conexão, POS e roteamento.
+
+### GET `/supertef/payments`
+
+Lista os pagamentos da empresa/filial atual, mais recentes primeiro.
+
+### POST `/supertef/payments`
+
+Solicita pagamento no endpoint oficial `POST /pagamentos`.
+
+Campos próprios:
+
+- `operationId`: identificador idempotente
+- `terminalId` ou `checkoutId`
+- `purpose`: `MANUAL | SALE | RECEIVABLE`
+- `businessReference`: referência funcional da venda ou grupo de baixas
+- `transactionType`: `DEBIT | CREDIT`
+- `installmentCount`: débito é sempre normalizado para 1
+- `amount`
+- `orderId`
+- `description`
+
+Regras:
+
+- primeira versão liberada somente para configuração `HOMOLOGATION`
+- débito envia `transaction_type = 1`
+- crédito envia `transaction_type = 2`
+- uma POS aceita somente uma cobrança simultânea
+- checkout usa a primeira POS ativa e livre conforme a prioridade configurada
+- toda solicitação e mudança de situação gera auditoria append-only
+- `SALE` e `RECEIVABLE` são enviados exclusivamente para a POS `EMULADOR 3120` durante a homologação
+- venda e baixa somente aceitam pagamento `PAID`, do mesmo tenant, filial, valor e modalidade
+- um pagamento não pode ser aplicado em mais de uma venda ou grupo de recebimentos
+
+### Integração operacional
+
+- `POST /sales` exige `payments[].superTefPaymentId` para `CREDIT_CARD` e `DEBIT_CARD`
+- `POST /receivables/installments/:installmentId/settle-manual` exige `superTefPaymentId` para cartão
+- estoque, caixa, venda e parcela são alterados somente depois da aprovação
+- várias parcelas do mesmo recebimento compartilham um pagamento e um `settlementGroupId`
+
+### POST `/supertef/payments/:paymentId/refresh`
+
+Consulta `GET /pagamentos/by-uniqueid/:paymentUniqueId`.
+
+Regras:
+
+- polling recomendado conforme `pollIntervalSeconds`, padrão 4 segundos
+- status SuperTEF `4` finaliza como `PAID`
+- status SuperTEF `5` finaliza como `REJECTED`
+- estados intermediários mantêm a POS bloqueada
+
+## DDA bancário
+
+### GET `/banks/:bankId/dda/open`
+
+Consulta os DDAs abertos no Sicoob, sincroniza o espelho local e devolve todo o histórico da conta.
+
+Regras:
+
+- grava por `companyId + branchCode + bankAccountId`
+- a chave externa da conta evita duplicidade
+- nova sincronização atualiza os dados bancários, mas preserva `CLOSED` e `CANCELED`
+- ausência temporária no retorno bancário não fecha nem exclui o registro local
+
+### POST `/banks/:bankId/dda/:ddaId/close`
+
+Marca o DDA como `CLOSED` somente no Financeiro. Exige `paymentDate`, grava a data do pagamento e não envia baixa ao banco.
+
+### POST `/banks/:bankId/dda/:ddaId/cancel`
+
+Marca o DDA como `CANCELED` somente no Financeiro. Não envia cancelamento ao banco.
+
+As duas mutações exigem escopo da empresa, aceitam observação e geram auditoria append-only.

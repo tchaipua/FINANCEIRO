@@ -13,6 +13,7 @@ import {
 } from "../../../common/finance-core.utils";
 import {
   ChangeBankStatusDto,
+  ChangeBankDdaStatusDto,
   GetBankDto,
   GetBankDdaDto,
   GetBankStatementDto,
@@ -565,7 +566,7 @@ export class BanksService {
   private buildDdaExternalId(
     bankAccountId: string,
     item: SicoobDdaBoleto,
-    index: number,
+    _index: number,
   ) {
     return createHash("sha1")
       .update(
@@ -577,7 +578,10 @@ export class BanksService {
           normalizeText(item.documentNumber),
           this.parseDdaDateOnly(item.dueDate),
           roundMoney(Math.abs(Number(item.amount || 0))),
-          index,
+          normalizeText(item.beneficiaryName),
+          normalizeDigits(item.beneficiaryDocument),
+          normalizeText(item.payerName),
+          normalizeDigits(item.payerDocument),
         ].join("|"),
       )
       .digest("hex");
@@ -636,6 +640,161 @@ export class BanksService {
         items.length === 1
           ? "1 DDA em aberto encontrado no Sicoob."
           : `${items.length} DDAs em aberto encontrados no Sicoob.`,
+    };
+  }
+
+  private mapPersistedDda(record: {
+    id: string;
+    externalId: string;
+    dueDate: string | null;
+    issueDate: string | null;
+    beneficiaryName: string;
+    beneficiaryDocument: string | null;
+    payerName: string | null;
+    payerDocument: string | null;
+    documentNumber: string | null;
+    digitableLine: string | null;
+    barcode: string | null;
+    amount: number;
+    status: string;
+    bankStatus: string | null;
+    localNotes: string | null;
+    firstSeenAt: Date;
+    lastSeenAt: Date;
+    statusChangedAt: Date | null;
+    statusChangedBy: string | null;
+    paidAt: Date | null;
+  }) {
+    return {
+      id: record.id,
+      externalId: record.externalId,
+      dueDate: record.dueDate,
+      issueDate: record.issueDate,
+      beneficiaryName: record.beneficiaryName,
+      beneficiaryDocument: record.beneficiaryDocument,
+      payerName: record.payerName,
+      payerDocument: record.payerDocument,
+      documentNumber: record.documentNumber,
+      digitableLine: record.digitableLine,
+      barcode: record.barcode,
+      amount: record.amount,
+      status: record.status,
+      bankStatus: record.bankStatus,
+      localNotes: record.localNotes,
+      firstSeenAt: record.firstSeenAt.toISOString(),
+      lastSeenAt: record.lastSeenAt.toISOString(),
+      statusChangedAt: record.statusChangedAt?.toISOString() || null,
+      statusChangedBy: record.statusChangedBy,
+      paidAt: record.paidAt?.toISOString() || null,
+    };
+  }
+
+  private async persistSicoobDda(
+    company: { id: string },
+    bank: {
+      id: string;
+      branchCode: number;
+      bankName: string;
+      branchNumber: string;
+      branchDigit?: string | null;
+      accountNumber: string;
+      accountDigit?: string | null;
+    },
+    mappedDda: MappedBankDda,
+    query: GetBankDdaDto,
+  ) {
+    const requestedBy = this.resolveStatementRequestedBy(query);
+    const pulledAt = new Date(mappedDda.pulledAt);
+    const seenAt = Number.isNaN(pulledAt.getTime()) ? new Date() : pulledAt;
+
+    const records = await this.prisma.$transaction(async (tx) => {
+      for (const item of mappedDda.items) {
+        const existing = await tx.bankDdaRecord.findUnique({
+          where: {
+            bankAccountId_externalId: {
+              bankAccountId: bank.id,
+              externalId: item.externalId,
+            },
+          },
+        });
+        const synchronizedData = {
+          companyId: company.id,
+          branchCode: bank.branchCode,
+          bankAccountId: bank.id,
+          externalId: item.externalId,
+          dueDate: item.dueDate,
+          issueDate: item.issueDate,
+          beneficiaryName: item.beneficiaryName,
+          beneficiaryDocument: item.beneficiaryDocument,
+          payerName: item.payerName,
+          payerDocument: item.payerDocument,
+          documentNumber: item.documentNumber,
+          digitableLine: item.digitableLine,
+          barcode: item.barcode,
+          amount: item.amount,
+          bankStatus: item.status,
+          rawPayloadJson: item.rawPayloadJson,
+          lastSeenAt: seenAt,
+          updatedBy: requestedBy,
+        };
+        const saved = existing
+          ? await tx.bankDdaRecord.update({
+              where: { id: existing.id },
+              data: synchronizedData,
+            })
+          : await tx.bankDdaRecord.create({
+              data: {
+                ...synchronizedData,
+                status: "OPEN",
+                firstSeenAt: seenAt,
+                createdBy: requestedBy,
+              },
+            });
+
+        await tx.bankDdaAuditEvent.create({
+          data: {
+            companyId: company.id,
+            branchCode: bank.branchCode,
+            bankDdaRecordId: saved.id,
+            action: existing ? "SYNCHRONIZED_FROM_BANK" : "CREATED_FROM_BANK",
+            summary: existing
+              ? "DDA ATUALIZADO PELA CONSULTA AO SICOOB."
+              : "DDA GRAVADO A PARTIR DA CONSULTA AO SICOOB.",
+            beforeJson: existing ? JSON.stringify(existing) : null,
+            afterJson: JSON.stringify(saved),
+            metadataJson: JSON.stringify({
+              provider: mappedDda.provider,
+              pulledAt: mappedDda.pulledAt,
+              bankStatus: item.status,
+            }),
+            performedBy: requestedBy,
+            createdBy: requestedBy,
+          },
+        });
+      }
+
+      return tx.bankDdaRecord.findMany({
+        where: {
+          companyId: company.id,
+          branchCode: bank.branchCode,
+          bankAccountId: bank.id,
+          canceledAt: null,
+        },
+        orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+      });
+    });
+
+    const items = records.map((record) => this.mapPersistedDda(record));
+    const openItems = items.filter((item) => item.status === "OPEN");
+
+    return {
+      ...mappedDda,
+      ddaCount: items.length,
+      openAmount: roundMoney(
+        openItems.reduce((total, item) => total + item.amount, 0),
+      ),
+      items,
+      message: `${mappedDda.items.length} DDA(s) sincronizado(s) com o Sicoob. ${items.length} registro(s) gravado(s) no Financeiro.`,
     };
   }
 
@@ -1906,7 +2065,7 @@ export class BanksService {
   }
 
   async getOpenDda(bankId: string, query: GetBankDdaDto) {
-    const { bank } = await this.loadScopedBank(
+    const { company, bank } = await this.loadScopedBank(
       bankId,
       query.sourceSystem,
       query.sourceTenantId,
@@ -1953,7 +2112,12 @@ export class BanksService {
         },
       );
 
-      return this.mapSicoobDda(bank, dda);
+      return this.persistSicoobDda(
+        company,
+        bank,
+        this.mapSicoobDda(bank, dda),
+        query,
+      );
     } catch (error) {
       if (error instanceof SicoobDdaApiError) {
         throw new BadRequestException(error.message);
@@ -1961,6 +2125,125 @@ export class BanksService {
 
       throw error;
     }
+  }
+
+  private async changeDdaLocalStatus(
+    bankId: string,
+    ddaId: string,
+    payload: ChangeBankDdaStatusDto,
+    targetStatus: "CLOSED" | "CANCELED",
+  ) {
+    const { bank } = await this.loadScopedBank(
+      bankId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const normalizedDdaId = String(ddaId || "").trim();
+
+    if (!normalizedDdaId) {
+      throw new BadRequestException("INFORME O DDA.");
+    }
+
+    const record = await this.prisma.bankDdaRecord.findFirst({
+      where: {
+        id: normalizedDdaId,
+        companyId: bank.companyId,
+        branchCode: bank.branchCode,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+    });
+
+    if (!record) {
+      throw new NotFoundException("DDA NÃO ENCONTRADO.");
+    }
+
+    if (record.status === targetStatus) {
+      return this.mapPersistedDda(record);
+    }
+
+    if (record.status !== "OPEN") {
+      throw new BadRequestException(
+        "SOMENTE UM DDA ABERTO PODE SER BAIXADO OU CANCELADO.",
+      );
+    }
+
+    const requestedBy = this.resolveStatementRequestedBy(payload);
+    const changedAt = new Date();
+    const localNotes = normalizeText(payload.notes) || null;
+    const paymentDate = String(payload.paymentDate || "").trim();
+    let paidAt: Date | null = null;
+    if (targetStatus === "CLOSED") {
+      if (!paymentDate) {
+        throw new BadRequestException("INFORME A DATA DO PAGAMENTO.");
+      }
+      paidAt = new Date(`${paymentDate.slice(0, 10)}T12:00:00.000Z`);
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
+        Number.isNaN(paidAt.getTime()) ||
+        paidAt.toISOString().slice(0, 10) !== paymentDate
+      ) {
+        throw new BadRequestException("INFORME UMA DATA DE PAGAMENTO VÁLIDA.");
+      }
+    }
+    const action =
+      targetStatus === "CLOSED" ? "CLOSED_LOCALLY" : "CANCELED_LOCALLY";
+    const summary =
+      targetStatus === "CLOSED"
+        ? "DDA BAIXADO SOMENTE NO CONTROLE LOCAL DO FINANCEIRO."
+        : "DDA CANCELADO SOMENTE NO CONTROLE LOCAL DO FINANCEIRO.";
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.bankDdaRecord.update({
+        where: { id: record.id },
+        data: {
+          status: targetStatus,
+          statusChangedAt: changedAt,
+          statusChangedBy: requestedBy,
+          paidAt,
+          localNotes,
+          updatedBy: requestedBy,
+        },
+      });
+
+      await tx.bankDdaAuditEvent.create({
+        data: {
+          companyId: bank.companyId,
+          branchCode: bank.branchCode,
+          bankDdaRecordId: saved.id,
+          action,
+          summary,
+          beforeJson: JSON.stringify(record),
+          afterJson: JSON.stringify(saved),
+          metadataJson: JSON.stringify({
+            affectsBank: false,
+            bankStatus: saved.bankStatus,
+          }),
+          performedBy: requestedBy,
+          createdBy: requestedBy,
+        },
+      });
+
+      return saved;
+    });
+
+    return this.mapPersistedDda(updated);
+  }
+
+  closeDdaLocally(
+    bankId: string,
+    ddaId: string,
+    payload: ChangeBankDdaStatusDto,
+  ) {
+    return this.changeDdaLocalStatus(bankId, ddaId, payload, "CLOSED");
+  }
+
+  cancelDdaLocally(
+    bankId: string,
+    ddaId: string,
+    payload: ChangeBankDdaStatusDto,
+  ) {
+    return this.changeDdaLocalStatus(bankId, ddaId, payload, "CANCELED");
   }
 
   async getStatement(bankId: string, query: GetBankStatementDto) {

@@ -174,7 +174,7 @@ FILTROS APLICADOS AGORA:
 - registros totais do caixa: ${totalCountText}
 
 ORDENAÇÃO:
-- movimentos exibidos por occurredAt ASC, conforme retorno da API do detalhe do caixa
+- movimentos exibidos por occurredAt DESC, do mais recente para o mais antigo
 
 OBSERVACAO SOBRE O FILTRO DA EMPRESA / TENANT:
 - cash_sessions.sourceTenantId e usado para isolar os dados da empresa/escola
@@ -226,7 +226,7 @@ LEFT JOIN cash_movements cm
 WHERE cs.id = ${toSqlLiteral(normalizedSessionId)}
   AND cs."canceledAt" IS NULL
   AND cs."sourceTenantId" = ${toSqlLiteral(normalizedSourceTenantId)}${sourceSystemWhere}${movementWhere}
-ORDER BY cm."occurredAt" ASC;`;
+ORDER BY cm."occurredAt" DESC;`;
 }
 
 function formatDateTimeLabel(value?: string | null) {
@@ -761,8 +761,16 @@ export default function FinanceiroCashDetailPage() {
 
   const filteredMovements = useMemo(() => {
     const movements = session?.movements || [];
-    if (!movementFilter) return movements;
-    return movements.filter(movementFilter.predicate);
+    const filtered = movementFilter
+      ? movements.filter(movementFilter.predicate)
+      : movements;
+
+    return [...filtered].sort((left, right) => {
+      const dateDifference =
+        new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime();
+      if (dateDifference !== 0) return dateDifference;
+      return String(right.id).localeCompare(String(left.id), 'pt-BR');
+    });
   }, [movementFilter, session]);
 
   const canceledMovementIds = useMemo(() => {

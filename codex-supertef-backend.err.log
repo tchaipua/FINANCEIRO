@@ -1,0 +1,4 @@
+Error: 
+EPERM: operation not permitted, rename 'C:\Sistemas\IA\Financeiro\backend\node_modules\.prisma\client\query_engine-windows.dll.node.tmp38496' -> 'C:\Sistemas\IA\Financeiro\backend\node_modules\.prisma\client\query_engine-windows.dll.node'
+
+

@@ -12,6 +12,7 @@ import { SalesModule } from "./modules/sales/sales.module";
 import { FinanceContextMiddleware } from "./common/finance-context.middleware";
 import { FiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documents.module";
 import { CustomersModule } from "./modules/customers/customers.module";
+import { SuperTefModule } from "./modules/supertef/supertef.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { CustomersModule } from "./modules/customers/customers.module";
     FiscalDocumentsModule,
     SalesModule,
     CustomersModule,
+    SuperTefModule,
   ],
 })
 export class AppModule implements NestModule {

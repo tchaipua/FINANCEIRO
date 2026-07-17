@@ -234,3 +234,79 @@ Decisão:
 Motivo:
 
 - permitir acertos operacionais rastreáveis sem editar ou apagar o histórico de estoque
+
+## D017 - Configuração e roteamento SuperTEF no Financeiro
+
+Decisão:
+
+- a integração SuperTEF pertence ao sistema `Financeiro`, para ser reutilizada por qualquer vertical
+- configuração, POS, checkouts e auditoria ficam em uma única tela com abas
+- o token da Software House é criptografado por empresa/filial e nunca retorna ao navegador
+- a URL oficial da API é fixa no backend para impedir alteração indevida e SSRF
+- cada checkout possui POS preferencial e alternativas ordenadas
+- POS fora de serviço permanece no histórico e pode ser compartilhada por vários checkouts quando voltar a operar
+- todas as mutações geram evento append-only sem dados secretos
+
+Motivo:
+
+- desacoplar meios de pagamento da Escola
+- permitir contingência entre vários checkouts e máquinas
+- preservar isolamento de tenant, segurança da credencial e rastreabilidade
+
+## D018 - Pagamento SuperTEF homologável e exclusão mútua por POS
+
+Decisão:
+
+- a primeira emissão operacional aceita débito e crédito somente no ambiente `HOMOLOGATION`
+- cada solicitação possui `operationId` idempotente
+- uma POS fica bloqueada enquanto o pagamento estiver em andamento
+- checkout escolhe a primeira POS ativa e livre conforme a prioridade
+- a situação é consultada pelo `payment_uniqueid` no intervalo configurado
+- pagamento pago ou rejeitado libera a POS; o registro original e a auditoria permanecem
+
+Motivo:
+
+- permitir homologação segura antes de liberar produção
+- impedir cobranças concorrentes na mesma SmartPOS
+- preservar rastreabilidade e evitar duplicidade por repetição de requisição
+
+## D019 - Cartão somente após aprovação SuperTEF
+
+Decisão:
+
+- vendas e baixas com cartão solicitam autorização antes da mutação financeira
+- durante a homologação operacional, o roteamento é fixo no `EMULADOR 3120`
+- somente `PAID` pode gerar venda, estoque, caixa ou liquidação
+- empresa, filial, modalidade e valor são revalidados no backend
+- a autorização é vinculada e não pode ser reutilizada
+
+Motivo:
+
+- impedir baixa fictícia por simples escolha da forma cartão
+- preservar atomicidade, isolamento de tenant e rastreabilidade
+- evitar venda ou recebimento quando o cliente rejeitar ou abandonar o cartão
+
+## D020 - PIX antes do cartão em venda mista
+
+- uma cobrança PIX pré-venda é emitida e persistida sem movimentar estoque, caixa ou venda
+- somente `PAID`, confirmado pelo Sicoob, libera a solicitação de crédito/débito no SuperTEF
+- a venda é confirmada apenas após PIX e cartão estarem aprovados
+- o PIX é aplicado à venda na mesma transação e não pode ser reutilizado
+- falha ou rejeição do cartão mantém o PIX pago disponível para nova tentativa da mesma venda, sem duplicar a cobrança
+
+## D021 - PIX confirmado antes da baixa de recebíveis
+
+- a baixa manual por PIX deixa de aceitar confirmação meramente operacional
+- o Financeiro emite cobrança dinâmica pelo Sicoob e consulta o status
+- somente `PAID` libera a liquidação das parcelas
+- a intenção limita tenant, filial, conta, grupo, parcelas e valor
+- falha após pagamento permite retomar as parcelas restantes com a mesma intenção, sem nova cobrança
+
+## D022 - DDA persistente com encerramento exclusivamente local
+
+- a consulta Sicoob passa a sincronizar um espelho local por empresa, filial e conta
+- a situação bancária fica separada da situação local
+- baixa e cancelamento alteram somente o Financeiro e nunca enviam comando ao banco
+- nova sincronização preserva registros fechados e cancelados
+- toda sincronização e mudança de situação gera auditoria append-only
+- títulos ausentes numa consulta posterior não são apagados nem encerrados automaticamente
