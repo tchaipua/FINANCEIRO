@@ -310,3 +310,192 @@ Motivo:
 - nova sincronização preserva registros fechados e cancelados
 - toda sincronização e mudança de situação gera auditoria append-only
 - títulos ausentes numa consulta posterior não são apagados nem encerrados automaticamente
+
+## D023 - NF-e modelo 55 centralizada no Financeiro e isolada por filial
+
+Decisão:
+
+- toda emissão NF-e pertence ao sistema `Financeiro`; Escola e futuras
+  verticais apenas enviam vendas/clientes e consomem a API fiscal;
+- identidade do emitente, certificado, série, numeração, natureza, tributação,
+  benefícios e automação pertencem a `companyId + branchCode`;
+- a NF-e usa leiaute 4.00 e os pacotes vigentes
+  `PL_010E_V1.02 + PL_010D_V1.03`;
+- o CNPJ é armazenado como texto e validado pelo algoritmo alfanumérico oficial
+  (ASCII menos 48, módulo 11);
+- em São Paulo, `cBenef` é informado apenas quando existir benefício aplicável;
+  para CSOSN 102 sem benefício o campo deve ser omitido;
+- o marcador `SEM CBENEF` é inválido e não pode ser persistido;
+- o catálogo paulista padrão nesta entrega é `20260626`;
+- emissão manual e automática reutilizam o mesmo serviço idempotente;
+- documento, tentativas, itens, duplicatas, eventos, XML, DANFE e auditoria
+  permanecem no Financeiro;
+- o perfil NF-e pode enviar DANFE/XML automaticamente após autorização e
+  também permite reenvio manual; o SMTP é isolado por filial/ambiente, a senha
+  fica criptografada e cada tentativa gera histórico e auditoria;
+- homologação exige um destinatário fixo de teste, evitando envio para o
+  contato real de clientes usados nos cenários de validação;
+- falha de e-mail nunca reverte nem altera uma autorização concedida pela
+  SEFAZ;
+- venda mista preserva a regra PIX confirmado antes do cartão;
+- para CRT 1, os grupos IBS/CBS não são forçados no cenário homologado de 2026;
+  a obrigatoriedade deve ser reavaliada antes de 04/01/2027.
+
+Motivo:
+
+- disponibilizar um único motor fiscal reutilizável por qualquer sistema;
+- impedir cruzamento de certificado, numeração ou regra entre filiais;
+- acompanhar as regras oficiais de CNPJ alfanumérico e `cBenef`;
+- preservar prova fiscal e rastreabilidade sem depender da interface da Escola.
+
+Fontes oficiais:
+
+- `https://portal.fazenda.sp.gov.br/servicos/nfe`
+- `https://portal.fazenda.sp.gov.br/servicos/nfe/Paginas/cBenef.aspx`
+- `https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=BMPFMBoln3w=`
+
+## D024 - NFS-e Nacional separada da NF-e e centralizada no Financeiro
+
+Decisão:
+
+- DPS/NFS-e usam agregado, tabelas, XML, numeração e APIs próprias;
+- emitente e certificado continuam sendo os mesmos dados fiscais da filial;
+- tomador/destinatário reutiliza `Party`; em duplicata, é o pagador do título,
+  sem cadastro separado;
+- XML 1.01 é assinado com A1 e transmitido via SEFIN Nacional com idempotência;
+- somente XML autorizado e DANFSe oficial são armazenados e enviados;
+- parâmetros municipais são consultados nas APIs nacionais e mantidos em cache
+  auditável;
+- o município fiscal nunca é substituído para contornar indisponibilidade no
+  ambiente restrito;
+- o validador comum aceita CNPJ alfanumérico, mas a DPS continua exigindo CNPJ
+  numérico enquanto o XSD NFS-e 1.01 oficial definir `TSCNPJ` com 14 dígitos.
+
+Motivo:
+
+- impedir acoplamento incorreto entre dois documentos fiscais diferentes;
+- manter um motor reutilizável por Escola e futuras verticais;
+- preservar validade jurídica, isolamento por filial e prova integral da API.
+
+Fontes oficiais:
+
+- `https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual`
+- `https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/apis-prod-restrita-e-producao`
+
+## D025 - Emissão fiscal manual independente de venda
+
+Decisão:
+
+- o portal Financeiro expõe cards próprios para emissão manual de NF-e e NFS-e;
+- a emissão manual não cria venda artificial nem movimenta estoque ou caixa;
+- destinatário/tomador reutiliza o mesmo `Party` usado como pagador das
+  duplicatas;
+- criar Contas a Receber é uma opção explícita do operador;
+- quando solicitado, o plano aceita de 1 a 60 parcelas e exige soma igual ao
+  valor líquido da nota;
+- título e parcelas só são persistidos depois da autorização fiscal;
+- documento fiscal e título permanecem vinculados e idempotentes por
+  empresa/filial/origem.
+
+Motivo:
+
+- permitir emissão avulsa sem falsificar uma operação de venda;
+- impedir cobrança de documento rejeitado;
+- manter cadastro único do cliente, isolamento por filial e rastreabilidade.
+
+## D026 - Pessoa única com papéis operacionais
+
+Decisão:
+
+- `Party` representa uma única identidade por empresa, resolvida primeiro por
+  CPF/CNPJ normalizado e depois pelas referências externas;
+- cliente, pagador, fornecedor, destinatário e tomador são registros em
+  `party_roles`, com escopo e inativação por filial;
+- IDs da Escola, do Projeto Inicial e de futuras verticais ficam em
+  `party_external_references`; `PERSON:<personId>` é a referência estável;
+- o cadastro mestre não é filtrado diretamente pela filial no middleware; toda
+  operação que lista ou seleciona pessoas exige papel ativo na filial;
+- fornecedores mantêm seus dados operacionais em `suppliers`, vinculados por
+  `partyId`;
+- duplicidades antigas não são apagadas: referências financeiras e fiscais são
+  redirecionadas à pessoa canônica, e os registros anteriores recebem marcação
+  de mesclagem, cancelamento lógico e auditoria;
+- e-mail não é chave de identidade; CPF/CNPJ aceita o formato alfanumérico
+  oficial.
+
+Motivo:
+
+- impedir que a mesma pessoa apareça várias vezes em vendas, recebíveis, NF-e
+  ou NFS-e;
+- preservar todos os papéis, filiais e identificadores de origem sem duplicar
+  dados civis;
+- manter histórico, auditoria e isolamento por empresa/filial.
+
+## D027 - Serviço NFS-e compartilhável entre filiais
+
+Decisão:
+
+- o serviço fiscal continua pertencendo a uma única empresa;
+- `branchCode=0` representa disponibilidade em todas as filiais da empresa;
+- serviço sem a opção compartilhada permanece exclusivo da filial atual;
+- consultas, configuração de perfil e emissão aceitam somente serviços da
+  filial atual ou compartilhados;
+- alteração e cancelamento mantêm soft delete, RBAC e auditoria existentes.
+
+Motivo:
+
+- evitar duplicação da mesma classificação fiscal de serviço em cada filial;
+- preservar isolamento total entre empresas e permitir exceções fiscais locais.
+
+## D028 - Múltiplas descrições por serviço fiscal NFS-e
+
+Decisão:
+
+- CNAE, NBS, tributação nacional/municipal e ISS permanecem no serviço fiscal;
+- cada serviço aceita de 1 a 30 descrições reutilizáveis;
+- a primeira descrição é a padrão e permanece espelhada no campo legado
+  `nfse_service_items.description`;
+- as demais ficam em `nfse_service_descriptions`, ordenadas, auditáveis e com
+  cancelamento lógico;
+- a emissão permite escolher uma descrição cadastrada e ainda editar o texto
+  específico que será preservado no snapshot da DPS;
+- a tela nacional é organizada em seis abas, uma para cada seção operacional.
+
+Motivo:
+
+- evitar duplicar toda a regra fiscal somente para variar o texto do serviço;
+- manter compatibilidade com integrações existentes e preservar o texto exato
+  emitido em cada documento.
+
+## D029 - Configurações corporativas compartilhadas com o Financeiro
+
+Decisão:
+
+- S3, SMTP e Telegram continuam sendo cadastrados na empresa ou filial do sistema de origem;
+- a configuração completa da filial tem prioridade e, na ausência dela, aplica-se a configuração da empresa;
+- o sistema de origem sincroniza o resultado efetivo com o Financeiro por API técnica autenticada;
+- o Financeiro mantém espelho por empresa e filial, criptografa todos os segredos e grava auditoria append-only;
+- segredos não passam pelo frontend, não são retornados por API e não são registrados em logs;
+- SMTP específico e completo de um perfil fiscal continua tendo prioridade sobre o SMTP corporativo.
+
+Motivo:
+
+- evitar cadastro duplicado e divergente em cada sistema consumidor;
+- permitir que o Financeiro use as configurações corporativas mantendo isolamento, segurança e rastreabilidade.
+
+## D030 - Sistema chamador como fonte oficial de empresa e filial
+
+Decisão:
+
+- empresas e filiais não podem ser incluídas manualmente no Financeiro;
+- código, nome, documento, endereço e contatos são espelhos somente leitura recebidos da origem;
+- a sincronização da origem informa todas as filiais ativas e desativa logicamente no espelho aquelas removidas da lista;
+- parâmetros financeiros, de estoque e comerciais podem ser editados na interface do Financeiro;
+- toda alteração desses parâmetros é enviada primeiro ao sistema de origem pelo contrato `PATCH /integrations/financeiro/company-branch-parameters`;
+- o Financeiro atualiza seu espelho somente depois da confirmação da origem e grava auditoria append-only nos dois sistemas;
+- cada novo sistema chamador configura sua própria URL e chave técnica por `sourceSystem` e implementa o mesmo contrato.
+
+Motivo:
+
+- impedir duplicidade e divergência cadastral entre sistemas;
+- manter uma única autoridade para empresa e filial sem retirar do Financeiro as parametrizações operacionais necessárias.

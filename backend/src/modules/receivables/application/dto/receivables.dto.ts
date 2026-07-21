@@ -39,6 +39,14 @@ export class ReceivablePayerImportDto {
   @IsString()
   externalEntityId!: string;
 
+  @IsOptional()
+  @IsString()
+  registeredPersonId?: string;
+
+  @IsOptional()
+  @IsString()
+  registeredPersonSourceType?: string;
+
   @IsString()
   name!: string;
 

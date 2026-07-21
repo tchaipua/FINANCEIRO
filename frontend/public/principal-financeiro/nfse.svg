@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" role="img" aria-labelledby="title desc">
+  <title id="title">Nota Fiscal de Serviço Eletrônica</title>
+  <desc id="desc">Documento fiscal com símbolo de serviço e confirmação</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset="1" stop-color="#dbeafe"/>
+    </linearGradient>
+  </defs>
+  <path d="M43 9h53l23 23v75a5 5 0 0 1-5 5H43a5 5 0 0 1-5-5V14a5 5 0 0 1 5-5Z" fill="url(#paper)" stroke="#1d4f91" stroke-width="5"/>
+  <path d="M96 9v23h23" fill="#bfdbfe" stroke="#1d4f91" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M55 47h47M55 60h47M55 73h25" stroke="#64748b" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="101" cy="85" r="25" fill="#16a34a" stroke="#fff" stroke-width="5"/>
+  <path d="m89 85 8 8 16-18" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24 34h8M20 47h12M24 60h8" stroke="#2563eb" stroke-width="5" stroke-linecap="round"/>
+</svg>

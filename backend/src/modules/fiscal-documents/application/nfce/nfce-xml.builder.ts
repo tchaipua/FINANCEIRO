@@ -1,5 +1,11 @@
 import { createHash, randomInt } from "crypto";
 import { BadRequestException } from "@nestjs/common";
+import {
+  assertValidCnpj,
+  calculateFiscalAccessKeyDigit,
+  isValidCnpj,
+  normalizeTaxId,
+} from "../../../../common/brazil-tax-id.utils";
 import { BuildNfceOptions, BuiltNfce, NfceItem } from "./nfce.types";
 
 const HOMOLOGATION_PRODUCT_DESCRIPTION =
@@ -35,18 +41,6 @@ function pad(value: number | string, length: number) {
   return digits(value).padStart(length, "0").slice(-length);
 }
 
-function modulo11(base: string) {
-  let weight = 2;
-  let sum = 0;
-  for (let index = base.length - 1; index >= 0; index -= 1) {
-    sum += Number(base[index]) * weight;
-    weight = weight === 9 ? 2 : weight + 1;
-  }
-  const remainder = sum % 11;
-  const digit = 11 - remainder;
-  return digit === 10 || digit === 11 ? "0" : String(digit);
-}
-
 function formatSaoPauloDate(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -65,23 +59,24 @@ function formatSaoPauloDate(date: Date) {
 
 function buildAccessKey(options: BuildNfceOptions, randomCode: string) {
   const stateCode = pad(options.issuer.stateCode, 2);
+  const issuerCnpj = assertValidCnpj(options.issuer.cnpj, "o CNPJ do emitente");
   const issuedAt = formatSaoPauloDate(options.issuedAt);
   const yearMonth = `${issuedAt.slice(2, 4)}${issuedAt.slice(5, 7)}`;
   const base = [
     stateCode,
     yearMonth,
-    pad(options.issuer.cnpj, 14),
+    issuerCnpj,
     "65",
     pad(options.series, 3),
     pad(options.number, 9),
     "1",
     pad(randomCode, 8),
   ].join("");
-  return `${base}${modulo11(base)}`;
+  return `${base}${calculateFiscalAccessKeyDigit(base)}`;
 }
 
 function validateOptions(options: BuildNfceOptions) {
-  if (digits(options.issuer.cnpj).length !== 14) {
+  if (!isValidCnpj(options.issuer.cnpj)) {
     throw new BadRequestException("O emitente da NFC-e precisa possuir CNPJ válido.");
   }
   if (!digits(options.issuer.stateRegistration)) {
@@ -224,16 +219,17 @@ export function buildNfceXml(options: BuildNfceOptions): BuiltNfce {
   const complementXml = issuer.complement ? `<xCpl>${escapeXml(issuer.complement)}</xCpl>` : "";
   const tradeNameXml = issuer.tradeName ? `<xFant>${escapeXml(issuer.tradeName)}</xFant>` : "";
   const phoneXml = digits(issuer.phone) ? `<fone>${digits(issuer.phone)}</fone>` : "";
-  const recipientDocument = digits(options.recipient?.document);
+  const recipientDocument = normalizeTaxId(options.recipient?.document) || "";
   const recipientName = homologation
     ? "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
     : options.recipient?.name;
-  const recipientXml = recipientDocument.length === 11 || recipientDocument.length === 14
+  const recipientXml =
+    (/^\d{11}$/.test(recipientDocument) || /^[0-9A-Z]{12}\d{2}$/.test(recipientDocument))
     ? `<dest><${recipientDocument.length === 11 ? "CPF" : "CNPJ"}>${recipientDocument}</${recipientDocument.length === 11 ? "CPF" : "CNPJ"}><xNome>${escapeXml(recipientName)}</xNome><indIEDest>9</indIEDest></dest>`
     : "";
 
   const ideXml = `<ide><cUF>${pad(issuer.stateCode, 2)}</cUF><cNF>${randomCode}</cNF><natOp>VENDA DE MERCADORIA</natOp><mod>65</mod><serie>${options.series}</serie><nNF>${options.number}</nNF><dhEmi>${issuedAt}</dhEmi><tpNF>1</tpNF><idDest>1</idDest><cMunFG>${pad(issuer.cityCode, 7)}</cMunFG><tpImp>4</tpImp><tpEmis>1</tpEmis><cDV>${checkDigit}</cDV><tpAmb>${homologation ? "2" : "1"}</tpAmb><finNFe>1</finNFe><indFinal>1</indFinal><indPres>1</indPres><procEmi>0</procEmi><verProc>${escapeXml(options.softwareVersion)}</verProc></ide>`;
-  const issuerXml = `<emit><CNPJ>${digits(issuer.cnpj)}</CNPJ><xNome>${escapeXml(issuer.legalName)}</xNome>${tradeNameXml}<enderEmit><xLgr>${escapeXml(issuer.street)}</xLgr><nro>${escapeXml(issuer.number)}</nro>${complementXml}<xBairro>${escapeXml(issuer.neighborhood)}</xBairro><cMun>${pad(issuer.cityCode, 7)}</cMun><xMun>${escapeXml(issuer.city)}</xMun><UF>${escapeXml(issuer.state)}</UF><CEP>${pad(issuer.postalCode, 8)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais>${phoneXml}</enderEmit><IE>${digits(issuer.stateRegistration)}</IE><CRT>${issuer.taxRegimeCode}</CRT></emit>`;
+  const issuerXml = `<emit><CNPJ>${normalizeTaxId(issuer.cnpj)}</CNPJ><xNome>${escapeXml(issuer.legalName)}</xNome>${tradeNameXml}<enderEmit><xLgr>${escapeXml(issuer.street)}</xLgr><nro>${escapeXml(issuer.number)}</nro>${complementXml}<xBairro>${escapeXml(issuer.neighborhood)}</xBairro><cMun>${pad(issuer.cityCode, 7)}</cMun><xMun>${escapeXml(issuer.city)}</xMun><UF>${escapeXml(issuer.state)}</UF><CEP>${pad(issuer.postalCode, 8)}</CEP><cPais>1058</cPais><xPais>BRASIL</xPais>${phoneXml}</enderEmit><IE>${digits(issuer.stateRegistration)}</IE><CRT>${issuer.taxRegimeCode}</CRT></emit>`;
   const icmsTotalXml = `<ICMSTot><vBC>${money(totals.icmsBase)}</vBC><vICMS>${money(totals.icms)}</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>${money(totals.products)}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>${money(totals.discount)}</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>${money(invoiceTotal)}</vNF><vTotTrib>0.00</vTotTrib></ICMSTot>`;
   const ibsCbsTotalXml = `<IBSCBSTot><vBCIBSCBS>${money(totals.ibsCbsBase)}</vBCIBSCBS><gIBS><gIBSUF><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSUF>${money(totals.ibsUf)}</vIBSUF></gIBSUF><gIBSMun><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSMun>${money(totals.ibsMunicipal)}</vIBSMun></gIBSMun><vIBS>${money(totals.ibs)}</vIBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gIBS><gCBS><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vCBS>${money(totals.cbs)}</vCBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gCBS></IBSCBSTot><vNFTot>${money(invoiceTotal + totals.ibs + totals.cbs)}</vNFTot>`;
   const unsignedXml = [

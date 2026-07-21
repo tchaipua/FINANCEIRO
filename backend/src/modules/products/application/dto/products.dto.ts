@@ -280,5 +280,109 @@ export class SaveProductDto {
 
   @IsOptional()
   @IsString()
+  fiscalDescription?: string;
+
+  @IsOptional()
+  @IsString()
+  gtinCode?: string;
+
+  @IsOptional()
+  @IsString()
+  taxableGtinCode?: string;
+
+  @IsOptional()
+  @IsString()
+  taxableUnitCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.000001)
+  taxableConversionFactor?: number;
+
+  @IsOptional()
+  @IsString()
+  exTipiCode?: string;
+
+  @IsOptional()
+  @IsString()
+  fiscalOriginCode?: string;
+
+  @IsOptional()
+  @IsString()
+  defaultCfopCode?: string;
+
+  @IsOptional()
+  @IsString()
+  icmsCsosnCode?: string;
+
+  @IsOptional()
+  @IsString()
+  icmsCstCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  icmsRate?: number;
+
+  @IsOptional()
+  @IsString()
+  pisCstCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  pisRate?: number;
+
+  @IsOptional()
+  @IsString()
+  cofinsCstCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  cofinsRate?: number;
+
+  @IsOptional()
+  @IsString()
+  ipiCstCode?: string;
+
+  @IsOptional()
+  @IsString()
+  ipiFrameworkCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  ipiRate?: number;
+
+  @IsOptional()
+  @IsString()
+  fiscalBenefitCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  approximateTaxRate?: number;
+
+  @IsOptional()
+  @IsString()
+  ibsCbsCstCode?: string;
+
+  @IsOptional()
+  @IsString()
+  ibsCbsClassCode?: string;
+
+  @IsOptional()
+  @IsString()
+  fiscalNotes?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
 }

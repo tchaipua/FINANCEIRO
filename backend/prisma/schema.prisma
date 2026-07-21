@@ -8,69 +8,197 @@ datasource db {
 }
 
 model Company {
-  id                      String                   @id @default(uuid())
-  sourceSystem            String
-  sourceTenantId          String
-  name                    String
-  document                String?
-  status                  String                   @default("ACTIVE")
-  interestRate            Float?
-  interestGracePeriod     Int?
-  penaltyRate             Float?
-  penaltyValue            Float?
-  penaltyGracePeriod      Int?
-  createdAt               DateTime                 @default(now())
-  createdBy               String?
-  updatedAt               DateTime                 @updatedAt
-  updatedBy               String?
-  canceledAt              DateTime?
-  canceledBy              String?
-  bankAccounts            BankAccount[]
-  fiscalCertificates      FiscalCertificate[]
-  nfceProfiles            NfceProfile[]
-  fiscalDocuments         FiscalDocument[]
-  fiscalDocumentAttempts  FiscalDocumentAttempt[]
-  products                Product[]
-  suppliers               Supplier[]
-  parties                 Party[]
-  payableInvoiceImports   PayableInvoiceImport[]
-  payableTitles           PayableTitle[]
-  payableInstallments     PayableInstallment[]
-  stockMovements          StockMovement[]
-  productStockBalances    ProductStockBalance[]
-  receivableBatches       ReceivableBatch[]
-  receivableTitles        ReceivableTitle[]
-  receivableInstallments  ReceivableInstallment[]
-  bankReturnImports       BankReturnImport[]
-  bankReturnImportItems   BankReturnImportItem[]
-  bankStatementImports    BankStatementImport[]
-  bankStatementMovements  BankStatementMovement[]
-  bankDdaRecords          BankDdaRecord[]
-  bankDdaAuditEvents      BankDdaAuditEvent[]
-  cashSessions            CashSession[]
-  cashMovements           CashMovement[]
-  settlements             InstallmentSettlement[]
-  customerCredits         CustomerCredit[]
-  customerCreditMovements CustomerCreditMovement[]
-  branches                CompanyBranch[]
-  sales                   Sale[]
-  saleReturns             SaleReturn[]
-  saleItems               SaleItem[]
-  saleReturnItems         SaleReturnItem[]
-  salePayments            SalePayment[]
-  salePixIntents          SalePixIntent[]
-  receivablePixIntents    ReceivablePixIntent[]
-  screenParameters        ScreenParameter[]
-  superTefConfigurations  SuperTefConfiguration[]
-  superTefTerminals       SuperTefTerminal[]
-  superTefCheckouts       SuperTefCheckout[]
-  superTefCheckoutRoutes  SuperTefCheckoutRoute[]
-  superTefPayments        SuperTefPayment[]
-  superTefAuditEvents     SuperTefAuditEvent[]
+  id                         String                        @id @default(uuid())
+  sourceSystem               String
+  sourceTenantId             String
+  name                       String
+  document                   String?
+  status                     String                        @default("ACTIVE")
+  interestRate               Float?
+  interestGracePeriod        Int?
+  penaltyRate                Float?
+  penaltyValue               Float?
+  penaltyGracePeriod         Int?
+  createdAt                  DateTime                      @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime                      @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
+  bankAccounts               BankAccount[]
+  fiscalCertificates         FiscalCertificate[]
+  nfceProfiles               NfceProfile[]
+  nfeProfiles                NfeProfile[]
+  nfseProfiles               NfseProfile[]
+  nfseServiceItems           NfseServiceItem[]
+  nfseServiceDescriptions    NfseServiceDescription[]
+  nfseDocuments              NfseDocument[]
+  nfseDocumentAttempts       NfseDocumentAttempt[]
+  nfseDocumentEmails         NfseEmailDelivery[]
+  nfseMunicipalParameters    NfseMunicipalParameter[]
+  fiscalOperationNatures     FiscalOperationNature[]
+  fiscalTaxRules             FiscalTaxRule[]
+  fiscalBenefitCodes         FiscalBenefitCode[]
+  fiscalDocuments            FiscalDocument[]
+  fiscalDocumentAttempts     FiscalDocumentAttempt[]
+  fiscalDocumentItems        FiscalDocumentItem[]
+  fiscalDocumentInstallments FiscalDocumentInstallment[]
+  fiscalDocumentEvents       FiscalDocumentEvent[]
+  fiscalDocumentEmails       FiscalDocumentEmailDelivery[]
+  fiscalNumberInutilizations FiscalNumberInutilization[]
+  fiscalAuditEvents          FiscalAuditEvent[]
+  products                   Product[]
+  suppliers                  Supplier[]
+  parties                    Party[]
+  partyRoles                 PartyRole[]
+  partyExternalReferences    PartyExternalReference[]
+  partyAuditEvents           PartyAuditEvent[]
+  payableInvoiceImports      PayableInvoiceImport[]
+  payableTitles              PayableTitle[]
+  payableInstallments        PayableInstallment[]
+  stockMovements             StockMovement[]
+  productStockBalances       ProductStockBalance[]
+  receivableBatches          ReceivableBatch[]
+  receivableTitles           ReceivableTitle[]
+  receivableInstallments     ReceivableInstallment[]
+  bankReturnImports          BankReturnImport[]
+  bankReturnImportItems      BankReturnImportItem[]
+  bankStatementImports       BankStatementImport[]
+  bankStatementMovements     BankStatementMovement[]
+  bankDdaRecords             BankDdaRecord[]
+  bankDdaAuditEvents         BankDdaAuditEvent[]
+  cashSessions               CashSession[]
+  cashMovements              CashMovement[]
+  settlements                InstallmentSettlement[]
+  customerCredits            CustomerCredit[]
+  customerCreditMovements    CustomerCreditMovement[]
+  branches                   CompanyBranch[]
+  sales                      Sale[]
+  saleReturns                SaleReturn[]
+  saleItems                  SaleItem[]
+  saleReturnItems            SaleReturnItem[]
+  salePayments               SalePayment[]
+  salePixIntents             SalePixIntent[]
+  receivablePixIntents       ReceivablePixIntent[]
+  screenParameters           ScreenParameter[]
+  superTefConfigurations     SuperTefConfiguration[]
+  superTefTerminals          SuperTefTerminal[]
+  superTefCheckouts          SuperTefCheckout[]
+  superTefCheckoutRoutes     SuperTefCheckoutRoute[]
+  superTefPayments           SuperTefPayment[]
+  superTefAuditEvents        SuperTefAuditEvent[]
+  s3Configurations          S3Configuration[]
+  s3AuditEvents             S3AuditEvent[]
+  sourceIntegrationConfigurations SourceIntegrationConfiguration[]
+  sourceIntegrationAuditEvents SourceIntegrationAuditEvent[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
   @@map("companies")
+}
+
+model S3Configuration {
+  id                   String   @id @default(uuid())
+  companyId            String
+  branchCode           Int      @default(1)
+  status               String   @default("ACTIVE")
+  endpoint             String?
+  region               String   @default("us-east-1")
+  bucket               String
+  basePrefix           String
+  capacityGb           Float?
+  imagesFolder         String?
+  sourceScope          String?
+  accessKeyEncrypted   String
+  secretKeyEncrypted   String
+  forcePathStyle       Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  createdBy            String?
+  updatedAt            DateTime @updatedAt
+  updatedBy            String?
+  canceledAt           DateTime?
+  canceledBy           String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("s3_configurations")
+}
+
+model S3AuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  entityType   String
+  entityId     String?
+  action       String
+  summary      String
+  metadataJson String?
+  occurredAt   DateTime @default(now())
+  performedBy  String?
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, branchCode, entityType, entityId])
+  @@map("s3_audit_events")
+}
+
+model SourceIntegrationConfiguration {
+  id                        String    @id @default(uuid())
+  companyId                 String
+  branchCode                Int       @default(1)
+  status                    String    @default("ACTIVE")
+  smtpHost                  String?
+  smtpPort                  Int?
+  smtpTimeout               Int?
+  smtpAuthenticate          Boolean?
+  smtpSecure                Boolean?
+  smtpAuthType              String?
+  smtpEmail                 String?
+  smtpPasswordEncrypted     String?
+  smtpSourceScope           String?
+  telegramEnabled           Boolean?
+  telegramBotTokenEncrypted String?
+  telegramBotUsername       String?
+  telegramSourceScope       String?
+  storageDefaultAcl         String?
+  storageDefaultExpiration  Int?
+  storageSourceScope        String?
+  lastSyncedAt              DateTime  @default(now())
+  createdAt                 DateTime  @default(now())
+  createdBy                 String?
+  updatedAt                 DateTime  @updatedAt
+  updatedBy                 String?
+  canceledAt                DateTime?
+  canceledBy                String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("source_integration_configurations")
+}
+
+model SourceIntegrationAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  action       String
+  summary      String
+  metadataJson String?
+  occurredAt   DateTime @default(now())
+  performedBy  String?
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@map("source_integration_audit_events")
 }
 
 model CompanyBranch {
@@ -90,6 +218,25 @@ model CompanyBranch {
   stockNegativeControlMode   String    @default("BY_PRODUCT")
   allowSaleUnitPriceEdit     Boolean   @default(true)
   allowSaleItemDiscount      Boolean   @default(true)
+  fiscalLegalName            String?
+  fiscalTradeName            String?
+  fiscalDocument             String?
+  stateRegistration          String?
+  municipalRegistration      String?
+  taxRegimeCode              String?
+  fiscalStreet               String?
+  fiscalNumber               String?
+  fiscalComplement           String?
+  fiscalNeighborhood         String?
+  fiscalCity                 String?
+  fiscalCityCode             String?
+  fiscalState                String?
+  fiscalStateCode            String?
+  fiscalPostalCode           String?
+  fiscalCountryCode          String?   @default("1058")
+  fiscalCountryName          String?   @default("BRASIL")
+  fiscalPhone                String?
+  fiscalEmail                String?
   createdAt                  DateTime  @default(now())
   createdBy                  String?
   updatedAt                  DateTime  @updatedAt
@@ -320,35 +467,58 @@ model SuperTefPayment {
 }
 
 model Product {
-  id                    String    @id @default(uuid())
-  companyId             String
-  branchCode            Int       @default(1)
-  status                String    @default("ACTIVE")
-  name                  String
-  internalCode          String?
-  sku                   String?
-  barcode               String?
-  unitCode              String    @default("UN")
-  productType           String    @default("GOODS")
-  tracksInventory       Boolean   @default(true)
-  allowFraction         Boolean   @default(false)
-  usesColorSize         Boolean   @default(false)
-  usesLotControl        Boolean   @default(false)
-  usesExpirationControl Boolean   @default(false)
-  allowsNegativeStock   Boolean   @default(false)
-  currentStock          Float     @default(0)
-  minimumStock          Float     @default(0)
-  purchasePrice         Float?
-  salePrice             Float?
-  ncmCode               String?
-  cestCode              String?
-  notes                 String?
-  createdAt             DateTime  @default(now())
-  createdBy             String?
-  updatedAt             DateTime  @updatedAt
-  updatedBy             String?
-  canceledAt            DateTime?
-  canceledBy            String?
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  status                  String    @default("ACTIVE")
+  name                    String
+  internalCode            String?
+  sku                     String?
+  barcode                 String?
+  unitCode                String    @default("UN")
+  productType             String    @default("GOODS")
+  tracksInventory         Boolean   @default(true)
+  allowFraction           Boolean   @default(false)
+  usesColorSize           Boolean   @default(false)
+  usesLotControl          Boolean   @default(false)
+  usesExpirationControl   Boolean   @default(false)
+  allowsNegativeStock     Boolean   @default(false)
+  currentStock            Float     @default(0)
+  minimumStock            Float     @default(0)
+  purchasePrice           Float?
+  salePrice               Float?
+  ncmCode                 String?
+  cestCode                String?
+  fiscalDescription       String?
+  gtinCode                String?
+  taxableGtinCode         String?
+  taxableUnitCode         String?
+  taxableConversionFactor Float     @default(1)
+  exTipiCode              String?
+  fiscalOriginCode        String?
+  defaultCfopCode         String?
+  icmsCsosnCode           String?
+  icmsCstCode             String?
+  icmsRate                Float?
+  pisCstCode              String?
+  pisRate                 Float?
+  cofinsCstCode           String?
+  cofinsRate              Float?
+  ipiCstCode              String?
+  ipiFrameworkCode        String?
+  ipiRate                 Float?
+  fiscalBenefitCode       String?
+  approximateTaxRate      Float?
+  ibsCbsCstCode           String?
+  ibsCbsClassCode         String?
+  fiscalNotes             String?
+  notes                   String?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
 
   company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImportItems PayableInvoiceImportItem[]
@@ -356,6 +526,8 @@ model Product {
   stockBalances             ProductStockBalance[]
   saleItems                 SaleItem[]
   saleReturnItems           SaleReturnItem[]
+  fiscalTaxRules            FiscalTaxRule[]
+  fiscalDocumentItems       FiscalDocumentItem[]
 
   @@unique([companyId, branchCode, internalCode])
   @@unique([companyId, branchCode, sku])
@@ -428,6 +600,8 @@ model FiscalCertificate {
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
   payableInvoiceImports PayableInvoiceImport[]
   nfceProfiles          NfceProfile[]
+  nfeProfiles           NfeProfile[]
+  nfseProfiles          NfseProfile[]
   fiscalDocuments       FiscalDocument[]
 
   @@index([companyId, status, environment, purpose, aliasName])
@@ -438,6 +612,7 @@ model Supplier {
   id                String    @id @default(uuid())
   companyId         String
   branchCode        Int       @default(1)
+  partyId           String?
   status            String    @default("ACTIVE")
   legalName         String
   tradeName         String?
@@ -454,11 +629,14 @@ model Supplier {
   canceledBy        String?
 
   company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party                 Party?                 @relation(fields: [partyId], references: [id], onDelete: SetNull)
   payableInvoiceImports PayableInvoiceImport[]
   payableTitles         PayableTitle[]
 
   @@unique([companyId, branchCode, document])
+  @@unique([companyId, branchCode, partyId])
   @@index([companyId, status, legalName])
+  @@index([partyId])
   @@map("suppliers")
 }
 
@@ -730,6 +908,7 @@ model Sale {
   payments        SalePayment[]
   returns         SaleReturn[]
   fiscalDocument  FiscalDocument?
+  nfseDocuments   NfseDocument[]
 
   @@unique([companyId, branchCode, saleNumber])
   @@index([companyId, branchCode, status, confirmedAt])
@@ -944,32 +1123,154 @@ model NfceProfile {
   @@map("nfce_profiles")
 }
 
-model FiscalDocument {
+model NfeProfile {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  certificateId              String
+  defaultOperationNatureId   String?
+  status                     String    @default("ACTIVE")
+  environment                String    @default("HOMOLOGATION")
+  autoIssueOnSale            Boolean   @default(false)
+  series                     Int       @default(1)
+  nextNumber                 Int       @default(1)
+  emissionType               String    @default("NORMAL")
+  danfeLayout                String    @default("PORTRAIT")
+  softwareVersion            String    @default("MSINFOR FIN 1.0")
+  schemaVersion              String    @default("PL_010E_V1.02+PL_010D_V1.03")
+  cbenefCatalogVersion       String    @default("20260626")
+  sendEmailToRecipient       Boolean   @default(false)
+  smtpHost                   String?
+  smtpPort                   Int?
+  smtpSecure                 Boolean   @default(true)
+  smtpAuthenticate           Boolean   @default(true)
+  smtpUsername               String?
+  smtpPasswordEncrypted      String?
+  smtpFromEmail              String?
+  smtpFromName               String?
+  smtpTimeoutSeconds         Int       @default(60)
+  homologationEmailRecipient String?
+  additionalInformation      String?
+  technicalResponsibleCnpj   String?
+  technicalResponsibleName   String?
+  technicalResponsibleEmail  String?
+  technicalResponsiblePhone  String?
+  csrtId                     String?
+  csrtHash                   String?
+  createdAt                  DateTime  @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
+
+  company                Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  certificate            FiscalCertificate           @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  defaultOperationNature FiscalOperationNature?      @relation("NfeProfileDefaultOperation", fields: [defaultOperationNatureId], references: [id], onDelete: SetNull)
+  documents              FiscalDocument[]
+  inutilizations         FiscalNumberInutilization[]
+
+  @@unique([companyId, branchCode, environment, series])
+  @@index([companyId, branchCode, status, autoIssueOnSale])
+  @@map("nfe_profiles")
+}
+
+model NfseProfile {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  certificateId              String
+  defaultServiceItemId       String?
+  status                     String    @default("ACTIVE")
+  environment                String    @default("HOMOLOGATION")
+  autoIssueOnSale            Boolean   @default(false)
+  series                     Int       @default(1)
+  nextNumber                 Int       @default(1)
+  softwareVersion            String    @default("MSINFOR FIN 1.0")
+  schemaVersion              String    @default("1.01")
+  simpleNationalOption       Int       @default(3)
+  simpleNationalTaxRegime    Int?      @default(1)
+  specialTaxRegime           Int       @default(0)
+  sendEmailToRecipient       Boolean   @default(false)
+  smtpHost                   String?
+  smtpPort                   Int?
+  smtpSecure                 Boolean   @default(true)
+  smtpAuthenticate           Boolean   @default(true)
+  smtpUsername               String?
+  smtpPasswordEncrypted      String?
+  smtpFromEmail              String?
+  smtpFromName               String?
+  smtpTimeoutSeconds         Int       @default(60)
+  homologationEmailRecipient String?
+  lastMunicipalCheckAt       DateTime?
+  lastMunicipalCheckStatus   String?
+  lastMunicipalCheckMessage  String?
+  createdAt                  DateTime  @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
+
+  company            Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  certificate        FiscalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  defaultServiceItem NfseServiceItem?  @relation("NfseProfileDefaultService", fields: [defaultServiceItemId], references: [id], onDelete: SetNull)
+  documents          NfseDocument[]
+
+  @@unique([companyId, branchCode, environment, series])
+  @@index([companyId, branchCode, status, autoIssueOnSale])
+  @@map("nfse_profiles")
+}
+
+model NfseServiceItem {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  status                     String    @default("ACTIVE")
+  internalCode               String
+  name                       String
+  description                String
+  cnaeCode                   String?
+  nationalTaxCode            String
+  municipalTaxCode           String?
+  nbsCode                    String?
+  serviceCityCode            String
+  issTaxationCode            String    @default("1")
+  issWithholdingCode         String    @default("1")
+  issRate                    Float?
+  pisCofinsCst               String    @default("00")
+  pisRate                    Float?
+  cofinsRate                 Float?
+  simpleNationalTotalTaxRate Float?
+  ibsCbsEnabled              Boolean   @default(false)
+  ibsCbsCst                  String?
+  ibsCbsClassCode            String?
+  isDefault                  Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
+
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  defaultInProfiles NfseProfile[]            @relation("NfseProfileDefaultService")
+  descriptions      NfseServiceDescription[]
+  documents         NfseDocument[]
+
+  @@unique([companyId, branchCode, internalCode])
+  @@index([companyId, branchCode, status, nationalTaxCode])
+  @@map("nfse_service_items")
+}
+
+model NfseServiceDescription {
   id            String    @id @default(uuid())
   companyId     String
-  branchCode    Int       @default(1)
-  saleId        String    @unique
-  profileId     String
-  certificateId String
-  model         String    @default("65")
-  environment   String
-  series        Int
-  number        Int
-  randomCode    String?
-  accessKey     String?   @unique
-  status        String    @default("PENDING")
-  statusCode    String?
-  statusMessage String?
-  protocol      String?
-  receivedAt    DateTime?
-  issuedAt      DateTime
-  qrCodeUrl     String?
-  signedXml     String?
-  responseXml   String?
-  processedXml  String?
-  attemptCount  Int       @default(0)
-  lastAttemptAt DateTime?
-  lastError     String?
+  branchCode    Int
+  serviceItemId String
+  status        String    @default("ACTIVE")
+  text          String
+  sortOrder     Int       @default(0)
   createdAt     DateTime  @default(now())
   createdBy     String?
   updatedAt     DateTime  @updatedAt
@@ -977,14 +1278,365 @@ model FiscalDocument {
   canceledAt    DateTime?
   canceledBy    String?
 
-  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sale        Sale                    @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  profile     NfceProfile             @relation(fields: [profileId], references: [id], onDelete: Restrict)
-  certificate FiscalCertificate       @relation(fields: [certificateId], references: [id], onDelete: Restrict)
-  attempts    FiscalDocumentAttempt[]
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  serviceItem NfseServiceItem @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceItemId, text])
+  @@index([companyId, branchCode, serviceItemId, status, sortOrder])
+  @@map("nfse_service_descriptions")
+}
+
+model NfseDocument {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int
+  profileId           String
+  serviceItemId       String?
+  takerPartyId        String
+  receivableTitleId   String?
+  saleId              String?
+  sourceSystem        String
+  sourceTenantId      String
+  sourceEntityType    String
+  sourceEntityId      String
+  idempotencyKey      String
+  receivablePlanJson  String?
+  environment         String
+  series              Int
+  number              Int
+  dpsId               String
+  accessKey           String?   @unique
+  nationalNfseNumber  String?
+  status              String    @default("PENDING")
+  statusCode          String?
+  statusMessage       String?
+  competenceDate      DateTime
+  issuedAt            DateTime
+  serviceCityCode     String
+  grossAmount         Float
+  discountAmount      Float     @default(0)
+  deductionAmount     Float     @default(0)
+  netAmount           Float
+  issuerSnapshotJson  String
+  takerSnapshotJson   String
+  serviceSnapshotJson String
+  taxSnapshotJson     String
+  signedDpsXml        String?
+  requestJson         String?
+  responseJson        String?
+  authorizedXml       String?
+  danfseFileName      String?
+  danfsePdfBlob       Bytes?
+  danfseDownloadedAt  DateTime?
+  attemptCount        Int       @default(0)
+  lastAttemptAt       DateTime?
+  lastError           String?
+  emailSentAt         DateTime?
+  emailError          String?
+  createdAt           DateTime  @default(now())
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt
+  updatedBy           String?
+  canceledAt          DateTime?
+  canceledBy          String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  profile         NfseProfile           @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  serviceItem     NfseServiceItem?      @relation(fields: [serviceItemId], references: [id], onDelete: SetNull)
+  takerParty      Party                 @relation(fields: [takerPartyId], references: [id], onDelete: Restrict)
+  receivableTitle ReceivableTitle?      @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  sale            Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  attempts        NfseDocumentAttempt[]
+  emailDeliveries NfseEmailDelivery[]
+
+  @@unique([companyId, branchCode, environment, series, number])
+  @@unique([companyId, branchCode, environment, dpsId])
+  @@unique([companyId, branchCode, idempotencyKey])
+  @@index([companyId, branchCode, status, issuedAt])
+  @@index([companyId, takerPartyId, issuedAt])
+  @@index([receivableTitleId])
+  @@index([saleId])
+  @@map("nfse_documents")
+}
+
+model NfseDocumentAttempt {
+  id             String    @id @default(uuid())
+  companyId      String
+  nfseDocumentId String
+  attemptNumber  Int
+  operation      String    @default("ISSUE")
+  status         String
+  httpStatus     Int?
+  statusCode     String?
+  statusMessage  String?
+  requestJson    String?
+  responseJson   String?
+  errorMessage   String?
+  attemptedAt    DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  nfseDocument NfseDocument @relation(fields: [nfseDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([nfseDocumentId, attemptNumber])
+  @@index([companyId, attemptedAt])
+  @@map("nfse_document_attempts")
+}
+
+model NfseEmailDelivery {
+  id              String    @id @default(uuid())
+  companyId       String
+  branchCode      Int
+  nfseDocumentId  String
+  recipientEmail  String
+  subject         String
+  status          String    @default("PENDING")
+  messageId       String?
+  attemptedAt     DateTime  @default(now())
+  sentAt          DateTime?
+  errorMessage    String?
+  attachmentsJson String?
+  createdAt       DateTime  @default(now())
+  createdBy       String?
+  updatedAt       DateTime  @updatedAt
+  updatedBy       String?
+  canceledAt      DateTime?
+  canceledBy      String?
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  nfseDocument NfseDocument @relation(fields: [nfseDocumentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, recipientEmail, attemptedAt])
+  @@index([nfseDocumentId, status, attemptedAt])
+  @@map("nfse_email_deliveries")
+}
+
+model NfseMunicipalParameter {
+  id               String    @id @default(uuid())
+  cacheKey         String    @unique
+  companyId        String
+  branchCode       Int
+  environment      String
+  municipalityCode String
+  nationalTaxCode  String?
+  competence       String?
+  parameterType    String
+  requestPath      String
+  status           String
+  httpStatus       Int?
+  responseJson     String?
+  errorMessage     String?
+  fetchedAt        DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, environment, municipalityCode, nationalTaxCode, competence, parameterType])
+  @@index([companyId, branchCode, environment, municipalityCode, fetchedAt])
+  @@map("nfse_municipal_parameters")
+}
+
+model FiscalOperationNature {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int
+  status                String    @default("ACTIVE")
+  code                  String
+  name                  String
+  documentModel         String    @default("55")
+  operationType         String    @default("OUTBOUND")
+  destinationType       String    @default("INTERNAL")
+  purposeCode           String    @default("1")
+  cfopCode              String
+  finalConsumer         Boolean   @default(true)
+  presenceIndicator     String    @default("1")
+  intermediaryIndicator String?
+  freightMode           String    @default("9")
+  isDefault             Boolean   @default(false)
+  additionalInformation String?
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt
+  updatedBy             String?
+  canceledAt            DateTime?
+  canceledBy            String?
+
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  taxRules          FiscalTaxRule[]
+  defaultInProfiles NfeProfile[]     @relation("NfeProfileDefaultOperation")
+  documents         FiscalDocument[]
+
+  @@unique([companyId, branchCode, code])
+  @@index([companyId, branchCode, status, documentModel])
+  @@map("fiscal_operation_natures")
+}
+
+model FiscalTaxRule {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int
+  operationNatureId       String
+  productId               String?
+  status                  String    @default("ACTIVE")
+  name                    String
+  priority                Int       @default(100)
+  originCode              String    @default("0")
+  icmsCsosnCode           String?
+  icmsCstCode             String?
+  icmsBaseMode            String?
+  icmsRate                Float     @default(0)
+  icmsBaseReductionRate   Float     @default(0)
+  icmsStRate              Float     @default(0)
+  fcpRate                 Float     @default(0)
+  difalDestinationRate    Float     @default(0)
+  difalInterstateRate     Float     @default(0)
+  fiscalBenefitCode       String?
+  fiscalBenefitRequired   Boolean   @default(false)
+  fiscalBenefitLegalBasis String?
+  pisCstCode              String    @default("49")
+  pisRate                 Float     @default(0)
+  cofinsCstCode           String    @default("49")
+  cofinsRate              Float     @default(0)
+  ipiCstCode              String?
+  ipiFrameworkCode        String?
+  ipiRate                 Float     @default(0)
+  ibsCbsEnabled           Boolean   @default(false)
+  ibsCbsCstCode           String?
+  ibsCbsClassCode         String?
+  ibsStateRate            Float     @default(0)
+  ibsMunicipalRate        Float     @default(0)
+  cbsRate                 Float     @default(0)
+  selectiveTaxCode        String?
+  selectiveTaxRate        Float     @default(0)
+  validFrom               DateTime?
+  validTo                 DateTime?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  operationNature FiscalOperationNature @relation(fields: [operationNatureId], references: [id], onDelete: Restrict)
+  product         Product?              @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, operationNatureId, status, priority])
+  @@index([companyId, branchCode, productId])
+  @@map("fiscal_tax_rules")
+}
+
+model FiscalBenefitCode {
+  id                     String    @id @default(uuid())
+  companyId              String
+  branchCode             Int
+  stateCode              String
+  code                   String
+  catalogVersion         String
+  status                 String    @default("ACTIVE")
+  description            String
+  legalBasis             String?
+  observations           String?
+  simpleNationalEligible Boolean   @default(false)
+  cstCodesJson           String?
+  validFrom              DateTime?
+  validTo                DateTime?
+  sourceUrl              String?
+  createdAt              DateTime  @default(now())
+  createdBy              String?
+  updatedAt              DateTime  @updatedAt
+  updatedBy              String?
+  canceledAt             DateTime?
+  canceledBy             String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, stateCode, code, catalogVersion])
+  @@index([companyId, branchCode, stateCode, status, code])
+  @@map("fiscal_benefit_codes")
+}
+
+model FiscalDocument {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  saleId                  String?   @unique
+  receivableTitleId       String?
+  sourceSystem            String?
+  sourceTenantId          String?
+  sourceEntityType        String?
+  sourceEntityId          String?
+  idempotencyKey          String?
+  receivablePlanJson      String?
+  profileId               String?
+  nfeProfileId            String?
+  operationNatureId       String?
+  recipientPartyId        String?
+  certificateId           String
+  model                   String    @default("65")
+  environment             String
+  series                  Int
+  number                  Int
+  randomCode              String?
+  accessKey               String?   @unique
+  status                  String    @default("PENDING")
+  statusCode              String?
+  statusMessage           String?
+  protocol                String?
+  receivedAt              DateTime?
+  issuedAt                DateTime
+  qrCodeUrl               String?
+  operationNatureSnapshot String?
+  issuerSnapshotJson      String?
+  recipientSnapshotJson   String?
+  totalsSnapshotJson      String?
+  paymentSnapshotJson     String?
+  schemaVersion           String?
+  danfeFileName           String?
+  danfePdfBlob            Bytes?
+  danfeGeneratedAt        DateTime?
+  signedXml               String?
+  responseXml             String?
+  processedXml            String?
+  attemptCount            Int       @default(0)
+  lastAttemptAt           DateTime?
+  lastError               String?
+  createdAt               DateTime  @default(now())
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt
+  updatedBy               String?
+  canceledAt              DateTime?
+  canceledBy              String?
+
+  company         Company                       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale            Sale?                         @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  receivableTitle ReceivableTitle?              @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  profile         NfceProfile?                  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  nfeProfile      NfeProfile?                   @relation(fields: [nfeProfileId], references: [id], onDelete: Restrict)
+  operationNature FiscalOperationNature?        @relation(fields: [operationNatureId], references: [id], onDelete: Restrict)
+  recipientParty  Party?                        @relation(fields: [recipientPartyId], references: [id], onDelete: SetNull)
+  certificate     FiscalCertificate             @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  attempts        FiscalDocumentAttempt[]
+  items           FiscalDocumentItem[]
+  installments    FiscalDocumentInstallment[]
+  events          FiscalDocumentEvent[]
+  emailDeliveries FiscalDocumentEmailDelivery[]
 
   @@unique([companyId, branchCode, model, series, number])
+  @@unique([companyId, branchCode, idempotencyKey])
   @@index([companyId, branchCode, status, issuedAt])
+  @@index([companyId, branchCode, sourceEntityType, sourceEntityId])
+  @@index([receivableTitleId])
   @@map("fiscal_documents")
 }
 
@@ -1014,6 +1666,184 @@ model FiscalDocumentAttempt {
   @@unique([fiscalDocumentId, attemptNumber])
   @@index([companyId, attemptedAt])
   @@map("fiscal_document_attempts")
+}
+
+model FiscalDocumentItem {
+  id                String    @id @default(uuid())
+  companyId         String
+  fiscalDocumentId  String
+  productId         String?
+  lineNumber        Int
+  productCode       String
+  description       String
+  ncmCode           String
+  cestCode          String?
+  cfopCode          String
+  unitCode          String
+  quantity          Float
+  unitPrice         Float
+  grossAmount       Float
+  discountAmount    Float     @default(0)
+  totalAmount       Float
+  originCode        String
+  icmsCode          String
+  pisCstCode        String
+  cofinsCstCode     String
+  fiscalBenefitCode String?
+  taxDetailsJson    String
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+  product        Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([fiscalDocumentId, lineNumber])
+  @@index([companyId, fiscalDocumentId])
+  @@map("fiscal_document_items")
+}
+
+model FiscalDocumentInstallment {
+  id                String    @id @default(uuid())
+  companyId         String
+  fiscalDocumentId  String
+  installmentNumber Int
+  reference         String
+  dueDate           DateTime
+  amount            Float
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([fiscalDocumentId, installmentNumber])
+  @@index([companyId, dueDate])
+  @@map("fiscal_document_installments")
+}
+
+model FiscalDocumentEvent {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int
+  fiscalDocumentId String
+  eventType        String
+  sequence         Int       @default(1)
+  status           String    @default("PENDING")
+  statusCode       String?
+  statusMessage    String?
+  protocol         String?
+  eventAt          DateTime
+  justification    String?
+  correctionText   String?
+  signedXml        String?
+  responseXml      String?
+  processedXml     String?
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([fiscalDocumentId, eventType, sequence])
+  @@index([companyId, branchCode, eventType, eventAt])
+  @@map("fiscal_document_events")
+}
+
+model FiscalDocumentEmailDelivery {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int
+  fiscalDocumentId String
+  recipientEmail   String
+  subject          String
+  status           String    @default("PENDING")
+  messageId        String?
+  attemptedAt      DateTime  @default(now())
+  sentAt           DateTime?
+  errorMessage     String?
+  attachmentsJson  String?
+  createdAt        DateTime  @default(now())
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt
+  updatedBy        String?
+  canceledAt       DateTime?
+  canceledBy       String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, recipientEmail, attemptedAt])
+  @@index([fiscalDocumentId, status, attemptedAt])
+  @@map("fiscal_document_email_deliveries")
+}
+
+model FiscalNumberInutilization {
+  id            String    @id @default(uuid())
+  companyId     String
+  branchCode    Int
+  nfeProfileId  String
+  environment   String
+  model         String    @default("55")
+  series        Int
+  startNumber   Int
+  endNumber     Int
+  year          Int
+  status        String    @default("PENDING")
+  statusCode    String?
+  statusMessage String?
+  protocol      String?
+  justification String
+  signedXml     String?
+  responseXml   String?
+  processedXml  String?
+  createdAt     DateTime  @default(now())
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt
+  updatedBy     String?
+  canceledAt    DateTime?
+  canceledBy    String?
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  nfeProfile NfeProfile @relation(fields: [nfeProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, environment, model, series, year, startNumber, endNumber])
+  @@index([companyId, branchCode, status, createdAt])
+  @@map("fiscal_number_inutilizations")
+}
+
+model FiscalAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int
+  entityType   String
+  entityId     String
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now())
+  performedBy  String?
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, entityType, entityId, occurredAt])
+  @@map("fiscal_audit_events")
 }
 
 model SaleReturn {
@@ -1216,20 +2046,89 @@ model BankDdaAuditEvent {
 }
 
 model Party {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int       @default(1)
+  externalEntityType         String
+  externalEntityId           String
+  name                       String
+  document                   String?
+  documentNormalized         String?
+  stateRegistration          String?
+  municipalRegistration      String?
+  stateRegistrationIndicator String?   @default("9")
+  email                      String?
+  phone                      String?
+  addressLine1               String?
+  street                     String?
+  addressNumber              String?
+  addressComplement          String?
+  neighborhood               String?
+  city                       String?
+  cityCode                   String?
+  state                      String?
+  postalCode                 String?
+  countryCode                String?   @default("1058")
+  countryName                String?   @default("BRASIL")
+  mergedIntoPartyId          String?
+  mergedAt                   DateTime?
+  mergedBy                   String?
+  mergeReason                String?
+  createdAt                  DateTime  @default(now())
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String?
+  canceledAt                 DateTime?
+  canceledBy                 String?
+
+  company            Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  roles              PartyRole[]
+  externalReferences PartyExternalReference[]
+  auditEvents        PartyAuditEvent[]
+  suppliers          Supplier[]
+  receivableTitles   ReceivableTitle[]
+  sales              Sale[]
+  fiscalDocuments    FiscalDocument[]
+  nfseDocuments      NfseDocument[]
+
+  @@unique([companyId, branchCode, externalEntityType, externalEntityId])
+  @@unique([companyId, documentNormalized])
+  @@index([companyId, name])
+  @@index([companyId, documentNormalized, canceledAt])
+  @@map("parties")
+}
+
+model PartyRole {
+  id         String    @id @default(uuid())
+  companyId  String
+  partyId    String
+  branchCode Int       @default(1)
+  roleType   String
+  createdAt  DateTime  @default(now())
+  createdBy  String?
+  updatedAt  DateTime  @updatedAt
+  updatedBy  String?
+  canceledAt DateTime?
+  canceledBy String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, partyId, branchCode, roleType])
+  @@index([companyId, branchCode, roleType, canceledAt])
+  @@index([partyId, canceledAt])
+  @@map("party_roles")
+}
+
+model PartyExternalReference {
   id                 String    @id @default(uuid())
   companyId          String
+  partyId            String
   branchCode         Int       @default(1)
+  sourceSystem       String
+  sourceTenantId     String
   externalEntityType String
   externalEntityId   String
-  name               String
-  document           String?
-  email              String?
-  phone              String?
-  addressLine1       String?
-  neighborhood       String?
-  city               String?
-  state              String?
-  postalCode         String?
   createdAt          DateTime  @default(now())
   createdBy          String?
   updatedAt          DateTime  @updatedAt
@@ -1237,13 +2136,36 @@ model Party {
   canceledAt         DateTime?
   canceledBy         String?
 
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  receivableTitles ReceivableTitle[]
-  sales            Sale[]
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Restrict)
 
-  @@unique([companyId, branchCode, externalEntityType, externalEntityId])
-  @@index([companyId, name])
-  @@map("parties")
+  @@unique([companyId, sourceSystem, sourceTenantId, externalEntityType, externalEntityId])
+  @@index([companyId, branchCode, externalEntityType, canceledAt])
+  @@index([partyId, canceledAt])
+  @@map("party_external_references")
+}
+
+model PartyAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  partyId      String
+  branchCode   Int      @default(1)
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now())
+  performedBy  String?
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([partyId, occurredAt])
+  @@map("party_audit_events")
 }
 
 model ReceivableBatch {
@@ -1305,11 +2227,13 @@ model ReceivableTitle {
   canceledAt            DateTime?
   canceledBy            String?
 
-  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  batch        ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  payerParty   Party?                  @relation(fields: [payerPartyId], references: [id], onDelete: SetNull)
-  installments ReceivableInstallment[]
-  sales        Sale[]
+  company         Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch           ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payerParty      Party?                  @relation(fields: [payerPartyId], references: [id], onDelete: SetNull)
+  installments    ReceivableInstallment[]
+  sales           Sale[]
+  fiscalDocuments FiscalDocument[]
+  nfseDocuments   NfseDocument[]
 
   @@unique([companyId, branchCode, businessKey])
   @@index([companyId, sourceEntityType, sourceEntityId])

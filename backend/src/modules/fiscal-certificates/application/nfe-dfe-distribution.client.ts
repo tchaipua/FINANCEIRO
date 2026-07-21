@@ -2,7 +2,11 @@ import https from "https";
 import { gunzipSync } from "zlib";
 import { BadRequestException } from "@nestjs/common";
 import { XMLParser } from "fast-xml-parser";
-import { normalizeDigits, normalizeText } from "../../../common/finance-core.utils";
+import { normalizeDigits } from "../../../common/finance-core.utils";
+import {
+  isValidBrazilTaxId,
+  normalizeTaxId,
+} from "../../../common/brazil-tax-id.utils";
 
 const SOAP_ACTION =
   "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse";
@@ -120,13 +124,13 @@ export async function fetchDfeDistributionBatch(options: {
   const normalizedEnvironment =
     options.environment === "HOMOLOGATION" ? "HOMOLOGATION" : "PRODUCTION";
   const normalizedStateCode = normalizeDigits(options.authorStateCode);
-  const normalizedDocument = normalizeDigits(options.interestedDocument);
+  const normalizedDocument = normalizeTaxId(options.interestedDocument);
 
   if (!normalizedStateCode || normalizedStateCode.length !== 2) {
     throw new BadRequestException("Informe o código IBGE da UF do autor para usar a SEFAZ.");
   }
 
-  if (!normalizedDocument || ![11, 14].includes(normalizedDocument.length)) {
+  if (!normalizedDocument || !isValidBrazilTaxId(normalizedDocument)) {
     throw new BadRequestException("Informe o CPF ou CNPJ do titular para usar a SEFAZ.");
   }
 

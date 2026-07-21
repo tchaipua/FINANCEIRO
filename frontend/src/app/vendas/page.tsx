@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { getJson, requestJson } from '@/app/lib/api';
+import { API_BASE_URL, getJson, requestJson } from '@/app/lib/api';
+import {
+  isValidBrazilTaxId,
+  normalizeBrazilTaxId,
+  normalizeBrazilTaxIdInput,
+} from '@/app/lib/brazil-tax-id';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildFinanceApiQueryString,
@@ -117,6 +122,27 @@ type CreatedSale = {
   id: string;
   saleNumber: string;
   message?: string;
+  nfe?: {
+    id?: string;
+    status: string;
+    statusCode?: string | null;
+    statusMessage?: string | null;
+    accessKey?: string | null;
+    protocol?: string | null;
+    series?: number | null;
+    number?: number | null;
+    hasDanfe?: boolean;
+    hasProcessedXml?: boolean;
+    danfeDownloadUrl?: string | null;
+    xmlDownloadUrl?: string | null;
+    emailDelivery?: {
+      status: string;
+      recipientEmail?: string | null;
+      sentAt?: string | null;
+      errorMessage?: string | null;
+      reused?: boolean;
+    } | null;
+  } | null;
   nfce?: {
     status: string;
     statusMessage?: string | null;
@@ -147,11 +173,19 @@ type CustomerState = {
   registeredPersonSourceType: string;
   externalEntityType: string;
   externalEntityId: string;
+  stateRegistration: string;
+  stateRegistrationIndicator: string;
   addressLine1: string;
+  street: string;
+  addressNumber: string;
+  addressComplement: string;
   neighborhood: string;
   city: string;
+  cityCode: string;
   state: string;
   postalCode: string;
+  countryCode: string;
+  countryName: string;
 };
 
 type PersonLookupResult = {
@@ -161,11 +195,19 @@ type PersonLookupResult = {
   document?: string | null;
   email?: string | null;
   phone?: string | null;
+  stateRegistration?: string | null;
+  stateRegistrationIndicator?: string | null;
   addressLine1?: string | null;
+  street?: string | null;
+  addressNumber?: string | null;
+  addressComplement?: string | null;
   neighborhood?: string | null;
   city?: string | null;
+  cityCode?: string | null;
   state?: string | null;
   postalCode?: string | null;
+  countryCode?: string | null;
+  countryName?: string | null;
   sourceType?: string | null;
   externalEntityType?: string | null;
   externalEntityId?: string | null;
@@ -178,11 +220,19 @@ type FinancialCustomersLookupResponse = {
     document?: string | null;
     email?: string | null;
     phone?: string | null;
+    stateRegistration?: string | null;
+    stateRegistrationIndicator?: string | null;
     addressLine1?: string | null;
+    street?: string | null;
+    addressNumber?: string | null;
+    addressComplement?: string | null;
     neighborhood?: string | null;
     city?: string | null;
+    cityCode?: string | null;
     state?: string | null;
     postalCode?: string | null;
+    countryCode?: string | null;
+    countryName?: string | null;
     origin?: string | null;
     externalEntityType: string;
     externalEntityId: string;
@@ -208,6 +258,7 @@ type QuickCashSaleState = {
   customerPhone: string;
   personSearch: string;
   personResults: PersonLookupResult[];
+  selectedPerson: PersonLookupResult | null;
   isSearchingPeople: boolean;
   isPeopleSearchOpen: boolean;
   futureDelivery: boolean;
@@ -420,55 +471,10 @@ function normalizeDocumentDigits(value: string) {
   return String(value || '').replace(/\D+/g, '');
 }
 
-function isValidCpf(value: string) {
-  const cpf = normalizeDocumentDigits(value);
-  if (!cpf || cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-
-  let sum = 0;
-  for (let index = 0; index < 9; index += 1) {
-    sum += Number.parseInt(cpf.charAt(index), 10) * (10 - index);
-  }
-  let remainder = 11 - (sum % 11);
-  if (remainder >= 10) remainder = 0;
-  if (remainder !== Number.parseInt(cpf.charAt(9), 10)) return false;
-
-  sum = 0;
-  for (let index = 0; index < 10; index += 1) {
-    sum += Number.parseInt(cpf.charAt(index), 10) * (11 - index);
-  }
-  remainder = 11 - (sum % 11);
-  if (remainder >= 10) remainder = 0;
-
-  return remainder === Number.parseInt(cpf.charAt(10), 10);
-}
-
-function isValidCnpj(value: string) {
-  const cnpj = normalizeDocumentDigits(value);
-  if (!cnpj || cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
-
-  const validateDigit = (base: string, weights: number[]) => {
-    const sum = weights.reduce(
-      (total, weight, index) => total + Number.parseInt(base.charAt(index), 10) * weight,
-      0,
-    );
-    const remainder = sum % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-
-  const firstDigit = validateDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-  const secondDigit = validateDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-
-  return (
-    firstDigit === Number.parseInt(cnpj.charAt(12), 10) &&
-    secondDigit === Number.parseInt(cnpj.charAt(13), 10)
-  );
-}
-
 function validateOptionalBrazilDocument(value: string) {
-  const digits = normalizeDocumentDigits(value);
-  if (!digits) return null;
-  if (digits.length === 11 && isValidCpf(digits)) return null;
-  if (digits.length === 14 && isValidCnpj(digits)) return null;
+  const normalized = normalizeBrazilTaxId(value);
+  if (!normalized) return null;
+  if (isValidBrazilTaxId(normalized)) return null;
   return 'CPF/CNPJ inválido. Confira o documento informado.';
 }
 
@@ -754,11 +760,19 @@ function createCustomerState(): CustomerState {
     registeredPersonSourceType: '',
     externalEntityType: '',
     externalEntityId: '',
+    stateRegistration: '',
+    stateRegistrationIndicator: '9',
     addressLine1: '',
+    street: '',
+    addressNumber: '',
+    addressComplement: '',
     neighborhood: '',
     city: '',
+    cityCode: '',
     state: '',
     postalCode: '',
+    countryCode: '1058',
+    countryName: 'BRASIL',
   };
 }
 
@@ -771,6 +785,7 @@ function createQuickCashSaleState(totalAmount = 0): QuickCashSaleState {
     customerPhone: '',
     personSearch: '',
     personResults: [],
+    selectedPerson: null,
     isSearchingPeople: false,
     isPeopleSearchOpen: false,
     futureDelivery: false,
@@ -837,11 +852,19 @@ function buildSalePayload(params: {
           document: customer.document || undefined,
           email: customer.email || undefined,
           phone: customer.phone || undefined,
+          stateRegistration: customer.stateRegistration || undefined,
+          stateRegistrationIndicator: customer.stateRegistrationIndicator || '9',
           addressLine1: customer.addressLine1 || undefined,
+          street: customer.street || undefined,
+          addressNumber: customer.addressNumber || undefined,
+          addressComplement: customer.addressComplement || undefined,
           neighborhood: customer.neighborhood || undefined,
           city: customer.city || undefined,
+          cityCode: customer.cityCode || undefined,
           state: customer.state || undefined,
           postalCode: customer.postalCode || undefined,
+          countryCode: customer.countryCode || '1058',
+          countryName: customer.countryName || 'BRASIL',
         }
       : undefined,
     items: cartItems.map((item) => ({
@@ -973,6 +996,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successSale, setSuccessSale] = useState<CreatedSale | null>(null);
+  const [isIssuingManualNfe, setIsIssuingManualNfe] = useState(false);
+  const [isSendingNfeEmail, setIsSendingNfeEmail] = useState(false);
   const [pixQrCode, setPixQrCode] = useState<PixQrCodeState | null>(null);
   const [paidPixIntent, setPaidPixIntent] = useState<{ id: string; amount: number } | null>(null);
   const pixFinalizationRef = useRef(false);
@@ -1836,6 +1861,19 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                   document: item.document || item.cpf || item.cnpj || null,
                   email: item.email || null,
                   phone: item.phone || item.whatsapp || item.cellphone1 || null,
+                  stateRegistration: item.stateRegistration || item.ie || null,
+                  stateRegistrationIndicator: item.stateRegistrationIndicator || null,
+                  addressLine1: item.addressLine1 || item.address || null,
+                  street: item.street || null,
+                  addressNumber: item.addressNumber || item.number || null,
+                  addressComplement: item.addressComplement || item.complement || null,
+                  neighborhood: item.neighborhood || null,
+                  city: item.city || null,
+                  cityCode: item.cityCode || item.ibgeCityCode || null,
+                  state: item.state || item.uf || null,
+                  postalCode: item.postalCode || item.cep || null,
+                  countryCode: item.countryCode || null,
+                  countryName: item.countryName || null,
                   sourceType: item.sourceType || item.role || null,
                 };
               }).filter((item: PersonLookupResult) => item.name)
@@ -1865,7 +1903,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   ) => {
     setCustomer((current) => ({
       ...current,
-      [field]: value,
+      [field]: field === 'document' ? normalizeBrazilTaxIdInput(value) : value,
       registeredPersonId: '',
       registeredPersonSourceType: '',
       externalEntityType: '',
@@ -1917,15 +1955,23 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       document: person.document || '',
       email: person.email || '',
       phone: person.phone || '',
+      stateRegistration: person.stateRegistration || '',
+      stateRegistrationIndicator: person.stateRegistrationIndicator || '9',
       registeredPersonId,
       registeredPersonSourceType: person.sourceType || 'PESSOA',
       externalEntityType: 'PERSON',
       externalEntityId: registeredPersonId,
       addressLine1: person.addressLine1 || '',
+      street: person.street || '',
+      addressNumber: person.addressNumber || '',
+      addressComplement: person.addressComplement || '',
       neighborhood: person.neighborhood || '',
       city: person.city || '',
+      cityCode: person.cityCode || '',
       state: person.state || '',
       postalCode: person.postalCode || '',
+      countryCode: person.countryCode || '1058',
+      countryName: person.countryName || 'BRASIL',
     }));
     setCustomerPersonResults([]);
     setCheckoutFeedback(null);
@@ -1951,11 +1997,19 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       document: item.document || null,
       email: item.email || null,
       phone: item.phone || null,
+      stateRegistration: item.stateRegistration || null,
+      stateRegistrationIndicator: item.stateRegistrationIndicator || null,
       addressLine1: item.addressLine1 || null,
+      street: item.street || null,
+      addressNumber: item.addressNumber || null,
+      addressComplement: item.addressComplement || null,
       neighborhood: item.neighborhood || null,
       city: item.city || null,
+      cityCode: item.cityCode || null,
       state: item.state || null,
       postalCode: item.postalCode || null,
+      countryCode: item.countryCode || null,
+      countryName: item.countryName || null,
       sourceType: [item.origin, item.externalEntityType].filter(Boolean).join(' - '),
       externalEntityType: item.externalEntityType,
       externalEntityId: item.externalEntityId,
@@ -1972,7 +2026,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     const uniqueCustomers = new Map<string, PersonLookupResult>();
 
     mappedCustomers.forEach((person) => {
-      const documentDigits = normalizeDocumentDigits(person.document || '');
+      const documentDigits = normalizeBrazilTaxId(person.document || '');
       const externalEntityType = String(person.externalEntityType || '').trim().toUpperCase();
       const externalEntityId = String(person.externalEntityId || '').trim().toUpperCase();
       const normalizedName = String(person.name || '').trim().toUpperCase();
@@ -1999,11 +2053,20 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         document: preferFormattedValue(current.document, person.document),
         phone: preferFormattedValue(current.phone, person.phone),
         email: current.email || person.email,
+        stateRegistration: current.stateRegistration || person.stateRegistration,
+        stateRegistrationIndicator:
+          current.stateRegistrationIndicator || person.stateRegistrationIndicator,
         addressLine1: current.addressLine1 || person.addressLine1,
+        street: current.street || person.street,
+        addressNumber: current.addressNumber || person.addressNumber,
+        addressComplement: current.addressComplement || person.addressComplement,
         neighborhood: current.neighborhood || person.neighborhood,
         city: current.city || person.city,
+        cityCode: current.cityCode || person.cityCode,
         state: current.state || person.state,
         postalCode: current.postalCode || person.postalCode,
+        countryCode: current.countryCode || person.countryCode,
+        countryName: current.countryName || person.countryName,
       });
     });
 
@@ -2065,15 +2128,23 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       document: person.document || '',
       email: person.email || '',
       phone: person.phone || '',
+      stateRegistration: person.stateRegistration || '',
+      stateRegistrationIndicator: person.stateRegistrationIndicator || '9',
       registeredPersonId,
       registeredPersonSourceType: person.sourceType || '',
       externalEntityType: registeredPersonId ? 'PERSON' : externalEntityType,
       externalEntityId: registeredPersonId || externalEntityId,
       addressLine1: person.addressLine1 || '',
+      street: person.street || '',
+      addressNumber: person.addressNumber || '',
+      addressComplement: person.addressComplement || '',
       neighborhood: person.neighborhood || '',
       city: person.city || '',
+      cityCode: person.cityCode || '',
       state: person.state || '',
       postalCode: person.postalCode || '',
+      countryCode: person.countryCode || '1058',
+      countryName: person.countryName || 'BRASIL',
     }));
 
     if (vpOrigin === 'checkout') {
@@ -2234,6 +2305,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
             personResults: [],
             personSearch: person.name,
             isPeopleSearchOpen: false,
+            selectedPerson: person,
             feedback: null,
           }
         : current,
@@ -2315,12 +2387,30 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     }
 
     const changeAmount = Math.max(0, amountPaid - cartTotals.total);
+    const selectedQuickPerson = quickCashSale.selectedPerson;
     const quickCustomer: CustomerState = {
       ...createCustomerState(),
       name: quickCashSale.customerName.trim() || (quickCashSale.document.trim() ? 'CONSUMIDOR' : ''),
       document: quickCashSale.document,
       email: quickCashSale.customerEmail,
       phone: quickCashSale.customerPhone,
+      registeredPersonId: getRegisteredPersonId(selectedQuickPerson?.registeredPersonId),
+      registeredPersonSourceType: selectedQuickPerson?.sourceType || '',
+      externalEntityType: selectedQuickPerson?.externalEntityType || '',
+      externalEntityId: selectedQuickPerson?.externalEntityId || '',
+      stateRegistration: selectedQuickPerson?.stateRegistration || '',
+      stateRegistrationIndicator: selectedQuickPerson?.stateRegistrationIndicator || '9',
+      addressLine1: selectedQuickPerson?.addressLine1 || '',
+      street: selectedQuickPerson?.street || '',
+      addressNumber: selectedQuickPerson?.addressNumber || '',
+      addressComplement: selectedQuickPerson?.addressComplement || '',
+      neighborhood: selectedQuickPerson?.neighborhood || '',
+      city: selectedQuickPerson?.city || '',
+      cityCode: selectedQuickPerson?.cityCode || '',
+      state: selectedQuickPerson?.state || '',
+      postalCode: selectedQuickPerson?.postalCode || '',
+      countryCode: selectedQuickPerson?.countryCode || '1058',
+      countryName: selectedQuickPerson?.countryName || 'BRASIL',
     };
     const quickNotes = [
       notes,
@@ -2708,6 +2798,115 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     submitSale,
   ]);
 
+  const issueManualNfe = useCallback(async () => {
+    if (
+      !successSale ||
+      !runtimeContext.sourceSystem ||
+      !runtimeContext.sourceTenantId
+    ) {
+      return;
+    }
+    setIsIssuingManualNfe(true);
+    setErrorMessage('');
+    try {
+      const nfe = await requestJson<NonNullable<CreatedSale['nfe']>>(
+        `/fiscal-documents/nfe/sales/${successSale.id}/issue`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            sourceBranchCode: runtimeContext.sourceBranchCode,
+            environment: 'HOMOLOGATION',
+            requestedBy:
+              runtimeContext.cashierUserId ||
+              runtimeContext.cashierDisplayName ||
+              'OPERADOR_FINANCEIRO',
+          }),
+          fallbackMessage: 'Não foi possível emitir a NF-e da venda.',
+        },
+      );
+      setSuccessSale((current) =>
+        current
+          ? {
+              ...current,
+              nfe,
+              message:
+                nfe.status === 'AUTHORIZED'
+                  ? `Venda ${current.saleNumber} e NF-e autorizadas com sucesso.`
+                  : `A NF-e retornou ${nfe.statusCode || nfe.status}.`,
+            }
+          : current,
+      );
+    } catch (error) {
+      setErrorMessage(
+        getFriendlyRequestErrorMessage(error, 'Não foi possível emitir a NF-e da venda.'),
+      );
+    } finally {
+      setIsIssuingManualNfe(false);
+    }
+  }, [runtimeContext, successSale]);
+
+  const getNfeArtifactUrl = useCallback(
+    (path?: string | null) => {
+      if (!path) return null;
+      return `${API_BASE_URL}${path}${buildFinanceApiQueryString(runtimeContext, {
+        sourceBranchCode: runtimeContext.sourceBranchCode,
+        environment: 'HOMOLOGATION',
+      })}`;
+    },
+    [runtimeContext],
+  );
+
+  const sendNfeEmail = useCallback(async () => {
+    const documentId = successSale?.nfe?.id;
+    if (
+      !documentId ||
+      !runtimeContext.sourceSystem ||
+      !runtimeContext.sourceTenantId
+    ) {
+      return;
+    }
+    setIsSendingNfeEmail(true);
+    setErrorMessage('');
+    try {
+      await requestJson<{ status: string; recipientEmail: string }>(
+        `/fiscal-documents/nfe/documents/${documentId}/email`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceSystem: runtimeContext.sourceSystem,
+            sourceTenantId: runtimeContext.sourceTenantId,
+            sourceBranchCode: runtimeContext.sourceBranchCode,
+            environment: 'HOMOLOGATION',
+            requestedBy:
+              runtimeContext.cashierUserId ||
+              runtimeContext.cashierDisplayName ||
+              'OPERADOR_FINANCEIRO',
+          }),
+          fallbackMessage: 'Não foi possível enviar o DANFE e o XML por e-mail.',
+        },
+      );
+      setSuccessSale((current) =>
+        current
+          ? {
+              ...current,
+              message: `NF-e da venda ${current.saleNumber} enviada por e-mail com sucesso.`,
+            }
+          : current,
+      );
+    } catch (error) {
+      setErrorMessage(
+        getFriendlyRequestErrorMessage(
+          error,
+          'Não foi possível enviar o DANFE e o XML por e-mail.',
+        ),
+      );
+    } finally {
+      setIsSendingNfeEmail(false);
+    }
+  }, [runtimeContext, successSale?.nfe?.id]);
+
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -2726,6 +2925,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       document: selectedCustomer.document || '',
       email: selectedCustomer.email || '',
       phone: selectedCustomer.phone || '',
+      stateRegistration: selectedCustomer.stateRegistration || '',
+      stateRegistrationIndicator: selectedCustomer.stateRegistrationIndicator || '9',
       registeredPersonId,
       registeredPersonSourceType: selectedCustomer.sourceType || '',
       externalEntityType: registeredPersonId
@@ -2734,10 +2935,16 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       externalEntityId: registeredPersonId
         || String(selectedCustomer.externalEntityId || '').trim(),
       addressLine1: selectedCustomer.addressLine1 || '',
+      street: selectedCustomer.street || '',
+      addressNumber: selectedCustomer.addressNumber || '',
+      addressComplement: selectedCustomer.addressComplement || '',
       neighborhood: selectedCustomer.neighborhood || '',
       city: selectedCustomer.city || '',
+      cityCode: selectedCustomer.cityCode || '',
       state: selectedCustomer.state || '',
       postalCode: selectedCustomer.postalCode || '',
+      countryCode: selectedCustomer.countryCode || '1058',
+      countryName: selectedCustomer.countryName || 'BRASIL',
     };
     const vpPaymentRows: PaymentRow[] = [{
       ...createDefaultPayment(cartTotals.total),
@@ -3851,16 +4058,30 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                       placeholder="E-mail"
                     />
                   </div>
-                  {hasBoletoPayment ? (
+                  {hasCustomerIdentification ? (
                     <div className="grid gap-1.5 rounded-xl border border-cyan-200 bg-cyan-50 p-2">
                       <div className="text-[9px] font-black uppercase tracking-[0.14em] text-cyan-700">
-                        Endereço para emissão Sicoob
+                        Endereço fiscal do destinatário
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          className={compactInputClass}
+                          value={customer.street}
+                          onChange={(event) => setCustomer((current) => ({ ...current, street: event.target.value }))}
+                          placeholder="Logradouro"
+                        />
+                        <input
+                          className={compactInputClass}
+                          value={customer.addressNumber}
+                          onChange={(event) => setCustomer((current) => ({ ...current, addressNumber: event.target.value }))}
+                          placeholder="Número"
+                        />
                       </div>
                       <input
                         className={compactInputClass}
-                        value={customer.addressLine1}
-                        onChange={(event) => setCustomer((current) => ({ ...current, addressLine1: event.target.value }))}
-                        placeholder="Rua, número e complemento"
+                        value={customer.addressComplement}
+                        onChange={(event) => setCustomer((current) => ({ ...current, addressComplement: event.target.value }))}
+                        placeholder="Complemento"
                       />
                       <div className="grid grid-cols-2 gap-1.5">
                         <input
@@ -3891,6 +4112,46 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                           maxLength={2}
                         />
                       </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          className={compactInputClass}
+                          value={customer.cityCode}
+                          onChange={(event) =>
+                            setCustomer((current) => ({
+                              ...current,
+                              cityCode: event.target.value.replace(/\D+/g, '').slice(0, 7),
+                            }))
+                          }
+                          placeholder="Código IBGE município"
+                        />
+                        <select
+                          className={compactInputClass}
+                          value={customer.stateRegistrationIndicator}
+                          onChange={(event) =>
+                            setCustomer((current) => ({
+                              ...current,
+                              stateRegistrationIndicator: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="9">Não contribuinte de ICMS</option>
+                          <option value="1">Contribuinte de ICMS</option>
+                          <option value="2">Contribuinte isento</option>
+                        </select>
+                      </div>
+                      {customer.stateRegistrationIndicator === '1' ? (
+                        <input
+                          className={compactInputClass}
+                          value={customer.stateRegistration}
+                          onChange={(event) =>
+                            setCustomer((current) => ({
+                              ...current,
+                              stateRegistration: event.target.value,
+                            }))
+                          }
+                          placeholder="Inscrição estadual"
+                        />
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -4803,7 +5064,80 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
               : 'border-emerald-200 bg-emerald-50 text-emerald-700'
           }`}
         >
-          {errorMessage || `Venda ${successSale?.saleNumber} confirmada com sucesso.`}
+          {errorMessage ? (
+            errorMessage
+          ) : successSale ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div>{successSale.message || `Venda ${successSale.saleNumber} confirmada com sucesso.`}</div>
+                {successSale.nfe ? (
+                  <>
+                    <div className="mt-1 text-xs font-semibold">
+                      NF-e: {successSale.nfe.statusCode || successSale.nfe.status}
+                      {successSale.nfe.number
+                        ? ` · SÉRIE ${successSale.nfe.series} · Nº ${successSale.nfe.number}`
+                        : ''}
+                      {successSale.nfe.protocol ? ` · PROTOCOLO ${successSale.nfe.protocol}` : ''}
+                    </div>
+                    {successSale.nfe.emailDelivery ? (
+                      <div
+                        className={`mt-1 text-xs font-semibold ${
+                          successSale.nfe.emailDelivery.status === 'SENT'
+                            ? 'text-emerald-700'
+                            : 'text-amber-700'
+                        }`}
+                      >
+                        {successSale.nfe.emailDelivery.status === 'SENT'
+                          ? 'DANFE E XML ENVIADOS POR E-MAIL.'
+                          : successSale.nfe.emailDelivery.errorMessage ||
+                            'NF-E AUTORIZADA, MAS O E-MAIL NÃO FOI ENVIADO.'}
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {successSale.nfe?.status !== 'AUTHORIZED' ? (
+                  <button
+                    type="button"
+                    onClick={() => void issueManualNfe()}
+                    disabled={isIssuingManualNfe}
+                    className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
+                  >
+                    {isIssuingManualNfe ? 'Emitindo NF-e...' : 'Emitir NF-e manualmente'}
+                  </button>
+                ) : null}
+                {successSale.nfe?.status === 'AUTHORIZED' && successSale.nfe.id ? (
+                  <button
+                    type="button"
+                    onClick={() => void sendNfeEmail()}
+                    disabled={isSendingNfeEmail}
+                    className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                  >
+                    {isSendingNfeEmail
+                      ? 'Enviando e-mail...'
+                      : 'Reenviar NF-e por e-mail'}
+                  </button>
+                ) : null}
+                {getNfeArtifactUrl(successSale.nfe?.danfeDownloadUrl) ? (
+                  <a
+                    href={getNfeArtifactUrl(successSale.nfe?.danfeDownloadUrl) || undefined}
+                    className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700"
+                  >
+                    Baixar DANFE
+                  </a>
+                ) : null}
+                {getNfeArtifactUrl(successSale.nfe?.xmlDownloadUrl) ? (
+                  <a
+                    href={getNfeArtifactUrl(successSale.nfe?.xmlDownloadUrl) || undefined}
+                    className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700"
+                  >
+                    Baixar XML
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </section>
       )}
 

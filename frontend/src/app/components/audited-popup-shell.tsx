@@ -53,6 +53,7 @@ export default function AuditedPopupShell({
   if (!isOpen) {
     return null;
   }
+  const isSubfolderCreationWarning = description?.startsWith('A nova subpasta será criada dentro de:');
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
@@ -79,7 +80,7 @@ export default function AuditedPopupShell({
               </div>
               <h2 className="mt-0.5 text-xl font-black text-slate-900">{title}</h2>
               {description ? (
-                <p className="mt-1 max-w-2xl text-xs font-medium leading-5 text-slate-500">{description}</p>
+                <p className={isSubfolderCreationWarning ? 'mt-2 max-w-2xl text-lg font-black leading-6 text-rose-600' : 'mt-1 max-w-2xl text-xs font-medium leading-5 text-slate-500'}>{description}</p>
               ) : null}
             </div>
           </div>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Benefícios Fiscais">
+  <rect width="640" height="360" fill="#f1f5f9"/>
+  <rect x="136" y="72" width="252" height="216" rx="26" fill="#ffffff"/>
+  <rect x="176" y="116" width="118" height="20" rx="10" fill="#2563eb"/>
+  <rect x="176" y="162" width="156" height="18" rx="9" fill="#93c5fd"/>
+  <rect x="176" y="204" width="126" height="18" rx="9" fill="#bfdbfe"/>
+  <path d="M428 94l82 32v66c0 52-35 91-82 108-47-17-82-56-82-108v-66l82-32z" fill="#16a34a"/>
+  <path d="m390 190 24 24 50-56" fill="none" stroke="#dcfce7" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

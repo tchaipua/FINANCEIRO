@@ -26,3 +26,134 @@ body[data-finance-embedded='1'] .finance-shell {
 body[data-finance-embedded='1'] .finance-shell-main {
   width: 100%;
 }
+
+.system-message-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(2, 15, 46, 0.7);
+  backdrop-filter: blur(7px);
+}
+
+.system-message-card {
+  --system-message-color: #dc2626;
+  position: relative;
+  width: min(450px, calc(100vw - 24px));
+  min-height: 180px;
+  overflow: visible;
+  border: 2px solid rgba(203, 213, 225, 0.95);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(239,246,255,.96));
+  box-shadow: 0 30px 80px rgba(2, 15, 46, .42), inset 0 1px 0 #fff;
+}
+
+.system-message-success { --system-message-color: #16a34a; }
+.system-message-accent {
+  position: absolute;
+  inset: 5px auto 5px 4px;
+  width: 6px;
+  border-radius: 999px;
+  background: var(--system-message-color);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--system-message-color) 35%, transparent);
+}
+
+.system-message-status-icon {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 55%;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--system-message-color);
+  color: #fff;
+  font: 900 36px/1 Arial, sans-serif;
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--system-message-color) 38%, transparent);
+}
+
+.system-message-header {
+  display: grid;
+  grid-template-columns: 76px 1fr 56px;
+  align-items: center;
+  min-height: 98px;
+  gap: 12px;
+  padding: 12px 35px 9px 45px;
+}
+
+.system-message-header strong {
+  color: var(--system-message-color);
+  font-size: clamp(18px, 2vw, 27px);
+  font-weight: 950;
+  letter-spacing: .015em;
+  line-height: 1;
+  text-align: center;
+}
+
+.system-message-logo {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid #1e3a8a;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .18);
+}
+
+.system-message-logo img { width: 100%; height: 100%; object-fit: contain; padding: 2px; }
+.system-message-divider { height: 1px; margin: 0 37px 0 88px; background: #cbd5e1; }
+.system-message-body {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+  padding: 16px 52px 36px 88px;
+}
+
+.system-message-body p {
+  max-width: 360px;
+  margin: 0;
+  color: #10265f;
+  font-size: clamp(14px, 1.25vw, 16px);
+  font-weight: 800;
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.system-message-close {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #bfd0e8;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #12377d;
+  font: 500 25px/1 Arial, sans-serif;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, .16);
+  cursor: pointer;
+}
+
+.system-message-close:hover { background: #eef5ff; transform: translateY(-1px); }
+
+@media (max-width: 700px) {
+  .system-message-card { min-height: 190px; border-radius: 14px; }
+  .system-message-header { grid-template-columns: 68px 1fr 36px; min-height: 90px; gap: 8px; padding: 12px 18px 9px 34px; }
+  .system-message-logo { width: 64px; height: 64px; }
+  .system-message-status-icon { width: 56px; height: 56px; font-size: 34px; }
+  .system-message-divider { margin: 0 22px 0 72px; }
+  .system-message-body { padding: 16px 40px 42px 72px; }
+  .system-message-close { right: 12px; bottom: 10px; }
+}

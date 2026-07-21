@@ -33,6 +33,15 @@ import {
 } from "./dto/sales.dto";
 import { SicoobPixService } from "./sicoob-pix.service";
 import { NfceService } from "../../fiscal-documents/application/nfce/nfce.service";
+import { NfeService } from "../../fiscal-documents/application/nfe/nfe.service";
+import {
+  isValidBrazilTaxId,
+  normalizeTaxId,
+} from "../../../common/brazil-tax-id.utils";
+import {
+  PARTY_ROLE,
+  upsertPartyIdentity,
+} from "../../../common/party-registry";
 
 type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
 
@@ -110,49 +119,8 @@ function parseDateOnlyAsLocalDate(value: string | undefined, label: string, endO
   return parsed;
 }
 
-function hasRepeatedDigits(value: string) {
-  return /^(\d)\1+$/.test(value);
-}
-
-function isValidCpf(document: string) {
-  if (!/^\d{11}$/.test(document) || hasRepeatedDigits(document)) return false;
-
-  const digits = document.split("").map(Number);
-  const firstCheck = digits
-    .slice(0, 9)
-    .reduce((sum, digit, index) => sum + digit * (10 - index), 0);
-  const firstRemainder = (firstCheck * 10) % 11;
-  const firstDigit = firstRemainder === 10 ? 0 : firstRemainder;
-  if (firstDigit !== digits[9]) return false;
-
-  const secondCheck = digits
-    .slice(0, 10)
-    .reduce((sum, digit, index) => sum + digit * (11 - index), 0);
-  const secondRemainder = (secondCheck * 10) % 11;
-  const secondDigit = secondRemainder === 10 ? 0 : secondRemainder;
-  return secondDigit === digits[10];
-}
-
-function isValidCnpj(document: string) {
-  if (!/^\d{14}$/.test(document) || hasRepeatedDigits(document)) return false;
-
-  const digits = document.split("").map(Number);
-  const calculateDigit = (base: number[], weights: number[]) => {
-    const sum = base.reduce((total, digit, index) => total + digit * weights[index], 0);
-    const remainder = sum % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-
-  const firstDigit = calculateDigit(digits.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-  const secondDigit = calculateDigit(digits.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
-
-  return firstDigit === digits[12] && secondDigit === digits[13];
-}
-
 function isValidBrazilianDocument(value?: string | null) {
-  const document = normalizeDigits(value);
-  if (!document) return false;
-  return document.length === 11 ? isValidCpf(document) : isValidCnpj(document);
+  return isValidBrazilTaxId(value);
 }
 
 @Injectable()
@@ -160,8 +128,38 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sicoobPixService: SicoobPixService,
+    private readonly nfeService: NfeService,
     private readonly nfceService: NfceService,
   ) {}
+
+  private async issueFiscalDocumentAfterConfirmation(
+    companyId: string,
+    saleId: string,
+    requestedBy?: string | null,
+  ) {
+    const nfe = await this.nfeService.issueForSaleAfterConfirmation(
+      companyId,
+      saleId,
+      requestedBy,
+    );
+    if (normalizeText((nfe as any)?.status) !== "NOT_CONFIGURED") {
+      return {
+        nfe,
+        nfce: null,
+        fiscalDocument: nfe,
+      };
+    }
+    const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+      companyId,
+      saleId,
+      requestedBy,
+    );
+    return {
+      nfe: null,
+      nfce,
+      fiscalDocument: nfce,
+    };
+  }
 
   private currentBranchCode(sourceBranchCode?: number | null) {
     const requestedBranchCode = normalizeBranchCode(
@@ -478,7 +476,7 @@ export class SalesService {
     });
 
     const normalizedCompanyName = normalizeText(payload.companyName);
-    const normalizedCompanyDocument = normalizeDigits(payload.companyDocument);
+    const normalizedCompanyDocument = normalizeTaxId(payload.companyDocument);
 
     if (existing) {
       return this.prisma.company.update({
@@ -756,7 +754,7 @@ export class SalesService {
       return null;
     }
 
-    const document = normalizeDigits(customer?.document);
+    const document = normalizeTaxId(customer?.document);
     const registeredPersonId = getRegisteredPersonId(customer?.registeredPersonId);
     const externalEntityType =
       (registeredPersonId ? "PERSON" : normalizeText(customer?.externalEntityType)) ||
@@ -769,44 +767,38 @@ export class SalesService {
       normalizeText(payload.sourceEntityId) ||
       `CUSTOMER-${randomUUID().toUpperCase()}`;
 
-    return tx.party.upsert({
-      where: {
-        companyId_branchCode_externalEntityType_externalEntityId: {
-          companyId,
-          branchCode,
-          externalEntityType,
-          externalEntityId,
-        },
-      },
-      create: {
-        companyId,
-        branchCode,
-        externalEntityType,
-        externalEntityId,
+    return upsertPartyIdentity(tx, {
+      companyId,
+      branchCode,
+      sourceSystem: payload.sourceSystem,
+      sourceTenantId: payload.sourceTenantId,
+      externalEntityType,
+      externalEntityId,
+      registeredPersonId: registeredPersonId || null,
+      registeredPersonSourceType: customer?.registeredPersonSourceType,
+      roles: [PARTY_ROLE.CUSTOMER, PARTY_ROLE.PAYER],
+      data: {
         name: normalizedName,
         document,
+        stateRegistration: normalizeDigits(customer?.stateRegistration),
+        municipalRegistration: normalizeDigits(customer?.municipalRegistration),
+        stateRegistrationIndicator:
+          normalizeDigits(customer?.stateRegistrationIndicator) || "9",
         email: normalizeEmail(customer?.email),
         phone: normalizePhone(customer?.phone),
         addressLine1: normalizeText(customer?.addressLine1),
+        street: normalizeText(customer?.street),
+        addressNumber: normalizeText(customer?.addressNumber),
+        addressComplement: normalizeText(customer?.addressComplement),
         neighborhood: normalizeText(customer?.neighborhood),
         city: normalizeText(customer?.city),
+        cityCode: normalizeDigits(customer?.cityCode),
         state: normalizeText(customer?.state),
         postalCode: normalizeDigits(customer?.postalCode),
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
+        countryCode: normalizeDigits(customer?.countryCode) || "1058",
+        countryName: normalizeText(customer?.countryName) || "BRASIL",
       },
-      update: {
-        name: normalizedName,
-        document,
-        email: normalizeEmail(customer?.email),
-        phone: normalizePhone(customer?.phone),
-        addressLine1: normalizeText(customer?.addressLine1),
-        neighborhood: normalizeText(customer?.neighborhood),
-        city: normalizeText(customer?.city),
-        state: normalizeText(customer?.state),
-        postalCode: normalizeDigits(customer?.postalCode),
-        updatedBy: payload.requestedBy || null,
-      },
+      requestedBy: payload.requestedBy,
     });
   }
 
@@ -1460,7 +1452,7 @@ export class SalesService {
             normalizeText(payload.sourceEntityName) ||
             "CONSUMIDOR FINAL",
           customerDocumentSnapshot:
-            customerParty?.document || normalizeDigits(payload.customer?.document),
+            customerParty?.document || normalizeTaxId(payload.customer?.document),
           sourceEntityType: normalizeText(payload.sourceEntityType),
           sourceEntityId: normalizeText(payload.sourceEntityId),
           sourceEntityName: normalizeText(payload.sourceEntityName),
@@ -1909,20 +1901,23 @@ export class SalesService {
       });
     });
 
-    const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+    const fiscalEmission = await this.issueFiscalDocumentAfterConfirmation(
       company.id,
       createdSale.id,
       normalizedRequestedBy,
     );
-    const nfceStatus = normalizeText((nfce as any)?.status);
+    const fiscalStatus = normalizeText(
+      (fiscalEmission.fiscalDocument as any)?.status,
+    );
+    const fiscalModel = fiscalEmission.nfe ? "NF-e" : "NFC-e";
     return {
       ...this.mapSale(createdSale),
-      nfce,
+      ...fiscalEmission,
       message:
-        nfceStatus === "AUTHORIZED"
-          ? "Venda confirmada e NFC-e autorizada com sucesso."
-          : nfceStatus === "REJECTED" || nfceStatus === "ERROR"
-            ? "Venda confirmada. A NFC-e requer correção ou reprocessamento."
+        fiscalStatus === "AUTHORIZED"
+          ? `Venda confirmada e ${fiscalModel} autorizada com sucesso.`
+          : fiscalStatus === "REJECTED" || fiscalStatus === "ERROR"
+            ? `Venda confirmada. A ${fiscalModel} requer correção ou reprocessamento.`
             : "Venda confirmada com sucesso.",
     };
   }
@@ -2143,23 +2138,33 @@ export class SalesService {
     const payment = sale?.payments.find((item) => item.receivableInstallmentId);
     if (!sale || !payment?.receivableInstallmentId) throw new BadRequestException("A venda não possui PIX pendente para consulta.");
     if (payment.status === "PAID") {
-      const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+      const fiscalEmission = await this.issueFiscalDocumentAfterConfirmation(
         company.id,
         sale.id,
         payload.requestedBy || "PIX_SICOOB",
       );
-      return { paid: true, saleNumber: sale.saleNumber, message: "PIX JÁ CONFIRMADO.", nfce };
+      return {
+        paid: true,
+        saleNumber: sale.saleNumber,
+        message: "PIX JÁ CONFIRMADO.",
+        ...fiscalEmission,
+      };
     }
 
     const installment = await this.prisma.receivableInstallment.findFirst({ where: { id: payment.receivableInstallmentId, companyId: company.id, canceledAt: null }, select: { id: true, amount: true, status: true, bankSlipOurNumber: true, bankAccountId: true } });
     if (!installment?.bankSlipOurNumber || !installment.bankAccountId) throw new BadRequestException("Cobrança PIX não encontrada para a venda.");
     if (installment.status === "PAID") {
-      const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+      const fiscalEmission = await this.issueFiscalDocumentAfterConfirmation(
         company.id,
         sale.id,
         payload.requestedBy || "PIX_SICOOB",
       );
-      return { paid: true, saleNumber: sale.saleNumber, message: "PIX JÁ CONFIRMADO.", nfce };
+      return {
+        paid: true,
+        saleNumber: sale.saleNumber,
+        message: "PIX JÁ CONFIRMADO.",
+        ...fiscalEmission,
+      };
     }
 
     const bank = await this.prisma.bankAccount.findFirst({ where: { id: installment.bankAccountId, companyId: company.id, canceledAt: null, billingProvider: "SICOOB" }, select: { id: true, bankName: true, billingApiClientId: true, billingCertificateBase64: true, billingCertificatePassword: true, pixKey: true } });
@@ -2178,12 +2183,17 @@ export class SalesService {
       await tx.salePayment.update({ where: { id: payment.id }, data: { status: "PAID", bankAccountId: bank.id, bankAccountLabel: bank.bankName, updatedBy: payload.requestedBy || "PIX_SICOOB" } });
       await tx.sale.update({ where: { id: sale.id }, data: { paidAmount: { increment: receivedAmount }, receivableAmount: { decrement: receivedAmount }, updatedBy: payload.requestedBy || "PIX_SICOOB" } });
     });
-    const nfce = await this.nfceService.issueForSaleAfterConfirmation(
+    const fiscalEmission = await this.issueFiscalDocumentAfterConfirmation(
       company.id,
       sale.id,
       payload.requestedBy || "PIX_SICOOB",
     );
-    return { paid: true, saleNumber: sale.saleNumber, message: "PIX CONFIRMADO PELO SICOOB.", nfce };
+    return {
+      paid: true,
+      saleNumber: sale.saleNumber,
+      message: "PIX CONFIRMADO PELO SICOOB.",
+      ...fiscalEmission,
+    };
   }
 
   async cancelPix(saleId: string, payload: CancelSaleDto) {
@@ -2353,10 +2363,10 @@ export class SalesService {
     }
 
     const returnCustomerName = normalizeText(payload.customer?.name);
-    const returnCustomerDocument = normalizeDigits(payload.customer?.document);
+    const returnCustomerDocument = normalizeTaxId(payload.customer?.document);
     const hasReturnCustomerPayload = Boolean(returnCustomerName || returnCustomerDocument);
     const saleCustomerName = normalizeText(sale.customerNameSnapshot);
-    const saleCustomerDocument = normalizeDigits(sale.customerDocumentSnapshot);
+    const saleCustomerDocument = normalizeTaxId(sale.customerDocumentSnapshot);
     const saleHasCustomerForCredit = Boolean(
       saleCustomerName && isValidBrazilianDocument(saleCustomerDocument),
     );
@@ -2420,34 +2430,21 @@ export class SalesService {
       }
 
       const returnCustomerParty = hasReturnCustomerPayload
-        ? await tx.party.upsert({
-            where: {
-              companyId_branchCode_externalEntityType_externalEntityId: {
-                companyId: company.id,
-                branchCode: sale.branchCode,
-                externalEntityType: creditCustomer.externalEntityType!,
-                externalEntityId: creditCustomer.externalEntityId!,
-              },
-            },
-            create: {
-              companyId: company.id,
-              branchCode: sale.branchCode,
-              externalEntityType: creditCustomer.externalEntityType!,
-              externalEntityId: creditCustomer.externalEntityId!,
+        ? await upsertPartyIdentity(tx, {
+            companyId: company.id,
+            branchCode: sale.branchCode,
+            sourceSystem: payload.sourceSystem,
+            sourceTenantId: payload.sourceTenantId,
+            externalEntityType: creditCustomer.externalEntityType!,
+            externalEntityId: creditCustomer.externalEntityId!,
+            roles: [PARTY_ROLE.CUSTOMER, PARTY_ROLE.PAYER],
+            data: {
               name: creditCustomer.name,
               document: creditCustomer.document,
               email: creditCustomer.email,
               phone: creditCustomer.phone,
-              createdBy: requestedBy,
-              updatedBy: requestedBy,
             },
-            update: {
-              name: creditCustomer.name,
-              document: creditCustomer.document,
-              email: creditCustomer.email,
-              phone: creditCustomer.phone,
-              updatedBy: requestedBy,
-            },
+            requestedBy,
           })
         : null;
       const customerPartyId =

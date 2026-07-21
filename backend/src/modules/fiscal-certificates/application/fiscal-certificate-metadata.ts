@@ -3,6 +3,10 @@ import { BadRequestException } from "@nestjs/common";
 import forge from "node-forge";
 import { createSecureContext } from "tls";
 import { normalizeDigits, normalizeText } from "../../../common/finance-core.utils";
+import {
+  extractCnpjFromText,
+  normalizeTaxId,
+} from "../../../common/brazil-tax-id.utils";
 
 export type ParsedPfxMetadata = {
   holderName: string;
@@ -176,14 +180,14 @@ export function parsePfxMetadata(
   const holderName =
     normalizeText(parseSubjectAttribute(certificate, ["commonName", "cn"])) ||
     "CERTIFICADO DIGITAL";
+  const subjectSerialNumber = parseSubjectAttribute(certificate, [
+    "serialnumber",
+    "serialNumber",
+  ]);
   const holderDocument =
-    normalizeDigits(
-      parseSubjectAttribute(certificate, [
-        "serialnumber",
-        "serialNumber",
-      ]),
-    ) ||
-    normalizeDigits(holderName) ||
+    extractCnpjFromText(subjectSerialNumber) ||
+    extractCnpjFromText(holderName) ||
+    normalizeTaxId(subjectSerialNumber) ||
     "";
 
   if (!holderDocument) {

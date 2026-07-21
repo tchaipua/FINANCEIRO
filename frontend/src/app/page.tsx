@@ -16,6 +16,7 @@ type MenuItem = {
   title?: string;
   image: string;
   adminOnly?: boolean;
+  financialManagerOnly?: boolean;
 };
 
 const MENU_ITEMS: MenuItem[] = [
@@ -107,6 +108,26 @@ const MENU_ITEMS: MenuItem[] = [
     description: 'Novo fluxo de vendas com consulta visual e foto dos produtos.',
     image: '/principal-financeiro/vendas.svg?v=1',
     adminOnly: true,
+  },
+  {
+    id: 'emissao-nfe',
+    label: 'Emissão NF-e',
+    href: '/emissao-nfe',
+    hostPath: '/principal/financeiro/emissao-nfe',
+    description:
+      'Emita manualmente NF-e de produtos, com Contas a Receber opcional e parcelado.',
+    image: '/principal-financeiro/vendas.svg?v=1',
+    financialManagerOnly: true,
+  },
+  {
+    id: 'emissao-nfs',
+    label: 'Emissão NFS (Serviço)',
+    href: '/emissao-nfs',
+    hostPath: '/principal/financeiro/emissao-nfs',
+    description:
+      'Emita manualmente NFS-e Nacional, com Contas a Receber opcional e parcelado.',
+    image: '/principal-financeiro/nfse.svg?v=1',
+    financialManagerOnly: true,
   },
   {
     id: 'msinfor',
@@ -206,7 +227,13 @@ export default function FinanceiroHomePage() {
 
       <section className={`${cardClass} p-6`}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {MENU_ITEMS.filter((item) => !item.adminOnly || runtimeContext.userRole === 'ADMIN').map((item) => {
+          {MENU_ITEMS.filter(
+            (item) =>
+              (!item.adminOnly || runtimeContext.userRole === 'ADMIN') &&
+              (!item.financialManagerOnly ||
+                runtimeContext.userRole === 'ADMIN' ||
+                runtimeContext.permissions.includes('MANAGE_FINANCIAL')),
+          ).map((item) => {
             const shouldReturnToHost = runtimeContext.embedded && hostBaseUrl;
             const href = shouldReturnToHost
               ? `${hostBaseUrl}${item.hostPath}`

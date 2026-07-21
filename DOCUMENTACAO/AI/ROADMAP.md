@@ -38,7 +38,8 @@
 
 ## Fase 5 - Fiscal
 
-- NFe
-- NFCe
-- NFS
+- NF-e modelo 55: motor, parâmetros, homologação e DANFE concluídos
+- NFC-e: homologação e emissão automática concluídas
+- NFS-e Nacional: motor e configuração concluídos; homologação externa depende
+  da ativação do convênio de Ipuã no ambiente restrito
 - CTe

@@ -6,6 +6,11 @@ import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { requestJson } from '@/app/lib/api';
+import {
+  isValidBrazilTaxId,
+  normalizeBrazilTaxId,
+  normalizeBrazilTaxIdInput,
+} from '@/app/lib/brazil-tax-id';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildDefaultExportColumns,
@@ -127,52 +132,12 @@ function normalizeUpperInput(value: string) {
   return String(value || '').toUpperCase();
 }
 
-function hasRepeatedDigits(value: string) {
-  return /^(\d)\1+$/.test(value);
-}
-
-function isValidCpf(value: string) {
-  const digits = value.replace(/\D+/g, '');
-  if (!/^\d{11}$/.test(digits) || hasRepeatedDigits(digits)) return false;
-
-  const calculateDigit = (baseLength: number) => {
-    const sum = digits
-      .slice(0, baseLength)
-      .split('')
-      .reduce((total, digit, index) => total + Number(digit) * (baseLength + 1 - index), 0);
-    const result = (sum * 10) % 11;
-    return result === 10 ? 0 : result;
-  };
-
-  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
-}
-
-function isValidCnpj(value: string) {
-  const digits = value.replace(/\D+/g, '');
-  if (!/^\d{14}$/.test(digits) || hasRepeatedDigits(digits)) return false;
-
-  const calculateDigit = (baseLength: number) => {
-    const weights =
-      baseLength === 12
-        ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-        : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const sum = digits
-      .slice(0, baseLength)
-      .split('')
-      .reduce((total, digit, index) => total + Number(digit) * (weights[index] ?? 0), 0);
-    const remainder = sum % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-
-  return calculateDigit(12) === Number(digits[12]) && calculateDigit(13) === Number(digits[13]);
-}
-
 function validateBrazilDocument(value: string) {
-  const digits = value.replace(/\D+/g, '');
-  if (!digits) return '';
-  if (digits.length !== 11 && digits.length !== 14) return 'INFORME UM CPF COM 11 DÍGITOS OU CNPJ COM 14 DÍGITOS.';
-  if (digits.length === 11 && !isValidCpf(digits)) return 'CPF INVÁLIDO.';
-  if (digits.length === 14 && !isValidCnpj(digits)) return 'CNPJ INVÁLIDO.';
+  const document = normalizeBrazilTaxId(value);
+  if (!document) return '';
+  if (!isValidBrazilTaxId(document)) {
+    return 'INFORME UM CPF OU CNPJ VÁLIDO; O CNPJ PODE CONTER LETRAS.';
+  }
   return '';
 }
 
@@ -732,7 +697,7 @@ export default function FinanceiroCustomerCreditsPage() {
 
     const amount = parseMoneyInput(amountInput);
     const normalizedCustomerName = customerName.trim().toUpperCase();
-    const normalizedCustomerDocument = customerDocument.replace(/\D+/g, '');
+    const normalizedCustomerDocument = normalizeBrazilTaxId(customerDocument);
     const documentError = validateBrazilDocument(normalizedCustomerDocument);
 
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
@@ -1104,11 +1069,11 @@ export default function FinanceiroCustomerCreditsPage() {
                   <input
                     value={customerDocument}
                     onChange={(event) => {
-                      setCustomerDocument(event.target.value.replace(/\D+/g, '').slice(0, 14));
+                      setCustomerDocument(normalizeBrazilTaxIdInput(event.target.value));
                       setCustomerDocumentError('');
                     }}
                     onBlur={() => setCustomerDocumentError(validateBrazilDocument(customerDocument))}
-                    inputMode="numeric"
+                    autoCapitalize="characters"
                     aria-invalid={Boolean(customerDocumentError)}
                     className={`${inputClass} ${customerDocumentError ? 'border-rose-400 bg-rose-50 focus:border-rose-500' : ''}`}
                     placeholder="CPF/CNPJ"

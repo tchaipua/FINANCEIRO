@@ -618,6 +618,7 @@ export default function ScreenNameCopy({
         <button
           type="button"
           onClick={handleCopy}
+          aria-label={`Copiar o identificador ${screenId}`}
           className="flex h-7 w-7 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
           title="Copiar nome da tela e abrir lógica usada"
         >

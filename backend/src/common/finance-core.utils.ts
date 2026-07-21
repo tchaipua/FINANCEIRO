@@ -11,6 +11,8 @@ export function normalizeDigits(value?: string | null) {
   return normalized || null;
 }
 
+export { normalizeTaxId } from "./brazil-tax-id.utils";
+
 export function normalizeEmail(value?: string | null) {
   return normalizeText(value);
 }

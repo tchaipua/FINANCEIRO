@@ -113,3 +113,10 @@ Regra obrigatoria da `Escola`:
 - para dar baixa em dinheiro, o usuario precisa operar com permissao de `CAIXA`
 - a baixa so acontece se existir caixa aberto para aquele usuario na escola atual
 - a tela operacional da `Escola` abre filtrando parcelas `ABERTAS` por padrao
+
+## Integração fiscal
+
+A Escola apenas informa o contexto (`sourceTenantId`, filial, usuário e
+permissões) e referencia venda/título/pagador. NF-e e NFS-e são emitidas,
+persistidas, auditadas e enviadas pelo `Financeiro`. O destinatário/tomador é o
+mesmo `Party` pagador do título; a Escola não mantém cadastro fiscal paralelo.

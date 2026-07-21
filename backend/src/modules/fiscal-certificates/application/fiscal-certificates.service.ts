@@ -6,6 +6,7 @@ import {
 import { PrismaService } from "../../../prisma/prisma.service";
 import { decryptSecret, encryptSecret } from "../../../common/secret-crypto.utils";
 import { normalizeDigits, normalizeText } from "../../../common/finance-core.utils";
+import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import {
   ChangeFiscalCertificateStatusDto,
   GetFiscalCertificateDto,
@@ -19,6 +20,7 @@ import {
 } from "./fiscal-certificate-metadata";
 import { fetchDfeDistributionBatch } from "./nfe-dfe-distribution.client";
 import { PayablesService } from "../../payables/application/payables.service";
+import { normalizeBranchCode } from "../../../common/branch.constants";
 
 @Injectable()
 export class FiscalCertificatesService {
@@ -70,7 +72,7 @@ export class FiscalCertificatesService {
     });
 
     const normalizedCompanyName = normalizeText(filters.companyName);
-    const normalizedCompanyDocument = normalizeDigits(filters.companyDocument);
+    const normalizedCompanyDocument = normalizeTaxId(filters.companyDocument);
 
     if (existing) {
       return this.prisma.company.update({
@@ -130,6 +132,7 @@ export class FiscalCertificatesService {
       companyName: certificate.company?.name || null,
       sourceSystem: certificate.company?.sourceSystem || null,
       sourceTenantId: certificate.company?.sourceTenantId || null,
+      branchCode: certificate.branchCode,
       status: certificate.status,
       certificateType: certificate.certificateType,
       environment: certificate.environment,
@@ -205,6 +208,7 @@ export class FiscalCertificatesService {
   private async ensureSingleDefault(
     tx: any,
     companyId: string,
+    branchCode: number,
     environment: string,
     purpose: string,
     keepCertificateId?: string,
@@ -212,6 +216,7 @@ export class FiscalCertificatesService {
     await tx.fiscalCertificate.updateMany({
       where: {
         companyId,
+        branchCode,
         environment,
         purpose,
         ...(keepCertificateId ? { id: { not: keepCertificateId } } : {}),
@@ -233,10 +238,15 @@ export class FiscalCertificatesService {
     }
 
     const normalizedStatus = normalizeText(query.status);
+    const branchCode = Math.max(
+      0,
+      normalizeBranchCode(query.sourceBranchCode, 1),
+    );
 
     const certificates = await this.prisma.fiscalCertificate.findMany({
       where: {
         companyId: company.id,
+        branchCode: { in: [0, branchCode] },
         ...(normalizedStatus && normalizedStatus !== "ALL"
           ? { status: normalizedStatus }
           : {}),
@@ -294,16 +304,27 @@ export class FiscalCertificatesService {
     );
     const environment = this.normalizeEnvironment(payload.environment);
     const purpose = this.normalizePurpose(payload.purpose);
+    const branchCode = Math.max(
+      0,
+      normalizeBranchCode(payload.sourceBranchCode, 1),
+    );
 
     const created = await this.prisma.$transaction(async (tx: any) => {
       const shouldBeDefault = Boolean(payload.isDefault);
       if (shouldBeDefault) {
-        await this.ensureSingleDefault(tx, company.id, environment, purpose);
+        await this.ensureSingleDefault(
+          tx,
+          company.id,
+          branchCode,
+          environment,
+          purpose,
+        );
       }
 
       const certificate = await tx.fiscalCertificate.create({
         data: {
           companyId: company.id,
+          branchCode,
           status: "ACTIVE",
           certificateType: "A1",
           environment,
@@ -372,6 +393,7 @@ export class FiscalCertificatesService {
         await this.ensureSingleDefault(
           tx,
           certificate.companyId,
+          certificate.branchCode,
           environment,
           purpose,
           certificate.id,
@@ -470,6 +492,7 @@ export class FiscalCertificatesService {
       await this.ensureSingleDefault(
         tx,
         certificate.companyId,
+        certificate.branchCode,
         certificate.environment,
         certificate.purpose,
         certificate.id,

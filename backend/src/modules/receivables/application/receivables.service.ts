@@ -50,6 +50,11 @@ import {
 } from "./bank-return.utils";
 import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
 import { getFinanceContext } from "../../../common/finance-context";
+import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
+import {
+  PARTY_ROLE,
+  upsertPartyIdentity,
+} from "../../../common/party-registry";
 
 @Injectable()
 export class ReceivablesService {
@@ -259,9 +264,13 @@ export class ReceivablesService {
 
   private async ensurePayerParty(
     companyId: string,
+    sourceSystem: string,
+    sourceTenantId: string,
     payer: {
       externalEntityType: string;
       externalEntityId: string;
+      registeredPersonId?: string | null;
+      registeredPersonSourceType?: string | null;
       name: string;
       document?: string | null;
       email?: string | null;
@@ -281,20 +290,9 @@ export class ReceivablesService {
       throw new BadRequestException("Pagador externo inválido.");
     }
 
-    const existing = await this.prisma.party.findUnique({
-      where: {
-        companyId_branchCode_externalEntityType_externalEntityId: {
-          companyId,
-          branchCode: this.branchCode(),
-          externalEntityType,
-          externalEntityId,
-        },
-      },
-    });
-
     const data = {
       name: normalizeText(payer.name) || "PAGADOR NÃO IDENTIFICADO",
-      document: normalizeDigits(payer.document),
+      document: normalizeTaxId(payer.document),
       email: normalizeEmail(payer.email),
       phone: normalizePhone(payer.phone),
       addressLine1: normalizeText(payer.addressLine1),
@@ -305,21 +303,18 @@ export class ReceivablesService {
       updatedBy: requestedBy || null,
     };
 
-    if (existing) {
-      return this.prisma.party.update({
-        where: { id: existing.id },
-        data,
-      });
-    }
-
-    return this.prisma.party.create({
-      data: {
-        companyId,
-        externalEntityType,
-        externalEntityId,
-        ...data,
-        createdBy: requestedBy || null,
-      },
+    return upsertPartyIdentity(this.prisma, {
+      companyId,
+      branchCode: this.branchCode(),
+      sourceSystem,
+      sourceTenantId,
+      externalEntityType,
+      externalEntityId,
+      registeredPersonId: payer.registeredPersonId,
+      registeredPersonSourceType: payer.registeredPersonSourceType,
+      roles: [externalEntityType, PARTY_ROLE.CUSTOMER, PARTY_ROLE.PAYER],
+      data,
+      requestedBy,
     });
   }
 
@@ -848,7 +843,11 @@ export class ReceivablesService {
         externalEntityId:
           normalizeText(item.payer.externalEntityId) || randomUUID(),
         name: normalizeText(item.payer.name) || "PAGADOR NÃO IDENTIFICADO",
-        document: normalizeDigits(item.payer.document),
+        registeredPersonId: normalizeText(item.payer.registeredPersonId),
+        registeredPersonSourceType: normalizeText(
+          item.payer.registeredPersonSourceType,
+        ),
+        document: normalizeTaxId(item.payer.document),
         email: normalizeEmail(item.payer.email),
         phone: normalizePhone(item.payer.phone),
       },
@@ -914,6 +913,8 @@ export class ReceivablesService {
       try {
         const payerParty = await this.ensurePayerParty(
           company.id,
+          normalizedSourceSystem,
+          normalizedSourceTenantId,
           item.payer,
           payload.requestedBy,
         );

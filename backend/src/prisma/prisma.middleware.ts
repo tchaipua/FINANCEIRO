@@ -4,6 +4,7 @@ import { getVisibleBranchCodes } from "../common/branch.constants";
 import { getFinanceContext } from "../common/finance-context";
 
 const IGNORED_MODELS = ["Company", "CompanyBranch"];
+// Party is company-wide; branch visibility is granted by PartyRole.
 const BRANCH_MODELS = [
   "Product",
   "ProductStockBalance",
@@ -14,7 +15,6 @@ const BRANCH_MODELS = [
   "PayableInstallment",
   "StockMovement",
   "BankAccount",
-  "Party",
   "ReceivableBatch",
   "ReceivableTitle",
   "ReceivableInstallment",

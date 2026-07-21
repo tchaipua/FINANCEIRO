@@ -37,6 +37,18 @@ export class SaleCustomerDto {
 
   @IsOptional()
   @IsString()
+  stateRegistration?: string;
+
+  @IsOptional()
+  @IsString()
+  municipalRegistration?: string;
+
+  @IsOptional()
+  @IsString()
+  stateRegistrationIndicator?: string;
+
+  @IsOptional()
+  @IsString()
   email?: string;
 
   @IsOptional()
@@ -49,6 +61,18 @@ export class SaleCustomerDto {
 
   @IsOptional()
   @IsString()
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  addressNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  addressComplement?: string;
+
+  @IsOptional()
+  @IsString()
   neighborhood?: string;
 
   @IsOptional()
@@ -57,11 +81,23 @@ export class SaleCustomerDto {
 
   @IsOptional()
   @IsString()
+  cityCode?: string;
+
+  @IsOptional()
+  @IsString()
   state?: string;
 
   @IsOptional()
   @IsString()
   postalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+
+  @IsOptional()
+  @IsString()
+  countryName?: string;
 }
 
 export class SaleItemDto {

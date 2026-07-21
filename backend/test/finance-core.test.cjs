@@ -42,9 +42,26 @@ const {
 
 async function resetDatabase(prisma) {
   await prisma.superTefAuditEvent.deleteMany();
+  await prisma.fiscalDocumentEvent.deleteMany();
+  await prisma.fiscalDocumentEmailDelivery.deleteMany();
+  await prisma.fiscalDocumentInstallment.deleteMany();
+  await prisma.fiscalDocumentItem.deleteMany();
   await prisma.fiscalDocumentAttempt.deleteMany();
   await prisma.fiscalDocument.deleteMany();
+  await prisma.fiscalNumberInutilization.deleteMany();
+  await prisma.fiscalAuditEvent.deleteMany();
+  await prisma.nfseEmailDelivery.deleteMany();
+  await prisma.nfseDocumentAttempt.deleteMany();
+  await prisma.nfseDocument.deleteMany();
+  await prisma.nfseProfile.deleteMany();
+  await prisma.nfseServiceDescription.deleteMany();
+  await prisma.nfseServiceItem.deleteMany();
+  await prisma.nfseMunicipalParameter.deleteMany();
+  await prisma.nfeProfile.deleteMany();
   await prisma.nfceProfile.deleteMany();
+  await prisma.fiscalTaxRule.deleteMany();
+  await prisma.fiscalBenefitCode.deleteMany();
+  await prisma.fiscalOperationNature.deleteMany();
   await prisma.salePixIntent.deleteMany();
   await prisma.salePayment.deleteMany();
   await prisma.saleReturnItem.deleteMany();
@@ -82,7 +99,14 @@ async function resetDatabase(prisma) {
   await prisma.receivableBatch.deleteMany();
   await prisma.cashSession.deleteMany();
   await prisma.bankAccount.deleteMany();
+  await prisma.partyAuditEvent.deleteMany();
+  await prisma.partyExternalReference.deleteMany();
+  await prisma.partyRole.deleteMany();
   await prisma.party.deleteMany();
+  await prisma.s3AuditEvent.deleteMany();
+  await prisma.s3Configuration.deleteMany();
+  await prisma.sourceIntegrationAuditEvent.deleteMany();
+  await prisma.sourceIntegrationConfiguration.deleteMany();
   await prisma.screenParameter.deleteMany();
   await prisma.companyBranch.deleteMany();
   await prisma.company.deleteMany();
@@ -152,6 +176,8 @@ async function main() {
     const customersService = new CustomersService(prisma);
     const salesService = new SalesService(prisma, {}, {
       issueForSaleAfterConfirmation: async () => ({ status: "NOT_CONFIGURED" }),
+    }, {
+      issueForSaleAfterConfirmation: async () => ({ status: "NOT_CONFIGURED" }),
     });
 
     const schoolCustomerSync = await customersService.sync({
@@ -164,14 +190,25 @@ async function main() {
         {
           externalEntityType: "RESPONSAVEL",
           externalEntityId: "RESPONSAVEL_001",
+          registeredPersonId: "PERSON:PESSOA_001",
+          registeredPersonSourceType: "ESCOLA",
           name: "RESPONSAVEL TESTE",
-          document: "12345678901",
+          document: "52998224725",
+          email: "responsavel@teste.com",
+        },
+        {
+          externalEntityType: "ALUNO",
+          externalEntityId: "ALUNO_001",
+          registeredPersonId: "PERSON:PESSOA_001",
+          registeredPersonSourceType: "ESCOLA",
+          name: "RESPONSAVEL TESTE",
+          document: "529.982.247-25",
           email: "responsavel@teste.com",
         },
       ],
     });
 
-    assert.equal(schoolCustomerSync.synchronizedCustomers, 1);
+    assert.equal(schoolCustomerSync.synchronizedCustomers, 2);
     const schoolCompany = await prisma.company.findUnique({
       where: {
         sourceSystem_sourceTenantId: {
@@ -180,6 +217,23 @@ async function main() {
         },
       },
     });
+    const unifiedSchoolParties = await prisma.party.findMany({
+      where: {
+        companyId: schoolCompany.id,
+        documentNormalized: "52998224725",
+      },
+      include: {
+        roles: true,
+        externalReferences: true,
+      },
+    });
+    assert.equal(unifiedSchoolParties.length, 1);
+    assert.deepEqual(
+      unifiedSchoolParties[0].externalReferences
+        .map((reference) => reference.externalEntityType)
+        .sort(),
+      ["ALUNO", "PERSON", "RESPONSAVEL"],
+    );
     const legacySchoolCustomer = await prisma.party.create({
       data: {
         companyId: schoolCompany.id,
@@ -187,6 +241,16 @@ async function main() {
         externalEntityType: "CLIENTE_LEGADO",
         externalEntityId: "LEGADO_LOCAL",
         name: "CLIENTE LEGADO COM TITULO",
+      },
+    });
+    await prisma.partyRole.create({
+      data: {
+        companyId: schoolCompany.id,
+        partyId: legacySchoolCustomer.id,
+        branchCode: 1,
+        roleType: "CUSTOMER",
+        createdBy: "CODEX",
+        updatedBy: "CODEX",
       },
     });
     const legacySchoolBatch = await prisma.receivableBatch.create({
@@ -247,7 +311,7 @@ async function main() {
       sourceTenantId: "TENANT_PETSHOP_CLIENTES",
       companyName: "PETSHOP CLIENTES",
       name: "CLIENTE LOCAL",
-      document: "11222333000144",
+      document: "04252011000110",
     });
     assert.equal(localCustomer.origin, "FINANCEIRO");
     assert.equal(localCustomer.canManageLocally, true);
@@ -261,14 +325,22 @@ async function main() {
       },
     );
     assert.equal(inactivatedLocalCustomer.status, "INACTIVE");
-    assert.ok(inactivatedLocalCustomer.canceledAt);
+    assert.equal(inactivatedLocalCustomer.canceledAt, null);
+    const inactivatedCustomerRole = await prisma.partyRole.findFirst({
+      where: {
+        partyId: localCustomer.id,
+        branchCode: 1,
+        roleType: "CUSTOMER",
+      },
+    });
+    assert.ok(inactivatedCustomerRole.canceledAt);
 
     const createdBank = await banksService.create({
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
       companyName: "ESCOLA BANCOS",
-      companyDocument: "11222333000144",
+      companyDocument: "04252011000110",
       bankCode: "756",
       bankName: "SICOOB",
       branchNumber: "1234",
@@ -279,7 +351,7 @@ async function main() {
       agreementCode: "445566",
       pixKey: "financeiro@escola.com",
       beneficiaryName: "ESCOLA BANCOS",
-      beneficiaryDocument: "11222333000144",
+      beneficiaryDocument: "04252011000110",
       notes: "CONTA PRINCIPAL",
     });
 
@@ -308,7 +380,7 @@ async function main() {
       agreementCode: "778899",
       pixKey: "cobranca@escola.com",
       beneficiaryName: "ESCOLA BANCOS",
-      beneficiaryDocument: "11222333000144",
+      beneficiaryDocument: "04252011000110",
       notes: "CONTA ATUALIZADA",
     });
 
@@ -357,7 +429,7 @@ async function main() {
             beneficiaryName: "FORNECEDOR DDA UM",
             beneficiaryDocument: "11222333000155",
             payerName: "ESCOLA BANCOS",
-            payerDocument: "11222333000144",
+            payerDocument: "04252011000110",
             documentNumber: "DOC-DDA-001",
             digitableLine: "00190000090123456789012345678901234567890123",
             amount: 150.75,
@@ -467,7 +539,7 @@ async function main() {
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
       companyName: "ESCOLA BANCOS",
-      companyDocument: "11222333000144",
+      companyDocument: "04252011000110",
       bankCode: "756",
       bankName: "SICOOB EXTRATO",
       branchNumber: "4321",
@@ -475,7 +547,7 @@ async function main() {
       accountNumber: "964",
       accountDigit: "4",
       beneficiaryName: "ESCOLA BANCOS",
-      beneficiaryDocument: "11222333000144",
+      beneficiaryDocument: "04252011000110",
       billingProvider: "SICOOB",
       billingApiClientId: "CLIENT_ID_TESTE",
       billingCertificateBase64: Buffer.from("CERTIFICADO TESTE").toString("base64"),
@@ -584,7 +656,7 @@ async function main() {
             externalEntityType: "RESPONSAVEL",
             externalEntityId: "RESP_001",
             name: "MARIA TESTE",
-            document: "12345678900",
+            document: "16899535009",
             email: "maria@teste.com",
             phone: "11999999999",
           },
@@ -683,7 +755,7 @@ async function main() {
             externalEntityType: "RESPONSAVEL",
             externalEntityId: "RESP_002",
             name: "MARIA TESTE 2",
-            document: "12345678901",
+            document: "11144477735",
             email: "maria2@teste.com",
             phone: "11999999998",
           },

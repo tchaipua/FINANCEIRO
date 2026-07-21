@@ -28,6 +28,7 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - ampliar importacao automatica com manifestacao do destinatario e tratamento de resumos DF-e
 - acompanhar patch oficial do Next moderno para remover alerta residual de `postcss` interno sem downgrade para Next 9
 - concluido: cadastro híbrido de clientes com consulta/sincronização exclusiva para Escola e cadastro local para as demais empresas
+- concluido: cadastro mestre único por CPF/CNPJ com papéis por filial para cliente, pagador, fornecedor, destinatário e tomador, consolidação lógica de duplicidades e auditoria
 - concluido: barra compacta do cadastro de produtos com botão `+`, pesquisa rápida no grid e remoção do resumo redundante acima da listagem
 - concluido: entrada e saída manual por produto com histórico append-only, saldo anterior/final, idempotência e consulta do histórico já filtrada pelo produto
 
@@ -35,6 +36,7 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 
 - concluido: primeira versao da tela `Vendas 2`, com novo layout de PDV e reutilizacao integral do fluxo operacional da tela de vendas atual
 - concluido: estrutura visual inicial da central `MSINFOR` no Financeiro, com card `SUPERTEF` e tela unica organizada por abas
+- concluido: card `PARÂMETROS FISCAIS` na central `MSINFOR`, com central própria e rotas preparadas para os cadastros fiscais por filial
 - concluido: configuração persistente SuperTEF por empresa/filial com token AES-256-GCM, teste de conexão, sincronização de POS, checkouts, prioridades, soft delete e auditoria append-only
 - concluido: credencial homologada, conexão testada e POS emulador 3120 sincronizada
 - concluido: solicitação/consulta de pagamento de débito e crédito em homologação, com idempotência, exclusão mútua por POS, polling e auditoria
@@ -54,4 +56,70 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - concluido: perfil fiscal isolado por empresa/filial/ambiente, tentativas auditadas e trava de cancelamento para venda autorizada
 - pendente externo: o CNPJ `51007652000199` da SACCARDO continua sem credenciamento NFC-e; retorno `245 - CNPJ Emitente não cadastrado`
 - pendente: cadastrar certificado e perfil fiscal do mesmo CNPJ da empresa usada pela tela de vendas e preencher NCM dos produtos
-- pendente: enviar o DANFE/XML de homologacao por e-mail
+- concluido: envio do DANFE/XML de homologacao por e-mail
+
+## NF-e modelo 55
+
+- concluído: motor NF-e centralizado no Financeiro e isolado por empresa/filial
+- concluído: filial `4 - MSINFOR` vinculada entre Escola e Financeiro
+- concluído: identidade fiscal do emitente, certificado A1, CRT 1, IE,
+  endereço e código IBGE cadastrados por filial
+- concluído: natureza de venda interna, CFOP 5102 e regra CSOSN 102 sem
+  benefício fiscal
+- concluído: cadastro fiscal de produtos com NCM, CEST, GTIN, unidades, origem,
+  CFOP, ICMS/CSOSN, PIS, COFINS, IPI e `cBenef`
+- concluído: dados fiscais completos de destinatário no cadastro de clientes
+- concluído: suporte ao CNPJ alfanumérico oficial no backend e frontend
+- concluído: catálogo paulista `cBenef` versão `20260626`, rejeição de
+  `SEM CBENEF` e omissão correta quando não há benefício
+- concluído: prévia, assinatura A1, validação XSD, autorização, consulta,
+  cancelamento, CC-e, inutilização, armazenamento XML/DANFE e auditoria
+- concluído: emissão manual e emissão automática ao finalizar a venda
+- concluído: card próprio `Emissão NF-e` no portal, com emissão avulsa sem
+  venda artificial e Contas a Receber opcional de 1 a 60 parcelas após
+  autorização
+- concluído: venda mista mantém PIX antes de crédito/débito
+- concluído: NF-e homologação série 1 número 2 autorizada, chave
+  `35260769342038000149550010000000021032818568`, protocolo
+  `135260006694946`
+- concluído: XML processado validado no XSD vigente, assinatura verificada e
+  DANFE conferido visualmente
+- concluído: envio automático e reenvio manual do DANFE/XML por e-mail, com
+  SMTP por filial criptografado, histórico e auditoria; NF-e 1/2 enviada em
+  homologação
+- pendente para produção: confirmar credenciamento/ambiente de produção,
+  revisar numeração inicial e homologar cenários tributários adicionais
+  (interestadual, ST, benefício fiscal, devolução e complemento)
+
+## NFS-e Nacional
+
+- concluído: card `NOTA FISCAL DE SERVIÇO` na central de parâmetros fiscais
+- concluído: tela única de prontidão, emitente, perfil, SMTP, catálogo de
+  serviços, emissão manual, documentos e artefatos
+- concluído: as seis seções da configuração NFS-e foram separadas em abas
+- concluído: cada serviço fiscal aceita múltiplas descrições reutilizáveis,
+  mantendo a primeira como padrão para integrações existentes
+- concluído: card próprio `Emissão NFS (Serviço)` no portal, com Contas a
+  Receber opcional e parcelado criado somente após autorização
+- concluído: agregado NFS-e próprio, multi-tenant/filial, soft delete,
+  idempotência, numeração transacional, tentativas e auditoria
+- concluído: DPS XML 1.01, assinatura A1, GZip/Base64, SEFIN restrita,
+  reconciliação, XML autorizado e DANFSe oficial
+- concluído: DPS 1/2 e 1/3 validadas no XSD oficial de 09/02/2026 e assinaturas
+  reais verificadas antes da transmissão
+- concluído: envio automático/manual de XML + DANFSe somente após autorização
+- concluído: tomador reutiliza o `Party` pagador da duplicata; NF-e também foi
+  ajustada para priorizar esse mesmo pagador
+- concluído: serviço de suporte técnico configurado com código nacional
+  `010701`, CNAE `6209100`, NBS `115013000` e valor de teste R$ 10,00
+- concluído: serviço fiscal pode ser exclusivo da filial ou compartilhado com
+  todas as filiais da mesma empresa
+- concluído: inscrição municipal `1299` obtida no CNC oficial de produção e
+  gravada na filial MSINFOR com auditoria
+- validado: ambiente nacional de produção informa o contribuinte ativo e
+  habilitado no CNC de Ipuã
+- pendente externo: o convênio de Ipuã/SP não está ativo no ambiente restrito;
+  as transmissões das DPS 1/2 e 1/3 retornaram `E0037`, portanto ainda não
+  existe XML autorizado/DANFSe e o e-mail não pode ser enviado
+- pendente de acompanhamento: adotar CNPJ alfanumérico na DPS quando o Governo
+  publicar XSD NFS-e que substitua a restrição numérica do leiaute 1.01

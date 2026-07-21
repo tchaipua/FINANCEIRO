@@ -36,45 +36,9 @@ export async function ensureDefaultCompanyBranch(
     return existing;
   }
 
-  const createdBranch = await prisma.companyBranch.create({
-    data: {
-      companyId,
-      branchCode: DEFAULT_BRANCH_CODE,
-      name: "FILIAL 1",
-      isActive: true,
-      isDefault: true,
-      inventoryControlType: "TRADITIONAL",
-      quantityPrecision: "INTEGER_ONLY",
-      stockControlMode: "BY_PRODUCT",
-      stockIntegerQuantityMode: "YES",
-      stockLotControlMode: "NO",
-      stockExpirationControlMode: "NO",
-      stockGridControlMode: "NO",
-      stockNegativeControlMode: "NO",
-      allowSaleUnitPriceEdit: true,
-      allowSaleItemDiscount: true,
-      createdBy: userId || undefined,
-      updatedBy: userId || undefined,
-    },
-    select: { id: true },
-  });
-
-  await prisma.screenParameter.create({
-    data: {
-      companyId,
-      branchId: createdBranch.id,
-      screenId: "PRINCIPAL_FINANCEIRO_VENDAS",
-      parametersJson: JSON.stringify({
-        allowSaleUnitPriceEdit: true,
-        allowSaleItemDiscount: true,
-        groupSameProduct: true,
-      }),
-      createdBy: userId || null,
-      updatedBy: userId || null,
-    },
-  });
-
-  return createdBranch;
+  throw new BadRequestException(
+    "A filial deve ser cadastrada e sincronizada pelo sistema de origem.",
+  );
 }
 
 export async function listCompanyBranches(

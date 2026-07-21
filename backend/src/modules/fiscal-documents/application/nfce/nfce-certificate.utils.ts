@@ -1,17 +1,18 @@
 import { BadRequestException } from "@nestjs/common";
 import forge from "node-forge";
+import {
+  extractCnpjFromText,
+  isValidCnpj,
+  normalizeTaxId,
+} from "../../../../common/brazil-tax-id.utils";
 import { normalizePfxBase64ForNodeTls } from "../../../fiscal-certificates/application/fiscal-certificate-metadata";
 import { NfceCertificateMaterial } from "./nfce.types";
-
-function digits(value: unknown) {
-  return String(value ?? "").replace(/\D/g, "");
-}
 
 export function assertNfceCertificateMatchesIssuer(
   certificate: NfceCertificateMaterial,
   issuerCnpj: string,
 ) {
-  if (certificate.holderCnpj !== digits(issuerCnpj)) {
+  if (certificate.holderCnpj !== normalizeTaxId(issuerCnpj)) {
     throw new BadRequestException(
       "O CNPJ do certificado A1 não corresponde ao CNPJ da empresa emitente.",
     );
@@ -50,9 +51,8 @@ export function loadNfceCertificateMaterial(
         .some((value) => value === "commonname" || value === "cn"),
     );
     const holderCnpj = [serialNumber, commonName, ...subjectAttributes]
-      .map((attribute) => digits(attribute?.value))
-      .map((value) => value.match(/\d{14}$/)?.[0] || value)
-      .find((value) => value.length === 14);
+      .map((attribute) => extractCnpjFromText(String(attribute?.value || "")))
+      .find((value): value is string => Boolean(value && isValidCnpj(value)));
     if (!holderCnpj) {
       throw new Error("CNPJ do titular ausente no certificado.");
     }

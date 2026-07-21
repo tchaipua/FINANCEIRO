@@ -13,6 +13,7 @@ import { FinanceContextMiddleware } from "./common/finance-context.middleware";
 import { FiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documents.module";
 import { CustomersModule } from "./modules/customers/customers.module";
 import { SuperTefModule } from "./modules/supertef/supertef.module";
+import { S3ControlModule } from "./modules/s3-control/s3-control.module";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { SuperTefModule } from "./modules/supertef/supertef.module";
     SalesModule,
     CustomersModule,
     SuperTefModule,
+    S3ControlModule,
   ],
 })
 export class AppModule implements NestModule {

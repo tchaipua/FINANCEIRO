@@ -8,6 +8,7 @@ import {
 import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
 import { ensureDefaultCompanyBranch } from "../../../common/company-branches";
 import { getFinanceContext } from "../../../common/finance-context";
+import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import {
   ChangeProductStatusDto,
   CreateManualStockMovementDto,
@@ -18,6 +19,7 @@ import {
 } from "./dto/products.dto";
 
 type NormalizedProductPayload = {
+  branchCode: number;
   name: string;
   internalCode: string | null;
   sku: string | null;
@@ -36,6 +38,29 @@ type NormalizedProductPayload = {
   salePrice: number | null;
   ncmCode: string | null;
   cestCode: string | null;
+  fiscalDescription: string | null;
+  gtinCode: string | null;
+  taxableGtinCode: string | null;
+  taxableUnitCode: string | null;
+  taxableConversionFactor: number;
+  exTipiCode: string | null;
+  fiscalOriginCode: string | null;
+  defaultCfopCode: string | null;
+  icmsCsosnCode: string | null;
+  icmsCstCode: string | null;
+  icmsRate: number | null;
+  pisCstCode: string | null;
+  pisRate: number | null;
+  cofinsCstCode: string | null;
+  cofinsRate: number | null;
+  ipiCstCode: string | null;
+  ipiFrameworkCode: string | null;
+  ipiRate: number | null;
+  fiscalBenefitCode: string | null;
+  approximateTaxRate: number | null;
+  ibsCbsCstCode: string | null;
+  ibsCbsClassCode: string | null;
+  fiscalNotes: string | null;
   notes: string | null;
 };
 
@@ -320,8 +345,15 @@ export class ProductsService {
       payload.allowsNegativeStock,
       allowsNegativeStockFallback,
     );
+    const fiscalBenefitCode = normalizeText(payload.fiscalBenefitCode);
+    if (fiscalBenefitCode === "SEM CBENEF") {
+      throw new BadRequestException(
+        "SEM CBENEF não é aceito em São Paulo desde 01/07/2026. Informe um código vigente ou deixe o campo vazio quando não houver benefício.",
+      );
+    }
 
     return {
+      branchCode: branchConfig.branchCode,
       name: normalizedName,
       internalCode: this.normalizeInternalCode(payload.internalCode),
       sku: normalizeText(payload.sku),
@@ -349,6 +381,34 @@ export class ProductsService {
       ncmCode: normalizeDigits(payload.ncmCode) || normalizeText(payload.ncmCode),
       cestCode:
         normalizeDigits(payload.cestCode) || normalizeText(payload.cestCode),
+      fiscalDescription: normalizeText(payload.fiscalDescription),
+      gtinCode: normalizeText(payload.gtinCode),
+      taxableGtinCode: normalizeText(payload.taxableGtinCode),
+      taxableUnitCode: normalizeText(payload.taxableUnitCode),
+      taxableConversionFactor: Math.max(
+        0.000001,
+        Number(payload.taxableConversionFactor || 1),
+      ),
+      exTipiCode: normalizeDigits(payload.exTipiCode),
+      fiscalOriginCode: normalizeDigits(payload.fiscalOriginCode),
+      defaultCfopCode: normalizeDigits(payload.defaultCfopCode),
+      icmsCsosnCode: normalizeDigits(payload.icmsCsosnCode),
+      icmsCstCode: normalizeDigits(payload.icmsCstCode),
+      icmsRate: this.normalizeOptionalNumber(payload.icmsRate),
+      pisCstCode: normalizeDigits(payload.pisCstCode),
+      pisRate: this.normalizeOptionalNumber(payload.pisRate),
+      cofinsCstCode: normalizeDigits(payload.cofinsCstCode),
+      cofinsRate: this.normalizeOptionalNumber(payload.cofinsRate),
+      ipiCstCode: normalizeDigits(payload.ipiCstCode),
+      ipiFrameworkCode: normalizeDigits(payload.ipiFrameworkCode),
+      ipiRate: this.normalizeOptionalNumber(payload.ipiRate),
+      fiscalBenefitCode,
+      approximateTaxRate: this.normalizeOptionalNumber(
+        payload.approximateTaxRate,
+      ),
+      ibsCbsCstCode: normalizeDigits(payload.ibsCbsCstCode),
+      ibsCbsClassCode: normalizeDigits(payload.ibsCbsClassCode),
+      fiscalNotes: normalizeText(payload.fiscalNotes),
       notes: normalizeText(payload.notes),
     };
   }
@@ -405,6 +465,45 @@ export class ProductsService {
           : roundMoney(product.salePrice),
       ncmCode: product.ncmCode || null,
       cestCode: product.cestCode || null,
+      fiscalDescription: product.fiscalDescription || null,
+      gtinCode: product.gtinCode || null,
+      taxableGtinCode: product.taxableGtinCode || null,
+      taxableUnitCode: product.taxableUnitCode || null,
+      taxableConversionFactor: Number(product.taxableConversionFactor || 1),
+      exTipiCode: product.exTipiCode || null,
+      fiscalOriginCode: product.fiscalOriginCode || null,
+      defaultCfopCode: product.defaultCfopCode || null,
+      icmsCsosnCode: product.icmsCsosnCode || null,
+      icmsCstCode: product.icmsCstCode || null,
+      icmsRate:
+        product.icmsRate === null || product.icmsRate === undefined
+          ? null
+          : Number(product.icmsRate),
+      pisCstCode: product.pisCstCode || null,
+      pisRate:
+        product.pisRate === null || product.pisRate === undefined
+          ? null
+          : Number(product.pisRate),
+      cofinsCstCode: product.cofinsCstCode || null,
+      cofinsRate:
+        product.cofinsRate === null || product.cofinsRate === undefined
+          ? null
+          : Number(product.cofinsRate),
+      ipiCstCode: product.ipiCstCode || null,
+      ipiFrameworkCode: product.ipiFrameworkCode || null,
+      ipiRate:
+        product.ipiRate === null || product.ipiRate === undefined
+          ? null
+          : Number(product.ipiRate),
+      fiscalBenefitCode: product.fiscalBenefitCode || null,
+      approximateTaxRate:
+        product.approximateTaxRate === null ||
+        product.approximateTaxRate === undefined
+          ? null
+          : Number(product.approximateTaxRate),
+      ibsCbsCstCode: product.ibsCbsCstCode || null,
+      ibsCbsClassCode: product.ibsCbsClassCode || null,
+      fiscalNotes: product.fiscalNotes || null,
       notes: product.notes || null,
       inventorySituation: this.getInventorySituation(product),
       branchCode: product.branchCode || DEFAULT_BRANCH_CODE,
@@ -535,7 +634,7 @@ export class ProductsService {
         name:
           normalizeText(payload.companyName) ||
           `${normalizedSourceSystem} ${normalizedSourceTenantId}`,
-        document: normalizeDigits(payload.companyDocument),
+        document: normalizeTaxId(payload.companyDocument),
         createdBy: payload.requestedBy || null,
         updatedBy: payload.requestedBy || null,
       },

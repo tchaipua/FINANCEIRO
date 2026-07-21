@@ -440,6 +440,7 @@ export default function FinanceiroCashDetailPage() {
   const [isClosingCashSession, setIsClosingCashSession] = useState(false);
   const [movementFilter, setMovementFilter] = useState<MovementFilter | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [popupAuditScreenId, setPopupAuditScreenId] = useState<string | null>(null);
   const [auditCopyStatus, setAuditCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [autoCloseCashSessionPopupOpened, setAutoCloseCashSessionPopupOpened] = useState(false);
@@ -1863,6 +1864,7 @@ export default function FinanceiroCashDetailPage() {
                   type="button"
                   onClick={() => {
                     void copyTextToClipboard(CANCEL_MOVEMENT_POPUP_SCREEN_ID);
+                    setPopupAuditScreenId(CANCEL_MOVEMENT_POPUP_SCREEN_ID);
                     setCancelMovementModal((current) => current ? {
                       ...current,
                       feedback: {
@@ -2051,6 +2053,7 @@ export default function FinanceiroCashDetailPage() {
                   type="button"
                   onClick={() => {
                     void copyTextToClipboard(CLOSE_CASH_SESSION_POPUP_SCREEN_ID);
+                    setPopupAuditScreenId(CLOSE_CASH_SESSION_POPUP_SCREEN_ID);
                     setCloseCashSessionModal((current) => current ? {
                       ...current,
                       feedback: {
@@ -2148,6 +2151,14 @@ export default function FinanceiroCashDetailPage() {
           auditText={auditInfoText}
           sqlText={auditSqlText}
           onClose={() => setIsAuditModalOpen(false)}
+        />
+      ) : null}
+      {popupAuditScreenId ? (
+        <ScreenAuditModal
+          screenId={popupAuditScreenId}
+          systemName="Sistema Financeiro"
+          originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/caixa/[sessionId]/page.tsx"
+          onClose={() => setPopupAuditScreenId(null)}
         />
       ) : null}
     </div>

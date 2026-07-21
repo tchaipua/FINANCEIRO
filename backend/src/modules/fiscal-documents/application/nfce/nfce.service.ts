@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../../../../prisma/prisma.service";
 import { normalizeBranchCode } from "../../../../common/branch.constants";
 import { normalizeDigits, normalizeText, roundMoney } from "../../../../common/finance-core.utils";
+import {
+  isValidCnpj,
+  normalizeTaxId,
+} from "../../../../common/brazil-tax-id.utils";
 import { decryptSecret } from "../../../../common/secret-crypto.utils";
 import { SaveNfceProfileDto, NfceContextDto } from "../dto/nfce.dto";
 import {
@@ -144,10 +148,10 @@ export class NfceService {
 
   async saveProfile(payload: SaveNfceProfileDto) {
     const company = await this.loadCompany(payload.sourceSystem, payload.sourceTenantId);
-    const companyDocument = normalizeDigits(company.document);
+    const companyDocument = normalizeTaxId(company.document);
     const branchCode = Math.max(1, normalizeBranchCode(payload.sourceBranchCode, 1));
     const environment = normalizeText(payload.environment) || "HOMOLOGATION";
-    if (!companyDocument || companyDocument.length !== 14) {
+    if (!companyDocument || !isValidCnpj(companyDocument)) {
       throw new BadRequestException("A empresa precisa possuir CNPJ para configurar a NFC-e.");
     }
     const branch = await this.prisma.companyBranch.findFirst({
@@ -167,7 +171,7 @@ export class NfceService {
     if (!certificate) {
       throw new BadRequestException("Certificado A1 ativo não encontrado para empresa, filial e ambiente.");
     }
-    if (normalizeDigits(certificate.holderDocument) !== companyDocument) {
+    if (normalizeTaxId(certificate.holderDocument) !== companyDocument) {
       throw new BadRequestException("O CNPJ do certificado não corresponde ao CNPJ da empresa.");
     }
     if (certificate.validTo && certificate.validTo.getTime() < Date.now()) {
@@ -341,7 +345,7 @@ export class NfceService {
     const pfxBase64 = decryptSecret(certificate.pfxEncryptedBase64);
     const passphrase = decryptSecret(certificate.passwordEncrypted);
     const certificateMaterial = loadNfceCertificateMaterial(pfxBase64, passphrase);
-    const issuerCnpj = normalizeDigits(sale.company.document)!;
+    const issuerCnpj = normalizeTaxId(sale.company.document)!;
     assertNfceCertificateMatchesIssuer(certificateMaterial, issuerCnpj);
     const items = this.buildSaleItems(sale, profile);
     const payments = this.buildPayments(sale.payments);

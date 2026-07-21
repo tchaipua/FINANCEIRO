@@ -336,18 +336,27 @@ Regras:
 - a devolucao gera credito em `customer_credits` com `sourceType = SALE_RETURN`, sem movimento de caixa
 - quando a venda original nao possui documento valido do cliente, a devolucao deve receber identificacao do cliente para que `sale_returns` e `customer_credits` guardem nome/documento do titular do credito
 
-## Cadastro híbrido de clientes
+## Cadastro mestre de pessoas e papéis
 
-O modelo `parties` é o cadastro genérico usado por clientes e pagadores.
+O modelo `parties` é a identidade única da pessoa por empresa. Cliente,
+pagador, fornecedor, destinatário e tomador são papéis da mesma pessoa, não
+cadastros independentes.
 
 Regras:
 
 - empresas com `sourceSystem = ESCOLA` recebem clientes exclusivamente por sincronização do cadastro escolar
-- na Escola, aparecem os clientes sincronizados (`ALUNO | RESPONSAVEL`) e os cadastros legados efetivamente vinculados a títulos a receber
+- CPF/CNPJ normalizado é único por `companyId`, independentemente da filial e aceita CNPJ alfanumérico
+- `party_roles` registra os papéis por filial, com cancelamento lógico independente da identidade
+- `party_external_references` preserva todos os IDs de origem, inclusive `PERSON:<personId>`, aluno e responsável
+- `party_audit_events` registra criação, sincronização, ativação, inativação e consolidação
+- `suppliers.partyId` transforma o fornecedor em papel operacional da mesma pessoa
+- na Escola, aparecem os clientes sincronizados (`ALUNO | RESPONSAVEL`) vinculados à identidade central
 - snapshots sem vínculo com `parties`, como `CONSUMIDOR FINAL`, permanecem apenas no histórico financeiro e não viram cliente
 - empresas das demais origens cadastram clientes diretamente no Financeiro com `externalEntityType = FINANCEIRO_CLIENTE`
-- toda consulta e mutação respeita `companyId` e `branchCode`
-- inativação usa `canceledAt` e `canceledBy`; não existe exclusão física
+- toda consulta respeita `companyId`; a visibilidade da filial é definida pelo papel ativo em `party_roles`
+- inativar cliente ou fornecedor inativa somente o papel; a pessoa permanece para os demais usos
+- duplicidades legadas são mantidas como registros mesclados/cancelados e todas as referências passam a apontar para a pessoa canônica
+- não existe exclusão física
 - títulos e parcelas mantêm seus snapshots históricos mesmo após atualização ou inativação do cliente
 
 ## Intenções PIX de venda
@@ -455,3 +464,191 @@ Regras:
 ### `bank_dda_audit_events`
 
 Trilha append-only de sincronização, baixa local e cancelamento local dos DDAs, com usuário, data e snapshots anterior/posterior.
+
+## NF-e modelo 55
+
+### Campos fiscais da filial em `company_branches`
+
+A identidade do emitente pertence à filial:
+
+- `fiscalLegalName`, `fiscalTradeName` e `fiscalDocument`;
+- `stateRegistration`, `municipalRegistration` e `taxRegimeCode`;
+- `fiscalStreet`, `fiscalNumber`, `fiscalComplement` e
+  `fiscalNeighborhood`;
+- `fiscalCity`, `fiscalCityCode`, `fiscalState`, `fiscalStateCode` e
+  `fiscalPostalCode`;
+- `fiscalCountryCode`, `fiscalCountryName`, `fiscalPhone` e `fiscalEmail`.
+
+`fiscalDocument` é texto normalizado, não número, para preservar zeros e
+aceitar o CNPJ alfanumérico oficial.
+
+### Campos fiscais em `products`
+
+O produto mantém os dados necessários à tributação e ao XML:
+
+- `fiscalDescription`;
+- `ncmCode`, `cestCode`, `gtinCode` e `taxableGtinCode`;
+- `unitCode`, `taxableUnitCode` e `taxableConversionFactor`;
+- `exTipiCode`, `fiscalOriginCode` e `defaultCfopCode`;
+- `icmsCsosnCode`, `icmsCstCode`, `pisCstCode`, `cofinsCstCode` e
+  `ipiCstCode`;
+- `fiscalBenefitCode`;
+- `approximateTaxRate` e `fiscalNotes`.
+
+NCM e unidade tributável são obrigatórios para a emissão. CEST, GTIN e
+`cBenef` são preenchidos somente quando a mercadoria/regra exigir.
+
+### Dados fiscais do destinatário em `parties`
+
+Além de documento e nome, o cadastro guarda:
+
+- inscrição estadual e indicador de IE;
+- inscrição municipal;
+- endereço completo;
+- município/UF e código IBGE;
+- país e código do país;
+- e-mail fiscal.
+
+CPF e CNPJ permanecem como texto. CNPJ aceita 12 posições-base alfanuméricas
+mais dois dígitos verificadores.
+
+### `nfe_profiles`
+
+Perfil isolado por `companyId + branchCode + environment + series`.
+
+Guarda:
+
+- certificado A1 e natureza de operação padrão;
+- ambiente, série e próxima numeração;
+- emissão automática;
+- envio automático de DANFE/XML;
+- configuração SMTP por filial/ambiente, com senha AES-256-GCM e sem
+  reexposição pela API;
+- destinatário fixo de e-mail em homologação, separado do e-mail fiscal do
+  cliente;
+- layout do DANFE;
+- versões de schema e catálogo `cBenef`;
+- responsável técnico e CSRT, quando aplicáveis.
+
+### `fiscal_operation_natures`
+
+Naturezas de operação/CFOP da filial. Possuem soft delete e podem ser
+referenciadas pelo perfil, regras e documentos emitidos.
+
+### `fiscal_tax_rules`
+
+Regras tributárias por natureza e, opcionalmente, produto. A prioridade permite
+regra específica antes da regra padrão da operação.
+
+### `fiscal_benefit_codes`
+
+Espelho local controlado dos códigos `cBenef` por UF e versão de catálogo.
+Não se grava o valor artificial `SEM CBENEF`; ausência de benefício é `NULL`.
+
+### Extensão de `fiscal_documents`
+
+O mesmo agregado fiscal suporta modelos 55 e 65. Para NF-e, preserva:
+
+- perfil e natureza utilizados;
+- destinatário;
+- snapshots de emitente, destinatário, totais e pagamentos;
+- chave, protocolo, XML assinado, resposta e XML processado;
+- nome/conteúdo do DANFE;
+- status, rejeições, tentativas e auditoria.
+
+A emissão manual permite `saleId` nulo e identifica a origem com
+`sourceSystem`, `sourceTenantId`, `sourceEntityType`, `sourceEntityId` e
+`idempotencyKey`. A escolha opcional de cobrança fica preservada em
+`receivablePlanJson`; após autorização, `receivableTitleId` vincula o documento
+ao título efetivamente criado.
+
+### `fiscal_document_items`
+
+Snapshot imutável dos itens e da tributação enviada à SEFAZ. Alterações
+posteriores no produto não reescrevem a nota.
+
+### `fiscal_document_installments`
+
+Duplicatas da venda a prazo, com número, vencimento e valor.
+
+### `fiscal_document_events`
+
+Histórico append-only de cancelamento e Carta de Correção.
+
+### `fiscal_document_email_deliveries`
+
+Histórico append-only das tentativas de envio do DANFE e XML. Guarda
+destinatário, assunto, anexos, situação, identificador retornado pelo provedor,
+datas e erro, sem guardar a senha SMTP.
+
+### `fiscal_number_inutilizations`
+
+Faixas inutilizadas por empresa, filial, ambiente, modelo, série e ano.
+
+### `fiscal_audit_events`
+
+Auditoria append-only de parâmetros, numeração, emissão, reconciliação e
+eventos. Senha do certificado e conteúdo secreto nunca entram nos snapshots.
+
+## NFS-e Nacional
+
+### `nfse_profiles`
+
+Perfil por `companyId + branchCode + environment + series`. Mantém certificado
+A1, série/próximo número da DPS, versão 1.01, opção e apuração no Simples,
+regime especial, serviço padrão, automação e SMTP criptografado. A inscrição
+municipal continua na filial fiscal compartilhada com NF-e/NFC-e.
+
+### `nfse_service_items`
+
+Catálogo de serviços com código interno, CNAE, código de tributação
+nacional/municipal, NBS, município da prestação, ISSQN, retenção, PIS/COFINS e
+campos preparados para IBS/CBS. `branchCode=0` identifica serviço compartilhado
+entre todas as filiais da mesma empresa; os demais códigos mantêm o serviço
+exclusivo da filial. Exclusão é sempre lógica.
+
+### `nfse_service_descriptions`
+
+Descrições reutilizáveis vinculadas ao mesmo serviço fiscal, sem repetir CNAE,
+NBS, códigos tributários ou configuração do ISS. `sortOrder=0` identifica a
+descrição padrão preservada também em `nfse_service_items.description` por
+compatibilidade. A tabela carrega `companyId`, `branchCode`, soft delete e
+metadados de auditoria; ao compartilhar o serviço, as descrições acompanham o
+mesmo escopo.
+
+### `nfse_documents`
+
+Agregado independente da NF-e, pois DPS/NFS-e têm numeração, XML, API e ciclo
+próprios. Preserva snapshots do emitente, tomador, serviço e tributos, vínculo
+opcional com venda/título, chave/id da DPS, XML assinado, XML autorizado e
+DANFSe oficial. `receivablePlanJson` preserva as parcelas solicitadas na
+emissão manual até a autorização. O tomador obrigatório aponta para `Party`;
+quando houver título, é o mesmo `payerParty` da duplicata.
+
+### Histórico e parametrização
+
+- `nfse_document_attempts`: tentativas append-only e retornos da API nacional;
+- `nfse_email_deliveries`: envios de XML/DANFSe, sem senha SMTP;
+- `nfse_municipal_parameters`: cache auditável de convênio, alíquota, regimes e
+  retenções consultados nas APIs oficiais.
+
+Chaves únicas impedem duplicidade por filial/ambiente/série/número, DPS e chave
+de idempotência. Nenhum documento fiscal é apagado fisicamente.
+
+## Controle S3
+
+### `s3_configurations`
+
+Configuração S3 exclusiva do Financeiro por `companyId` e `branchCode`. As chaves de acesso são armazenadas criptografadas, e o acesso é limitado à `basePrefix` obrigatória.
+
+### `s3_audit_events`
+
+Trilha append-only das configurações e exclusões de arquivos S3. Registra empresa, filial, ator, ação, resumo e metadados não sensíveis; nunca registra a credencial.
+
+### `source_integration_configurations`
+
+Espelho técnico das configurações compartilhadas pela empresa/filial do sistema de origem, exclusivo por `companyId` e `branchCode`. Armazena SMTP, Telegram e metadados de armazenamento, com senhas e tokens criptografados. O campo de escopo registra se cada configuração veio da filial ou foi herdada da empresa.
+
+### `source_integration_audit_events`
+
+Trilha append-only de cada sincronização das configurações de origem. Registra origem, empresa, filial, ator e somente indicadores não sensíveis; nunca registra senha SMTP, token ou credenciais S3.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import RootShell from "@/app/components/root-shell";
+import SystemMessageProvider from "@/app/components/system-message-provider";
 
 export const metadata: Metadata = {
   title: "Financeiro Core",
@@ -37,7 +38,7 @@ export default function RootLayout({
             })();
           `}
         </Script>
-        <RootShell>{children}</RootShell>
+        <SystemMessageProvider><RootShell>{children}</RootShell></SystemMessageProvider>
       </body>
     </html>
   );

@@ -51,6 +51,12 @@ function resolveSchoolShellOrigin() {
 }
 
 function resolveSchoolFinancePath(pathname: string) {
+  if (pathname.startsWith('/contas-a-receber')) {
+    return '/principal/financeiro/contas-a-receber';
+  }
+  if (pathname.startsWith('/msinfor/controle-s3')) {
+    return `/principal/financeiro${pathname}`;
+  }
   if (pathname.startsWith('/analises-graficos')) {
     return `/principal/financeiro${pathname}`;
   }
@@ -77,6 +83,8 @@ function resolveSchoolFinancePath(pathname: string) {
   }
   if (pathname.startsWith('/vendas/periodo')) return '/principal/financeiro/vendas-periodo';
   if (pathname.startsWith('/vendas')) return '/principal/financeiro/vendas';
+  if (pathname.startsWith('/emissao-nfe')) return '/principal/financeiro/emissao-nfe';
+  if (pathname.startsWith('/emissao-nfs')) return '/principal/financeiro/emissao-nfs';
 
   return null;
 }

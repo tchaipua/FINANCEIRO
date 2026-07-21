@@ -18,11 +18,12 @@ Uso:
 
 ## Companies
 
-### POST `/companies`
+### GET `/companies`
 
 Uso:
 
-- cadastrar empresa dona da operacao financeira
+- listar o espelho das empresas recebidas dos sistemas de origem;
+- empresa e filial não são cadastradas manualmente no Financeiro.
 
 ## Integration clients
 
@@ -269,8 +270,10 @@ Uso:
 Regras:
 
 - habilitado somente para `sourceSystem = ESCOLA`
-- cria ou atualiza `parties` pela chave `companyId + branchCode + externalEntityType + externalEntityId`
-- registros escolares ausentes na carga completa são inativados logicamente
+- resolve ou atualiza uma única `Party` por `companyId + documentNormalized` ou pela referência estável `registeredPersonId`
+- `externalEntityType + externalEntityId` permanece como alias do papel escolar, sem criar outra pessoa
+- cada carga cria/reativa os papéis necessários em `party_roles` para a filial
+- registros escolares ausentes na carga completa têm referências e papéis inativados logicamente; a identidade não é cancelada se possuir outro papel
 
 ### POST `/customers`
 
@@ -292,7 +295,7 @@ Regra:
 
 ### POST `/customers/:customerId/inactivate`
 
-- inativa logicamente um cliente local, preservando histórico e snapshots financeiros
+- inativa logicamente apenas o papel de cliente na filial, preservando a pessoa, outros papéis, histórico e snapshots financeiros
 
 ## NFC-e
 
@@ -392,28 +395,16 @@ Uso:
 
 ### POST `/companies/:id/branches`
 
-Uso:
-
-- criar filial com parametros operacionais
-
-Body resumido:
-
-```json
-{
-  "branchCode": 2,
-  "name": "FILIAL CENTRO",
-  "inventoryControlType": "COLOR_SIZE",
-  "quantityPrecision": "PRODUCT_DEFINED",
-  "allowSaleUnitPriceEdit": true,
-  "allowSaleItemDiscount": true
-}
-```
+- Não existe. A inclusão de filial é exclusiva do sistema de origem e chega ao Financeiro pela sincronização técnica.
 
 ### PATCH `/companies/:id/branches/:branchId`
 
 Uso:
 
-- atualizar nome, regras de estoque, regra de quantidade e parametros comerciais da filial
+- atualizar somente regras operacionais de estoque, quantidade e parâmetros comerciais da filial;
+- código e nome da filial são somente leitura no Financeiro;
+- antes de alterar o espelho local, o Financeiro chama o sistema de origem e exige confirmação;
+- se a origem estiver indisponível ou recusar, nenhuma alteração é persistida no Financeiro.
 
 ## Fiscal Certificates
 
@@ -916,3 +907,218 @@ Marca o DDA como `CLOSED` somente no Financeiro. Exige `paymentDate`, grava a da
 Marca o DDA como `CANCELED` somente no Financeiro. Não envia cancelamento ao banco.
 
 As duas mutações exigem escopo da empresa, aceitam observação e geram auditoria append-only.
+
+## NF-e modelo 55
+
+Toda operação exige o contexto da filial emitente:
+
+- `sourceSystem`
+- `sourceTenantId`
+- `sourceBranchCode`
+- `requestedBy`
+
+O contexto é resolvido para `companyId + branchCode`; certificado, perfil,
+numeração, regras tributárias, documentos e auditoria nunca podem atravessar
+empresa ou filial.
+
+### Parâmetros fiscais
+
+#### GET `/fiscal-parameters/overview`
+
+Retorna:
+
+- identidade fiscal da filial;
+- certificados A1 disponíveis para a filial;
+- perfil NF-e, ambiente, série e próxima numeração;
+- naturezas de operação/CFOP;
+- regras tributárias;
+- catálogo local de `cBenef`;
+- checklist de prontidão para emissão.
+
+#### PUT `/fiscal-parameters/branch`
+
+Atualiza a identidade fiscal da filial, incluindo razão social, nome fantasia,
+CNPJ, IE, CRT, endereço e códigos IBGE.
+
+#### PUT `/fiscal-parameters/operations`
+
+Cria ou atualiza uma natureza de operação. O cadastro guarda modelo, tipo da
+operação, destino, finalidade, CFOP, consumidor final, presença, intermediador
+e modalidade de frete.
+
+#### PUT `/fiscal-parameters/tax-rules`
+
+Cria ou atualiza regra tributária por operação e, opcionalmente, por produto.
+Suporta origem, CSOSN/CST, PIS, COFINS, IPI, `cBenef`, NCM e CEST.
+
+#### PUT `/fiscal-parameters/benefits`
+
+Cria ou atualiza um código da tabela oficial paulista de benefícios fiscais.
+
+Regras:
+
+- `SEM CBENEF` é rejeitado;
+- o código deve pertencer à UF da filial;
+- a versão padrão do catálogo é `20260626`;
+- regra sem benefício fiscal deve manter `cBenef` vazio;
+- cancelamento usa `DELETE /fiscal-parameters/benefits/:benefitId` com soft
+  delete e auditoria.
+
+#### PUT `/fiscal-parameters/nfe-profile`
+
+Configura certificado, ambiente, série, próxima numeração, natureza padrão,
+versão de schema e emissão automática no fechamento da venda. Quando o envio
+de e-mail estiver ativo, também configura servidor, porta, SSL, autenticação,
+usuário, senha SMTP criptografada, remetente e tempo limite. A senha nunca é
+devolvida pela API. Em homologação, exige um e-mail fixo de testes para impedir
+envio acidental ao contato real de outro destinatário.
+
+### Emissão
+
+#### GET `/fiscal-documents/nfe/manual/overview`
+
+Retorna a prontidão fiscal da filial, pagadores/destinatários (`Party`),
+naturezas, produtos e as emissões manuais recentes. Exige `ADMIN` ou
+`MANAGE_FINANCIAL`.
+
+#### POST `/fiscal-documents/nfe/manual/issue`
+
+Emite uma NF-e manual sem criar venda, movimento de estoque ou caixa. A
+requisição informa itens, forma de pagamento, destinatário e chave de
+idempotência. Opcionalmente, `createReceivable=true` recebe de 1 a 60 parcelas;
+o título e as parcelas só são criados depois da autorização fiscal, com soma
+obrigatoriamente igual ao valor líquido da nota.
+
+#### POST `/fiscal-documents/nfe/sales/:saleId/preview`
+
+Monta e valida a prévia da NF-e sem consumir numeração e sem transmitir.
+
+#### POST `/fiscal-documents/nfe/sales/:saleId/issue`
+
+Emite ou reconcilia de forma idempotente a NF-e da venda.
+
+Regras:
+
+- somente venda confirmada e pertencente ao mesmo tenant/filial pode emitir;
+- o CNPJ do certificado deve ser igual ao CNPJ da filial;
+- o CNPJ aceita o formato alfanumérico oficial nas 12 posições-base e mantém os
+  dois dígitos verificadores numéricos;
+- XML 4.00 é assinado com o certificado A1 e validado nos schemas
+  `PL_010E_V1.02 + PL_010D_V1.03`;
+- uma repetição consulta/reutiliza o mesmo documento e não duplica a venda;
+- rejeição por numeração já utilizada é reconciliada por consulta da chave ou,
+  quando a chave pertence a outro documento, por nova alocação auditada;
+- documento autorizado gera XML processado e DANFE armazenados;
+- venda com PIX e cartão somente chega à emissão depois do PIX confirmado e do
+  cartão aprovado, nesta ordem;
+- venda a prazo gera cobrança `tPag=14` e duplicatas no grupo `cobr/dup`;
+- PIX usa `tPag=17`, crédito `03` e débito `04`.
+
+#### GET `/fiscal-documents/nfe/status`
+
+Consulta a disponibilidade do serviço NF-e na SEFAZ-SP para o ambiente da
+filial.
+
+#### GET `/fiscal-documents/nfe/sales/:saleId`
+
+Consulta a NF-e vinculada à venda.
+
+#### GET `/fiscal-documents/nfe/documents/:documentId/danfe`
+
+Baixa o DANFE armazenado.
+
+#### GET `/fiscal-documents/nfe/documents/:documentId/xml`
+
+Baixa o XML processado autorizado.
+
+#### POST `/fiscal-documents/nfe/documents/:documentId/email`
+
+Envia ou reenvia o DANFE e o XML autorizado por e-mail. Aceita
+`recipientEmail` opcional; sem ele, utiliza o e-mail fiscal armazenado no
+snapshot do destinatário. No ambiente de homologação, o e-mail fixo de testes
+do perfil substitui o contato do destinatário. Cada tentativa fica persistida
+e auditada. Falha no SMTP não altera o status de uma NF-e já autorizada.
+
+Quando `sendEmailToRecipient=true` no perfil, o mesmo envio ocorre
+automaticamente após a autorização e geração dos artefatos. A emissão
+idempotente não duplica um envio automático já concluído para o destinatário.
+A resposta da emissão inclui `emailDelivery` com `SENT`, reaproveitamento ou
+erro; uma falha de e-mail continua mantendo a NF-e como `AUTHORIZED`.
+
+### Eventos fiscais
+
+- `POST /fiscal-documents/nfe/documents/:documentId/cancel`: cancelamento;
+- `POST /fiscal-documents/nfe/documents/:documentId/correction`: Carta de
+  Correção Eletrônica;
+- `POST /fiscal-documents/nfe/inutilizations`: inutilização de faixa.
+
+Eventos são assinados, transmitidos, persistidos e auditados sem apagar o
+documento original.
+
+## NFS-e Nacional
+
+### Configuração por filial
+
+- `GET /fiscal-parameters/nfse/overview`: prontidão, emitente, perfil, serviços,
+  pagadores disponíveis, parâmetros oficiais e documentos;
+- `PUT /fiscal-parameters/nfse/profile`: certificado, série, regimes, automação
+  e SMTP; exige administrador;
+- `PUT /fiscal-parameters/nfse/services`: cria/atualiza classificação fiscal do
+  serviço; exige administrador. O campo booleano
+  `availableToAllBranches=true` torna o serviço visível para todas as filiais
+  da mesma empresa; ausente ou falso mantém o cadastro exclusivo da filial.
+  `descriptions` aceita de 1 a 30 textos reutilizáveis, com até 2000 caracteres
+  cada; o primeiro é também mantido em `description` como padrão compatível;
+- `DELETE /fiscal-parameters/nfse/services/:serviceItemId`: cancelamento lógico;
+- `POST /fiscal-parameters/nfse/municipal-parameters/sync`: consulta convênio,
+  alíquota, regimes especiais e retenções no ambiente nacional e persiste o
+  resultado.
+
+### Emissão e artefatos
+
+- `GET /fiscal-documents/nfse/manual/overview`: retorna prontidão, tomadores
+  (`Party`), serviços com suas descrições cadastradas e emissões manuais
+  recentes; exige `ADMIN` ou `MANAGE_FINANCIAL`;
+- `GET /fiscal-documents/nfse/status`: consulta habilitação municipal;
+- `GET /fiscal-documents/nfse/documents`: lista por tenant e filial;
+- `POST /fiscal-documents/nfse/issue`: aloca DPS, gera XML 1.01, assina com A1,
+  compacta em GZip/Base64 e transmite de forma idempotente; na emissão manual,
+  aceita `createReceivable` e de 1 a 60 parcelas, criadas somente após a
+  autorização e sem criar venda artificial;
+- `GET /fiscal-documents/nfse/documents/:id/xml`: baixa somente XML autorizado;
+- `GET /fiscal-documents/nfse/documents/:id/danfse`: baixa somente DANFSe PDF
+  oficial obtido pela chave;
+- `POST /fiscal-documents/nfse/documents/:id/email`: envia/reenvia os dois
+  artefatos autorizados.
+
+O tomador é um `Party` existente e, em recebíveis, deve ser o pagador do título.
+O sistema não aceita município fictício, não gera DANFSe próprio e não envia
+e-mail quando a DPS for rejeitada. Em homologação, o destinatário SMTP fixo do
+perfil substitui o e-mail real do cadastro.
+
+## Controle S3
+
+### POST `/companies/sync-source-integration-settings`
+
+- Autenticação técnica: `x-api-key`, validada por `FINANCEIRO_INTEGRATION_API_KEY` nos dois backends;
+- Uso: recebe do sistema de origem empresa, todas as filiais ativas, identidade da filial, parâmetros financeiros/comerciais e configurações efetivas de S3, SMTP e Telegram;
+- Regra: a origem resolve primeiro a filial e usa a empresa como fallback quando a filial não possui configuração completa;
+- Segurança: credenciais, senhas e tokens são criptografados no Financeiro, não são registrados em log e nunca retornam na resposta;
+- Auditoria: cada sincronização gera eventos append-only de integração e, quando aplicável, de configuração S3.
+
+### PATCH no sistema de origem `/integrations/financeiro/company-branch-parameters`
+
+- Contrato obrigatório para qualquer sistema que consuma o Financeiro;
+- URL configurada por `SOURCE_SYSTEM_<ORIGEM>_API_URL` e chave por `SOURCE_SYSTEM_<ORIGEM>_API_KEY`;
+- Para `ESCOLA`, a chave pode usar o fallback `FINANCEIRO_INTEGRATION_API_KEY`;
+- O Financeiro envia `sourceTenantId`, `sourceBranchCode`, `entityType`, ator e somente os parâmetros alterados;
+- A origem é a autoridade: o Financeiro somente grava o espelho depois de receber sucesso HTTP.
+
+- `GET /s3-control/configuration`: consulta a configuração da empresa e filial sem expor credenciais;
+- `PUT /s3-control/configuration`: cria ou atualiza as credenciais criptografadas; exige `ADMIN`;
+- `GET /s3-control/objects`: lista somente arquivos e pastas abaixo de `basePrefix`; exige `ADMIN`;
+- `DELETE /s3-control/object`: remove um arquivo S3 e grava os eventos append-only da solicitação e resultado; exige `ADMIN`.
+
+O módulo operacional pertence exclusivamente ao Financeiro. A configuração pode ser abastecida automaticamente pelo cadastro da empresa/filial do sistema de origem. Credenciais nunca são retornadas pela API, e os caminhos `.` e `..` são rejeitados.
+
+Nos envios de NF-e e NFS-e, um SMTP completo do perfil fiscal tem prioridade. Quando ele estiver incompleto, o Financeiro usa o SMTP sincronizado da empresa/filial de origem.

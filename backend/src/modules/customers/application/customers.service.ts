@@ -3,7 +3,6 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "crypto";
 import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
 import {
   normalizeDigits,
@@ -12,6 +11,16 @@ import {
   normalizeText,
 } from "../../../common/finance-core.utils";
 import { getFinanceContext } from "../../../common/finance-context";
+import {
+  assertValidBrazilTaxId,
+  normalizeTaxId,
+} from "../../../common/brazil-tax-id.utils";
+import {
+  createLocalExternalEntityId,
+  PARTY_ROLE,
+  setPartyRoleActive,
+  upsertPartyIdentity,
+} from "../../../common/party-registry";
 import { PrismaService } from "../../../prisma/prisma.service";
 import {
   ChangeCustomerStatusDto,
@@ -68,7 +77,7 @@ export class CustomersService {
 
     const existing = await this.findCompany(sourceSystem, sourceTenantId);
     const companyName = normalizeText(payload.companyName);
-    const companyDocument = normalizeDigits(payload.companyDocument);
+    const companyDocument = normalizeTaxId(payload.companyDocument);
 
     if (existing) {
       if (!companyName && !companyDocument) {
@@ -113,57 +122,78 @@ export class CustomersService {
 
     return {
       name,
-      document: normalizeDigits(payload.document),
+      document: payload.document
+        ? assertValidBrazilTaxId(payload.document, "CPF/CNPJ do cliente")
+        : null,
+      stateRegistration: normalizeDigits(payload.stateRegistration),
+      municipalRegistration: normalizeDigits(payload.municipalRegistration),
+      stateRegistrationIndicator:
+        normalizeDigits(payload.stateRegistrationIndicator) || "9",
       email: normalizeEmail(payload.email),
       phone: normalizePhone(payload.phone),
       addressLine1: normalizeText(payload.addressLine1),
+      street: normalizeText(payload.street),
+      addressNumber: normalizeText(payload.addressNumber),
+      addressComplement: normalizeText(payload.addressComplement),
       neighborhood: normalizeText(payload.neighborhood),
       city: normalizeText(payload.city),
+      cityCode: normalizeDigits(payload.cityCode),
       state: normalizeText(payload.state),
       postalCode: normalizeDigits(payload.postalCode),
+      countryCode: normalizeDigits(payload.countryCode) || "1058",
+      countryName: normalizeText(payload.countryName) || "BRASIL",
     };
   }
 
   private mapCustomer(
-    party: {
-      id: string;
-      externalEntityType: string;
-      externalEntityId: string;
-      name: string;
-      document: string | null;
-      email: string | null;
-      phone: string | null;
-      addressLine1: string | null;
-      neighborhood: string | null;
-      city: string | null;
-      state: string | null;
-      postalCode: string | null;
-      createdAt: Date;
-      createdBy: string | null;
-      updatedAt: Date;
-      updatedBy: string | null;
-      canceledAt: Date | null;
-      canceledBy: string | null;
-    },
+    party: any,
     sourceSystem: string,
   ) {
     const isSchool = normalizeText(sourceSystem) === SCHOOL_SOURCE_SYSTEM;
+    const branchCode = this.branchCode();
+    const customerRole = (party.roles || []).find(
+      (role: any) =>
+        role.roleType === PARTY_ROLE.CUSTOMER &&
+        [0, branchCode].includes(role.branchCode),
+    );
+    const preferredReference = (party.externalReferences || []).find(
+      (reference: any) =>
+        !reference.canceledAt &&
+        [0, branchCode].includes(reference.branchCode) &&
+        (isSchool
+          ? ["ALUNO", "RESPONSAVEL", "PERSON"].includes(
+              reference.externalEntityType,
+            )
+          : true),
+    );
     return {
       id: party.id,
-      status: party.canceledAt ? "INACTIVE" : "ACTIVE",
+      status:
+        party.canceledAt || customerRole?.canceledAt ? "INACTIVE" : "ACTIVE",
       origin: isSchool ? SCHOOL_SOURCE_SYSTEM : "FINANCEIRO",
       canManageLocally: !isSchool,
-      externalEntityType: party.externalEntityType,
-      externalEntityId: party.externalEntityId,
+      externalEntityType:
+        preferredReference?.externalEntityType || party.externalEntityType,
+      externalEntityId:
+        preferredReference?.externalEntityId || party.externalEntityId,
       name: party.name,
       document: party.document,
+      stateRegistration: party.stateRegistration,
+      municipalRegistration: party.municipalRegistration,
+      stateRegistrationIndicator: party.stateRegistrationIndicator || "9",
       email: party.email,
       phone: party.phone,
       addressLine1: party.addressLine1,
+      street: party.street,
+      addressNumber: party.addressNumber,
+      addressComplement: party.addressComplement,
       neighborhood: party.neighborhood,
       city: party.city,
+      cityCode: party.cityCode,
       state: party.state,
       postalCode: party.postalCode,
+      countryCode: party.countryCode || "1058",
+      countryName: party.countryName || "BRASIL",
       createdAt: party.createdAt.toISOString(),
       createdBy: party.createdBy,
       updatedAt: party.updatedAt.toISOString(),
@@ -178,14 +208,13 @@ export class CustomersService {
     document?: string | null,
     ignoredPartyId?: string,
   ) {
-    const normalizedDocument = normalizeDigits(document);
+    const normalizedDocument = normalizeTaxId(document);
     if (!normalizedDocument) return;
 
     const duplicate = await this.prisma.party.findFirst({
       where: {
         companyId,
-        branchCode: this.branchCode(),
-        document: normalizedDocument,
+        documentNormalized: normalizedDocument,
         ...(ignoredPartyId ? { id: { not: ignoredPartyId } } : {}),
       },
     });
@@ -213,11 +242,22 @@ export class CustomersService {
       where: {
         id: String(customerId || "").trim(),
         companyId: company.id,
-        branchCode: this.branchCode(),
+      },
+      include: {
+        roles: true,
+        externalReferences: {
+          where: { canceledAt: null },
+          orderBy: { updatedAt: "desc" },
+        },
       },
     });
 
-    if (!customer) {
+    const hasCustomerRole = customer?.roles.some(
+      (role) =>
+        role.roleType === PARTY_ROLE.CUSTOMER &&
+        [0, this.branchCode()].includes(role.branchCode),
+    );
+    if (!customer || !hasCustomerRole) {
       throw new NotFoundException("Cliente não encontrado.");
     }
 
@@ -241,35 +281,35 @@ export class CustomersService {
     const status = normalizeText(query.status) || "ACTIVE";
     const search = normalizeText(query.search);
     const searchDigits = normalizeDigits(query.search);
-    const isSchool = normalizeText(company.sourceSystem) === SCHOOL_SOURCE_SYSTEM;
+    const searchTaxId = normalizeTaxId(query.search);
+    const branchCode = this.branchCode();
+    const customerRoleFilter = {
+      roles: {
+        some: {
+          branchCode: { in: [0, branchCode] },
+          roleType: PARTY_ROLE.CUSTOMER,
+          ...(status === "ACTIVE"
+            ? { canceledAt: null }
+            : status === "INACTIVE"
+              ? { canceledAt: { not: null } }
+              : {}),
+        },
+      },
+    };
     const items = await this.prisma.party.findMany({
       where: {
         companyId: company.id,
-        branchCode: this.branchCode(),
-        ...(isSchool
-          ? {
-              OR: [
-                { externalEntityType: { in: ["ALUNO", "RESPONSAVEL"] } },
-                {
-                  receivableTitles: {
-                    some: { canceledAt: null },
-                  },
-                },
-              ],
-            }
-          : {}),
+        ...customerRoleFilter,
         ...(status === "ACTIVE"
           ? { canceledAt: null }
-          : status === "INACTIVE"
-            ? { canceledAt: { not: null } }
-            : {}),
+          : {}),
         ...(search
           ? {
               AND: [
                 {
                   OR: [
                     { name: { contains: search } },
-                    { document: { contains: searchDigits || search } },
+                    { document: { contains: searchTaxId || search } },
                     { email: { contains: search } },
                     { phone: { contains: searchDigits || search } },
                     { city: { contains: search } },
@@ -278,6 +318,13 @@ export class CustomersService {
               ],
             }
           : {}),
+      },
+      include: {
+        roles: true,
+        externalReferences: {
+          where: { canceledAt: null },
+          orderBy: { updatedAt: "desc" },
+        },
       },
       orderBy: [{ name: "asc" }, { updatedAt: "desc" }],
     });
@@ -296,19 +343,30 @@ export class CustomersService {
     const data = this.normalizedData(payload);
     await this.ensureDocumentAvailable(company.id, data.document);
 
-    const customer = await this.prisma.party.create({
-      data: {
-        companyId: company.id,
-        branchCode: this.branchCode(),
-        externalEntityType: LOCAL_CUSTOMER_TYPE,
-        externalEntityId: randomUUID(),
-        ...data,
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
+    const customer = await upsertPartyIdentity(this.prisma, {
+      companyId: company.id,
+      branchCode: this.branchCode(),
+      sourceSystem: company.sourceSystem,
+      sourceTenantId: company.sourceTenantId,
+      externalEntityType: LOCAL_CUSTOMER_TYPE,
+      externalEntityId: createLocalExternalEntityId(),
+      roles: [PARTY_ROLE.CUSTOMER, PARTY_ROLE.PAYER],
+      data,
+      requestedBy: payload.requestedBy,
     });
 
-    return this.mapCustomer(customer, company.sourceSystem);
+    return this.mapCustomer(
+      {
+        ...customer,
+        roles: await this.prisma.partyRole.findMany({
+          where: { partyId: customer.id },
+        }),
+        externalReferences: await this.prisma.partyExternalReference.findMany({
+          where: { partyId: customer.id, canceledAt: null },
+        }),
+      },
+      company.sourceSystem,
+    );
   }
 
   async update(customerId: string, payload: SaveCustomerDto) {
@@ -321,15 +379,25 @@ export class CustomersService {
     const data = this.normalizedData(payload);
     await this.ensureDocumentAvailable(company.id, data.document, customer.id);
 
-    const updated = await this.prisma.party.update({
-      where: { id: customer.id },
-      data: {
-        ...data,
-        updatedBy: payload.requestedBy || null,
-      },
+    const updated = await upsertPartyIdentity(this.prisma, {
+      companyId: company.id,
+      branchCode: this.branchCode(),
+      sourceSystem: company.sourceSystem,
+      sourceTenantId: company.sourceTenantId,
+      externalEntityType: customer.externalEntityType,
+      externalEntityId: customer.externalEntityId,
+      roles: [PARTY_ROLE.CUSTOMER, PARTY_ROLE.PAYER],
+      data,
+      requestedBy: payload.requestedBy,
     });
 
-    return this.mapCustomer(updated, company.sourceSystem);
+    return this.mapCustomer(
+      await this.prisma.party.findUnique({
+        where: { id: updated.id },
+        include: { roles: true, externalReferences: true },
+      }),
+      company.sourceSystem,
+    );
   }
 
   async activate(customerId: string, payload: ChangeCustomerStatusDto) {
@@ -341,16 +409,22 @@ export class CustomersService {
     this.assertLocalRegistrationAllowed(company);
     await this.ensureDocumentAvailable(company.id, customer.document, customer.id);
 
-    const updated = await this.prisma.party.update({
-      where: { id: customer.id },
-      data: {
-        canceledAt: null,
-        canceledBy: null,
-        updatedBy: payload.requestedBy || null,
-      },
+    await setPartyRoleActive(this.prisma, {
+      companyId: company.id,
+      partyId: customer.id,
+      branchCode: this.branchCode(),
+      roleType: PARTY_ROLE.CUSTOMER,
+      active: true,
+      requestedBy: payload.requestedBy,
     });
 
-    return this.mapCustomer(updated, company.sourceSystem);
+    return this.mapCustomer(
+      await this.prisma.party.findUnique({
+        where: { id: customer.id },
+        include: { roles: true, externalReferences: true },
+      }),
+      company.sourceSystem,
+    );
   }
 
   async inactivate(customerId: string, payload: ChangeCustomerStatusDto) {
@@ -361,16 +435,22 @@ export class CustomersService {
     );
     this.assertLocalRegistrationAllowed(company);
 
-    const updated = await this.prisma.party.update({
-      where: { id: customer.id },
-      data: {
-        canceledAt: new Date(),
-        canceledBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
+    await setPartyRoleActive(this.prisma, {
+      companyId: company.id,
+      partyId: customer.id,
+      branchCode: this.branchCode(),
+      roleType: PARTY_ROLE.CUSTOMER,
+      active: false,
+      requestedBy: payload.requestedBy,
     });
 
-    return this.mapCustomer(updated, company.sourceSystem);
+    return this.mapCustomer(
+      await this.prisma.party.findUnique({
+        where: { id: customer.id },
+        include: { roles: true, externalReferences: true },
+      }),
+      company.sourceSystem,
+    );
   }
 
   async sync(payload: SyncCustomersDto) {
@@ -384,6 +464,7 @@ export class CustomersService {
     const company = await this.resolveOrCreateCompany(payload);
     const branchCode = this.branchCode();
     const requestedBy = payload.requestedBy || "INTEGRACAO_ESCOLA";
+    const sourceTenantId = normalizeText(payload.sourceTenantId)!;
     const activeKeys = new Set<string>();
 
     for (const item of payload.customers) {
@@ -395,55 +476,46 @@ export class CustomersService {
 
       const data = this.normalizedData(item);
       activeKeys.add(`${externalEntityType}|${externalEntityId}`);
-      await this.prisma.party.upsert({
-        where: {
-          companyId_branchCode_externalEntityType_externalEntityId: {
-            companyId: company.id,
-            branchCode,
-            externalEntityType,
-            externalEntityId,
-          },
-        },
-        create: {
-          companyId: company.id,
-          branchCode,
+      await upsertPartyIdentity(this.prisma, {
+        companyId: company.id,
+        branchCode,
+        sourceSystem,
+        sourceTenantId,
+        externalEntityType,
+        externalEntityId,
+        registeredPersonId: item.registeredPersonId,
+        registeredPersonSourceType: item.registeredPersonSourceType,
+        roles: [
           externalEntityType,
-          externalEntityId,
-          ...data,
-          createdBy: requestedBy,
-          updatedBy: requestedBy,
-        },
-        update: {
-          ...data,
-          canceledAt: null,
-          canceledBy: null,
-          updatedBy: requestedBy,
-        },
+          PARTY_ROLE.CUSTOMER,
+          PARTY_ROLE.PAYER,
+        ],
+        data,
+        requestedBy,
       });
     }
 
-    const integratedCustomers = await this.prisma.party.findMany({
+    const integratedReferences =
+      await this.prisma.partyExternalReference.findMany({
       where: {
         companyId: company.id,
         branchCode,
+        sourceSystem,
+        sourceTenantId,
         externalEntityType: { in: ["ALUNO", "RESPONSAVEL"] },
         canceledAt: null,
       },
-      select: {
-        id: true,
-        externalEntityType: true,
-        externalEntityId: true,
-      },
+      select: { id: true, partyId: true, externalEntityType: true, externalEntityId: true },
     });
-    const staleIds = integratedCustomers
+    const staleReferences = integratedReferences
       .filter(
         (item) =>
           !activeKeys.has(`${item.externalEntityType}|${item.externalEntityId}`),
-      )
-      .map((item) => item.id);
+      );
+    const staleIds = staleReferences.map((item) => item.id);
 
     if (staleIds.length) {
-      await this.prisma.party.updateMany({
+      await this.prisma.partyExternalReference.updateMany({
         where: { id: { in: staleIds }, companyId: company.id, branchCode },
         data: {
           canceledAt: new Date(),
@@ -451,6 +523,30 @@ export class CustomersService {
           updatedBy: requestedBy,
         },
       });
+
+      for (const reference of staleReferences) {
+        const hasAnotherActiveReference =
+          await this.prisma.partyExternalReference.findFirst({
+            where: {
+              companyId: company.id,
+              partyId: reference.partyId,
+              branchCode,
+              externalEntityType: reference.externalEntityType,
+              canceledAt: null,
+            },
+            select: { id: true },
+          });
+        if (!hasAnotherActiveReference) {
+          await setPartyRoleActive(this.prisma, {
+            companyId: company.id,
+            partyId: reference.partyId,
+            branchCode,
+            roleType: reference.externalEntityType,
+            active: false,
+            requestedBy,
+          });
+        }
+      }
     }
 
     return {

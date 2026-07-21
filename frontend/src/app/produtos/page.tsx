@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
@@ -51,6 +51,29 @@ type ProductItem = {
   salePrice?: number | null;
   ncmCode?: string | null;
   cestCode?: string | null;
+  fiscalDescription?: string | null;
+  gtinCode?: string | null;
+  taxableGtinCode?: string | null;
+  taxableUnitCode?: string | null;
+  taxableConversionFactor?: number | null;
+  exTipiCode?: string | null;
+  fiscalOriginCode?: string | null;
+  defaultCfopCode?: string | null;
+  icmsCsosnCode?: string | null;
+  icmsCstCode?: string | null;
+  icmsRate?: number | null;
+  pisCstCode?: string | null;
+  pisRate?: number | null;
+  cofinsCstCode?: string | null;
+  cofinsRate?: number | null;
+  ipiCstCode?: string | null;
+  ipiFrameworkCode?: string | null;
+  ipiRate?: number | null;
+  fiscalBenefitCode?: string | null;
+  approximateTaxRate?: number | null;
+  ibsCbsCstCode?: string | null;
+  ibsCbsClassCode?: string | null;
+  fiscalNotes?: string | null;
   notes?: string | null;
   inventorySituation: 'OK' | 'LOW' | 'OUT' | 'WITHOUT_CONTROL';
   createdAt: string;
@@ -97,6 +120,29 @@ type ProductFormState = {
   salePrice: string;
   ncmCode: string;
   cestCode: string;
+  fiscalDescription: string;
+  gtinCode: string;
+  taxableGtinCode: string;
+  taxableUnitCode: string;
+  taxableConversionFactor: string;
+  exTipiCode: string;
+  fiscalOriginCode: string;
+  defaultCfopCode: string;
+  icmsCsosnCode: string;
+  icmsCstCode: string;
+  icmsRate: string;
+  pisCstCode: string;
+  pisRate: string;
+  cofinsCstCode: string;
+  cofinsRate: string;
+  ipiCstCode: string;
+  ipiFrameworkCode: string;
+  ipiRate: string;
+  fiscalBenefitCode: string;
+  approximateTaxRate: string;
+  ibsCbsCstCode: string;
+  ibsCbsClassCode: string;
+  fiscalNotes: string;
   notes: string;
 };
 
@@ -155,6 +201,7 @@ type ProductFormTab = 'IDENTIFICATION' | 'CLASSIFICATION' | 'STOCK_PRICES' | 'FI
 const PRODUCT_SCREEN_ID = 'FINANCEIRO_PRODUTOS_LISTAGEM_GERAL';
 const EMBEDDED_PRODUCT_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_ESTOQUE';
 const PRODUCT_FORM_POPUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_ESTOQUE_CADASTRO_PRODUTO';
+const PRODUCT_EDIT_SUCCESS_POPUP_SCREEN_ID = 'POPUP_FINANCEIRO_ESTOQUE_IMAGENS_PRODUTOS_SUCESSO_ALTERACAO';
 const MANUAL_STOCK_ENTRY_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_ESTOQUE_ENTRADA_MANUAL';
 const MANUAL_STOCK_EXIT_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_ESTOQUE_SAIDA_MANUAL';
 const PRODUCT_FORM_TABS: Array<{ value: ProductFormTab; label: string }> = [
@@ -162,6 +209,55 @@ const PRODUCT_FORM_TABS: Array<{ value: ProductFormTab; label: string }> = [
   { value: 'CLASSIFICATION', label: 'Classificação' },
   { value: 'STOCK_PRICES', label: 'Estoque e valores' },
   { value: 'FISCAL', label: 'Fiscal e observações' },
+];
+type ProductFiscalFieldKey =
+  | 'gtinCode'
+  | 'taxableGtinCode'
+  | 'taxableUnitCode'
+  | 'taxableConversionFactor'
+  | 'exTipiCode'
+  | 'fiscalOriginCode'
+  | 'defaultCfopCode'
+  | 'icmsCsosnCode'
+  | 'icmsCstCode'
+  | 'icmsRate'
+  | 'pisCstCode'
+  | 'pisRate'
+  | 'cofinsCstCode'
+  | 'cofinsRate'
+  | 'ipiCstCode'
+  | 'ipiFrameworkCode'
+  | 'ipiRate'
+  | 'fiscalBenefitCode'
+  | 'approximateTaxRate'
+  | 'ibsCbsCstCode'
+  | 'ibsCbsClassCode';
+const PRODUCT_FISCAL_FIELDS: Array<{
+  key: ProductFiscalFieldKey;
+  label: string;
+  placeholder?: string;
+}> = [
+  { key: 'gtinCode', label: 'GTIN comercial', placeholder: 'SEM GTIN' },
+  { key: 'taxableGtinCode', label: 'GTIN tributável', placeholder: 'SEM GTIN' },
+  { key: 'taxableUnitCode', label: 'Unidade tributável', placeholder: 'UN' },
+  { key: 'taxableConversionFactor', label: 'Fator de conversão', placeholder: '1' },
+  { key: 'exTipiCode', label: 'EX TIPI' },
+  { key: 'fiscalOriginCode', label: 'Origem da mercadoria', placeholder: '0' },
+  { key: 'defaultCfopCode', label: 'CFOP padrão', placeholder: '5102' },
+  { key: 'icmsCsosnCode', label: 'CSOSN (Simples)', placeholder: '102' },
+  { key: 'icmsCstCode', label: 'CST ICMS (regime normal)' },
+  { key: 'icmsRate', label: 'Alíquota ICMS (%)', placeholder: '0' },
+  { key: 'pisCstCode', label: 'CST PIS', placeholder: '49' },
+  { key: 'pisRate', label: 'Alíquota PIS (%)', placeholder: '0' },
+  { key: 'cofinsCstCode', label: 'CST COFINS', placeholder: '49' },
+  { key: 'cofinsRate', label: 'Alíquota COFINS (%)', placeholder: '0' },
+  { key: 'ipiCstCode', label: 'CST IPI' },
+  { key: 'ipiFrameworkCode', label: 'Enquadramento IPI' },
+  { key: 'ipiRate', label: 'Alíquota IPI (%)', placeholder: '0' },
+  { key: 'fiscalBenefitCode', label: 'cBenef', placeholder: 'DEIXE VAZIO SEM BENEFÍCIO' },
+  { key: 'approximateTaxRate', label: 'Tributos aproximados (%)' },
+  { key: 'ibsCbsCstCode', label: 'CST IBS/CBS' },
+  { key: 'ibsCbsClassCode', label: 'Classificação IBS/CBS' },
 ];
 const PRODUCT_GRID_STORAGE_PREFIX = 'financeiro:produtos:grid-columns:';
 const PRODUCT_EXPORT_STORAGE_PREFIX = 'financeiro:produtos:export-config:';
@@ -273,6 +369,29 @@ const emptyFormState: ProductFormState = {
   salePrice: '',
   ncmCode: '',
   cestCode: '',
+  fiscalDescription: '',
+  gtinCode: 'SEM GTIN',
+  taxableGtinCode: 'SEM GTIN',
+  taxableUnitCode: 'UN',
+  taxableConversionFactor: '1',
+  exTipiCode: '',
+  fiscalOriginCode: '0',
+  defaultCfopCode: '',
+  icmsCsosnCode: '',
+  icmsCstCode: '',
+  icmsRate: '0',
+  pisCstCode: '49',
+  pisRate: '0',
+  cofinsCstCode: '49',
+  cofinsRate: '0',
+  ipiCstCode: '',
+  ipiFrameworkCode: '',
+  ipiRate: '0',
+  fiscalBenefitCode: '',
+  approximateTaxRate: '',
+  ibsCbsCstCode: '',
+  ibsCbsClassCode: '',
+  fiscalNotes: '',
   notes: '',
 };
 
@@ -649,6 +768,29 @@ function buildProductForm(product: ProductItem): ProductFormState {
     salePrice: formatOptionalNumberInput(product.salePrice),
     ncmCode: product.ncmCode || '',
     cestCode: product.cestCode || '',
+    fiscalDescription: product.fiscalDescription || '',
+    gtinCode: product.gtinCode || 'SEM GTIN',
+    taxableGtinCode: product.taxableGtinCode || product.gtinCode || 'SEM GTIN',
+    taxableUnitCode: product.taxableUnitCode || product.unitCode || 'UN',
+    taxableConversionFactor: formatOptionalNumberInput(product.taxableConversionFactor ?? 1),
+    exTipiCode: product.exTipiCode || '',
+    fiscalOriginCode: product.fiscalOriginCode || '0',
+    defaultCfopCode: product.defaultCfopCode || '',
+    icmsCsosnCode: product.icmsCsosnCode || '',
+    icmsCstCode: product.icmsCstCode || '',
+    icmsRate: formatOptionalNumberInput(product.icmsRate ?? 0),
+    pisCstCode: product.pisCstCode || '49',
+    pisRate: formatOptionalNumberInput(product.pisRate ?? 0),
+    cofinsCstCode: product.cofinsCstCode || '49',
+    cofinsRate: formatOptionalNumberInput(product.cofinsRate ?? 0),
+    ipiCstCode: product.ipiCstCode || '',
+    ipiFrameworkCode: product.ipiFrameworkCode || '',
+    ipiRate: formatOptionalNumberInput(product.ipiRate ?? 0),
+    fiscalBenefitCode: product.fiscalBenefitCode || '',
+    approximateTaxRate: formatOptionalNumberInput(product.approximateTaxRate),
+    ibsCbsCstCode: product.ibsCbsCstCode || '',
+    ibsCbsClassCode: product.ibsCbsClassCode || '',
+    fiscalNotes: product.fiscalNotes || '',
     notes: product.notes || '',
   };
 }
@@ -996,6 +1138,9 @@ function ProductGridConfigModal({
 
 export default function FinanceiroProdutosPage() {
   const runtimeContext = useFinanceRuntimeContext();
+  const [requestedEditProductId, setRequestedEditProductId] = useState<string | null>(null);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
+  const handledEditProductId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!runtimeContext.embedded) return;
@@ -1008,6 +1153,12 @@ export default function FinanceiroProdutosPage() {
       '*',
     );
   }, [runtimeContext.embedded]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setRequestedEditProductId(params.get('editProductId'));
+    setReturnTo(params.get('returnTo'));
+  }, []);
 
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [productColumnFilters, setProductColumnFilters] = useState<ProductColumnFilters>({
@@ -1034,6 +1185,7 @@ export default function FinanceiroProdutosPage() {
   const [manualMovementError, setManualMovementError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [returnSuccessMessage, setReturnSuccessMessage] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productFormTab, setProductFormTab] = useState<ProductFormTab>('IDENTIFICATION');
   const [formState, setFormState] = useState<ProductFormState>(emptyFormState);
@@ -1192,6 +1344,26 @@ export default function FinanceiroProdutosPage() {
   useEffect(() => {
     void loadBranchInventoryConfig();
   }, [loadBranchInventoryConfig]);
+
+  useEffect(() => {
+    if (!requestedEditProductId || handledEditProductId.current === requestedEditProductId) {
+      return;
+    }
+
+    const product = products.find((item) => item.id === requestedEditProductId);
+    if (!product) return;
+
+    handledEditProductId.current = requestedEditProductId;
+    setFormState(applyBranchInventoryRules(buildProductForm(product), branchInventoryConfig));
+    setSuccessMessage(null);
+    setErrorMessage(null);
+    setProductFormTab('IDENTIFICATION');
+    setIsFormOpen(true);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('editProductId');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [branchInventoryConfig, products, requestedEditProductId]);
 
   useEffect(() => {
     setProductPage(1);
@@ -1373,6 +1545,21 @@ export default function FinanceiroProdutosPage() {
     setIsFormOpen(true);
   }
 
+  function returnToProductImages() {
+    const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
+    setIsFormOpen(false);
+    setReturnSuccessMessage(null);
+    window.location.assign(`/estoque/imagens-produtos${navigationQuery}`);
+  }
+
+  function closeProductForm() {
+    if (returnTo === 'IMAGES_PRODUCTS') {
+      returnToProductImages();
+      return;
+    }
+    setIsFormOpen(false);
+  }
+
   async function handleSaveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1421,6 +1608,30 @@ export default function FinanceiroProdutosPage() {
         salePrice: parseOptionalNumber(formState.salePrice),
         ncmCode: formState.ncmCode || undefined,
         cestCode: formState.cestCode || undefined,
+        fiscalDescription: formState.fiscalDescription || undefined,
+        gtinCode: formState.gtinCode || undefined,
+        taxableGtinCode: formState.taxableGtinCode || undefined,
+        taxableUnitCode: formState.taxableUnitCode || undefined,
+        taxableConversionFactor:
+          parseOptionalNumber(formState.taxableConversionFactor) || 1,
+        exTipiCode: formState.exTipiCode || undefined,
+        fiscalOriginCode: formState.fiscalOriginCode || undefined,
+        defaultCfopCode: formState.defaultCfopCode || undefined,
+        icmsCsosnCode: formState.icmsCsosnCode || undefined,
+        icmsCstCode: formState.icmsCstCode || undefined,
+        icmsRate: parseOptionalNumber(formState.icmsRate),
+        pisCstCode: formState.pisCstCode || undefined,
+        pisRate: parseOptionalNumber(formState.pisRate),
+        cofinsCstCode: formState.cofinsCstCode || undefined,
+        cofinsRate: parseOptionalNumber(formState.cofinsRate),
+        ipiCstCode: formState.ipiCstCode || undefined,
+        ipiFrameworkCode: formState.ipiFrameworkCode || undefined,
+        ipiRate: parseOptionalNumber(formState.ipiRate),
+        fiscalBenefitCode: formState.fiscalBenefitCode || undefined,
+        approximateTaxRate: parseOptionalNumber(formState.approximateTaxRate),
+        ibsCbsCstCode: formState.ibsCbsCstCode || undefined,
+        ibsCbsClassCode: formState.ibsCbsClassCode || undefined,
+        fiscalNotes: formState.fiscalNotes || undefined,
         notes: formState.notes || undefined,
       };
 
@@ -1430,7 +1641,11 @@ export default function FinanceiroProdutosPage() {
           body: JSON.stringify(payload),
           fallbackMessage: 'Não foi possível atualizar o produto.',
         });
-        setSuccessMessage('Produto atualizado com sucesso.');
+        if (returnTo === 'IMAGES_PRODUCTS') {
+          setReturnSuccessMessage('Produto alterado com sucesso.');
+        } else {
+          setSuccessMessage('Produto atualizado com sucesso.');
+        }
       } else {
         await requestJson('/products', {
           method: 'POST',
@@ -1877,7 +2092,7 @@ export default function FinanceiroProdutosPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsFormOpen(false)}
+                onClick={closeProductForm}
                 className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
               >
                 ✕
@@ -1924,6 +2139,23 @@ export default function FinanceiroProdutosPage() {
                     Identificação
                   </div>
                   <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="block lg:col-span-2">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Descrição fiscal do produto
+                      </span>
+                      <input
+                        value={formState.fiscalDescription}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            fiscalDescription: event.target.value,
+                          }))
+                        }
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                        placeholder="DESCRIÇÃO QUE SERÁ ENVIADA NA NF-E"
+                      />
+                    </label>
+
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                         Produto
@@ -2201,6 +2433,47 @@ export default function FinanceiroProdutosPage() {
                       />
                     </label>
 
+                    {PRODUCT_FISCAL_FIELDS.map((field) => (
+                      <label key={field.key} className="block">
+                        <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          {field.label}
+                        </span>
+                        <input
+                          value={formState[field.key]}
+                          onChange={(event) =>
+                            setFormState((current) => ({
+                              ...current,
+                              [field.key]: event.target.value,
+                            }))
+                          }
+                          className={FINANCE_GRID_PAGE_LAYOUT.input}
+                          placeholder={field.placeholder}
+                        />
+                      </label>
+                    ))}
+
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900 lg:col-span-2">
+                      Em São Paulo, não informe <strong>SEM CBENEF</strong>. Desde 01/07/2026,
+                      use um código vigente quando a operação possuir benefício fiscal; em uma
+                      venda normal sem benefício, deixe o campo vazio.
+                    </div>
+
+                    <label className="block lg:col-span-2">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Observações fiscais
+                      </span>
+                      <textarea
+                        value={formState.fiscalNotes}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            fiscalNotes: event.target.value,
+                          }))
+                        }
+                        className="min-h-20 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      />
+                    </label>
+
                     <label className="block lg:col-span-2">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                         Observações
@@ -2221,7 +2494,7 @@ export default function FinanceiroProdutosPage() {
               <div className="mt-6 flex flex-wrap justify-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setIsFormOpen(false)}
+                  onClick={closeProductForm}
                   className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
                   Fechar
@@ -2471,6 +2744,32 @@ VALUES
             </div>
           </div>
         ) : null}
+      </AuditedPopupShell>
+
+      <AuditedPopupShell
+        isOpen={Boolean(returnSuccessMessage)}
+        screenId={PRODUCT_EDIT_SUCCESS_POPUP_SCREEN_ID}
+        title="Produto alterado com sucesso"
+        eyebrow="Confirmação da alteração"
+        description="A alteração foi gravada. Feche esta mensagem para retornar à tela de imagens dos produtos."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        originText="Origem: Sistema Financeiro - retorno para PRINCIPAL_FINANCEIRO_ESTOQUE_IMAGENS_PRODUTOS"
+        auditText="Popup exclusivo de confirmação após alterar produto iniciado pela tela PRINCIPAL_FINANCEIRO_ESTOQUE_IMAGENS_PRODUTOS."
+        onClose={returnToProductImages}
+        footerActions={
+          <button
+            type="button"
+            onClick={returnToProductImages}
+            className="rounded-2xl bg-rose-600 px-6 py-3 text-sm font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700"
+          >
+            Fechar
+          </button>
+        }
+      >
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-center text-sm font-bold text-emerald-800">
+          {returnSuccessMessage}
+        </div>
       </AuditedPopupShell>
 
       <ProductGridConfigModal

@@ -81,7 +81,9 @@ Contexto operacional:
 
 Estrutura atual:
 - card SUPERTEF abre a administração da integração em uma tela única com abas
-- nenhuma credencial sensível é exibida ou armazenada nesta tela
+- card PARÂMETROS FISCAIS abre a central de cadastros necessários à emissão fiscal por filial
+- card CONTROLE S3 abre a administração do armazenamento no próprio Financeiro
+- credenciais do S3 são mantidas criptografadas no banco do Financeiro e nunca exibidas na tela
 - todas as integrações futuras devem preservar o isolamento por sourceSystem + sourceTenantId`;
 
   return (
@@ -123,6 +125,36 @@ Estrutura atual:
             </div>
             <div className="flex min-h-11 items-center justify-center p-2.5 text-center">
               <div className="text-sm font-black text-slate-800">SUPERTEF</div>
+            </div>
+          </Link>
+
+          <Link
+            href={`/msinfor/parametros-fiscais${preservedQueryString}`}
+            title="Configurar por filial os dados, regras e cadastros necessários à emissão de documentos fiscais."
+            className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+          >
+            <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
+              <img
+                src="/principal-financeiro/empresa.svg"
+                alt="Parâmetros fiscais"
+                className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
+              />
+            </div>
+            <div className="flex min-h-11 items-center justify-center p-2.5 text-center">
+              <div className="text-sm font-black text-slate-800">PARÂMETROS FISCAIS</div>
+            </div>
+          </Link>
+
+          <Link
+            href={`/msinfor/controle-s3${preservedQueryString}`}
+            title="Configurar e explorar os arquivos S3 exclusivos do Financeiro."
+            className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+          >
+            <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3 text-4xl">
+              ☁️
+            </div>
+            <div className="flex min-h-11 items-center justify-center p-2.5 text-center">
+              <div className="text-sm font-black text-slate-800">CONTROLE S3</div>
             </div>
           </Link>
         </div>

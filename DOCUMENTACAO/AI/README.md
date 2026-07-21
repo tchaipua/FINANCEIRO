@@ -16,6 +16,8 @@ Centralizar a documentacao oficial do projeto `Financeiro`.
 8. `TASKS.md`
 9. `ROADMAP.md`
 10. `SCHOOL_INTEGRATION.md`
+11. `NFE_MODELO_55_CHECKLIST.md`
+12. `NFSE_NACIONAL.md`
 
 ## Regra principal
 

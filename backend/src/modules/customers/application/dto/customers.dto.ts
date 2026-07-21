@@ -64,6 +64,18 @@ export class SaveCustomerDto {
 
   @IsOptional()
   @IsString()
+  stateRegistration?: string;
+
+  @IsOptional()
+  @IsString()
+  municipalRegistration?: string;
+
+  @IsOptional()
+  @IsString()
+  stateRegistrationIndicator?: string;
+
+  @IsOptional()
+  @IsString()
   email?: string;
 
   @IsOptional()
@@ -76,6 +88,18 @@ export class SaveCustomerDto {
 
   @IsOptional()
   @IsString()
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  addressNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  addressComplement?: string;
+
+  @IsOptional()
+  @IsString()
   neighborhood?: string;
 
   @IsOptional()
@@ -84,11 +108,23 @@ export class SaveCustomerDto {
 
   @IsOptional()
   @IsString()
+  cityCode?: string;
+
+  @IsOptional()
+  @IsString()
   state?: string;
 
   @IsOptional()
   @IsString()
   postalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+
+  @IsOptional()
+  @IsString()
+  countryName?: string;
 }
 
 export class ChangeCustomerStatusDto {
@@ -116,12 +152,32 @@ export class SyncedCustomerDto {
   @IsString()
   externalEntityId!: string;
 
+  @IsOptional()
+  @IsString()
+  registeredPersonId?: string;
+
+  @IsOptional()
+  @IsString()
+  registeredPersonSourceType?: string;
+
   @IsString()
   name!: string;
 
   @IsOptional()
   @IsString()
   document?: string;
+
+  @IsOptional()
+  @IsString()
+  stateRegistration?: string;
+
+  @IsOptional()
+  @IsString()
+  municipalRegistration?: string;
+
+  @IsOptional()
+  @IsString()
+  stateRegistrationIndicator?: string;
 
   @IsOptional()
   @IsString()
@@ -137,6 +193,18 @@ export class SyncedCustomerDto {
 
   @IsOptional()
   @IsString()
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  addressNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  addressComplement?: string;
+
+  @IsOptional()
+  @IsString()
   neighborhood?: string;
 
   @IsOptional()
@@ -145,11 +213,23 @@ export class SyncedCustomerDto {
 
   @IsOptional()
   @IsString()
+  cityCode?: string;
+
+  @IsOptional()
+  @IsString()
   state?: string;
 
   @IsOptional()
   @IsString()
   postalCode?: string;
+
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+
+  @IsOptional()
+  @IsString()
+  countryName?: string;
 }
 
 export class SyncCustomersDto {

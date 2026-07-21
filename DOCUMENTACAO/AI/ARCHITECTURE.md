@@ -21,6 +21,7 @@ O `Financeiro` sera um monolito modular em `NestJS` com `Prisma`, preparado para
 - `financial-parties`
 - `products`
 - `fiscal-certificates`
+- `fiscal-documents` (NF-e, NFC-e e NFS-e Nacional)
 - `payables`
 - `receivable-batches`
 - `receivable-titles`
@@ -46,7 +47,9 @@ Exemplos:
 
 ### `financial-parties`
 
-Cadastro financeiro generico para pagador, sacado, responsavel financeiro e favorecido.
+Cadastro mestre de identidade por empresa. CPF/CNPJ normalizado resolve uma
+única `Party`; cliente, pagador, fornecedor, destinatário e tomador são papéis
+por filial. IDs das verticais são aliases externos e não criam outra pessoa.
 
 ### `products`
 
@@ -55,6 +58,13 @@ Cadastro base compartilhado de produtos, preparado para estoque, notas de entrad
 ### `fiscal-certificates`
 
 Cadastro multi-certificado por empresa para automacao fiscal, com armazenamento criptografado do PFX e da senha e uso em consultas DF-e na SEFAZ.
+
+### `fiscal-documents`
+
+Motor fiscal centralizado no `Financeiro`. NF-e/NFC-e compartilham a base
+SEFAZ; a NFS-e Nacional possui agregado, XML DPS, APIs e artefatos próprios.
+Todos permanecem isolados por empresa e filial e reutilizam `Party` como a
+identidade fiscal do destinatário/tomador. Não existe cadastro fiscal paralelo.
 
 ### `payables`
 

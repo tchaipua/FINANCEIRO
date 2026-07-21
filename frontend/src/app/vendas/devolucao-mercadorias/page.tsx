@@ -3,6 +3,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
+import {
+  isValidBrazilTaxId,
+  normalizeBrazilTaxId,
+  normalizeBrazilTaxIdInput,
+} from '@/app/lib/brazil-tax-id';
 import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
 import {
@@ -101,8 +106,7 @@ function normalizeDigits(value: string) {
 }
 
 function hasIdentifiedCustomer(sale: SaleItemForReturn | null) {
-  const document = normalizeDigits(sale?.customerDocument || '');
-  return document.length === 11 || document.length === 14;
+  return isValidBrazilTaxId(sale?.customerDocument);
 }
 
 function formatDateTimeLabel(value?: string | null) {
@@ -384,8 +388,8 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
       return;
     }
     if (needsCustomerIdentification) {
-      const customerDocument = normalizeDigits(returnCustomer.document);
-      if (!returnCustomer.name.trim() || ![11, 14].includes(customerDocument.length)) {
+      const customerDocument = normalizeBrazilTaxId(returnCustomer.document);
+      if (!returnCustomer.name.trim() || !isValidBrazilTaxId(customerDocument)) {
         setAlert({
           type: 'warning',
           message: 'Informe nome e CPF/CNPJ do cliente para gerar o crédito da devolução.',
@@ -425,7 +429,7 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
             customer: needsCustomerIdentification
               ? {
                   name: returnCustomer.name.trim(),
-                  document: normalizeDigits(returnCustomer.document),
+                  document: normalizeBrazilTaxId(returnCustomer.document),
                 }
               : undefined,
             items: selectedReturnLines.map((line) => ({
@@ -711,7 +715,12 @@ ORDER BY S.confirmedAt DESC, SI.lineNumber ASC;`,
                             />
                             <input
                               value={returnCustomer.document}
-                              onChange={(event) => setReturnCustomer((current) => ({ ...current, document: event.target.value }))}
+                              onChange={(event) =>
+                                setReturnCustomer((current) => ({
+                                  ...current,
+                                  document: normalizeBrazilTaxIdInput(event.target.value),
+                                }))
+                              }
                               className={FINANCE_GRID_PAGE_LAYOUT.input}
                               placeholder="CPF/CNPJ"
                             />

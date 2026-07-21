@@ -767,7 +767,6 @@ function CompanyBranchSettingsModal({
   error,
   onClose,
   onEdit,
-  onNew,
   onChange,
   onSave,
 }: {
@@ -780,7 +779,6 @@ function CompanyBranchSettingsModal({
   error: string | null;
   onClose: () => void;
   onEdit: (branch: CompanyBranchItem) => void;
-  onNew: () => void;
   onChange: (field: keyof CompanyBranchFormState, value: string | boolean) => void;
   onSave: () => void;
 }) {
@@ -798,7 +796,7 @@ function CompanyBranchSettingsModal({
             </div>
             <h2 className="mt-1 text-2xl font-black text-slate-900">{company.name}</h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
-              Configure como cada filial controla estoque, grade, lote e regras comerciais.
+              Configure estoque e regras comerciais. As alterações serão confirmadas no sistema de origem.
             </p>
           </div>
           <button
@@ -815,20 +813,19 @@ function CompanyBranchSettingsModal({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                  Filiais cadastradas
+                  Filiais herdadas da origem
                 </div>
                 <div className="mt-1 text-xs font-medium text-slate-500">
                   {isLoading ? 'Carregando...' : `${branches.length} filial(is)`}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onNew}
-                className="rounded-full bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
-              >
-                Nova
-              </button>
             </div>
+
+            {!isLoading && branches.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+                Cadastre a filial no sistema de origem para que ela seja sincronizada automaticamente.
+              </div>
+            ) : null}
 
             <div className="mt-4 space-y-3">
               {branches.map((branch) => (
@@ -876,9 +873,8 @@ function CompanyBranchSettingsModal({
                 </span>
                 <input
                   value={form.branchCode}
-                  onChange={(event) => onChange('branchCode', event.target.value)}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
-                  disabled={Boolean(form.id)}
+                  readOnly
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} cursor-not-allowed bg-slate-100 text-slate-500`}
                   inputMode="numeric"
                 />
               </label>
@@ -889,8 +885,8 @@ function CompanyBranchSettingsModal({
                 </span>
                 <input
                   value={form.name}
-                  onChange={(event) => onChange('name', event.target.value)}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  readOnly
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} cursor-not-allowed bg-slate-100 text-slate-500`}
                 />
               </label>
 
@@ -1330,28 +1326,31 @@ export default function FinanceiroEmpresasPage() {
       return;
     }
 
+    if (!branchForm.id) {
+      setBranchFormError(
+        'A filial deve ser cadastrada e sincronizada pelo sistema de origem.',
+      );
+      return;
+    }
+
     try {
       setIsSavingBranch(true);
       setBranchFormError(null);
       const payload = {
         requestedBy:
-          runtimeContext.sourceTenantId || runtimeContext.companyName || 'FINANCEIRO_EMPRESAS',
-        branchCode: branchForm.id ? undefined : parseOptionalNumber(branchForm.branchCode, true),
-        name: branchForm.name || undefined,
+          runtimeContext.cashierUserId || runtimeContext.sourceTenantId || runtimeContext.companyName || 'FINANCEIRO_EMPRESAS',
         inventoryControlType: branchForm.inventoryControlType,
         quantityPrecision: branchForm.quantityPrecision,
         allowSaleUnitPriceEdit: branchForm.allowSaleUnitPriceEdit,
         allowSaleItemDiscount: branchForm.allowSaleItemDiscount,
       };
 
-      const endpoint = branchForm.id
-        ? `/companies/${branchCompany.id}/branches/${branchForm.id}${buildFinanceApiQueryString(
-            runtimeContext,
-          )}`
-        : `/companies/${branchCompany.id}/branches${buildFinanceApiQueryString(runtimeContext)}`;
+      const endpoint = `/companies/${branchCompany.id}/branches/${branchForm.id}${buildFinanceApiQueryString(
+        runtimeContext,
+      )}`;
 
       const savedBranch = await requestJson<CompanyBranchItem>(endpoint, {
-        method: branchForm.id ? 'PATCH' : 'POST',
+        method: 'PATCH',
         body: JSON.stringify(payload),
         fallbackMessage: 'Não foi possível salvar os parâmetros da filial.',
       });
@@ -1388,7 +1387,7 @@ export default function FinanceiroEmpresasPage() {
           method: 'PATCH',
           body: JSON.stringify({
             requestedBy:
-              runtimeContext.sourceTenantId || runtimeContext.companyName || 'FINANCEIRO_EMPRESAS',
+              runtimeContext.cashierUserId || runtimeContext.sourceTenantId || runtimeContext.companyName || 'FINANCEIRO_EMPRESAS',
             interestRate: parseOptionalNumber(financialForm.interestRate),
             interestGracePeriod: parseOptionalNumber(
               financialForm.interestGracePeriod,
@@ -1567,18 +1566,7 @@ export default function FinanceiroEmpresasPage() {
 
       {!runtimeContext.embedded ? (
         <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} p-6`}>
-          <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[auto_1fr_auto_auto]">
-            <button
-              type="button"
-              title="INCLUIR"
-              aria-label="INCLUIR"
-              className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700"
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
-              </svg>
-            </button>
+          <form onSubmit={handleSubmit} className="grid gap-4 xl:grid-cols-[1fr_auto_auto]">
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -1843,14 +1831,6 @@ export default function FinanceiroEmpresasPage() {
         error={branchFormError}
         onClose={closeBranchSettings}
         onEdit={(branch) => setBranchForm(buildBranchForm(branch))}
-        onNew={() =>
-          setBranchForm({
-            ...emptyBranchForm,
-            branchCode: branches.length
-              ? String(Math.max(...branches.map((branch) => branch.branchCode)) + 1)
-              : '1',
-          })
-        }
         onChange={(field, value) => {
           setBranchForm((current) => ({
             ...current,

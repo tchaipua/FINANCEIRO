@@ -36,6 +36,12 @@ import {
 } from "../../../common/branch.constants";
 import { ensureDefaultCompanyBranch } from "../../../common/company-branches";
 import { getFinanceContext } from "../../../common/finance-context";
+import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
+import {
+  createLocalExternalEntityId,
+  PARTY_ROLE,
+  upsertPartyIdentity,
+} from "../../../common/party-registry";
 
 type ResolvedCompany = {
   id: string;
@@ -457,7 +463,7 @@ export class PayablesService {
   }
 
   private async ensureSupplier(
-    companyId: string,
+    company: ResolvedCompany,
     payload: {
       legalName: string;
       tradeName?: string | null;
@@ -468,15 +474,17 @@ export class PayablesService {
     },
     requestedBy?: string | null,
   ) {
-    const normalizedDocument = normalizeDigits(payload.document);
+    const normalizedDocument = normalizeTaxId(payload.document);
     const normalizedLegalName =
       normalizeText(payload.legalName) || "FORNECEDOR NÃO IDENTIFICADO";
+    const branchCode = this.currentBranchCode();
 
     const existing =
       (normalizedDocument
         ? await this.prisma.supplier.findFirst({
             where: {
-              companyId,
+              companyId: company.id,
+              branchCode,
               document: normalizedDocument,
               canceledAt: null,
             },
@@ -484,7 +492,8 @@ export class PayablesService {
         : null) ||
       (await this.prisma.supplier.findFirst({
         where: {
-          companyId,
+          companyId: company.id,
+          branchCode,
           legalName: normalizedLegalName,
           canceledAt: null,
         },
@@ -501,16 +510,37 @@ export class PayablesService {
       updatedBy: requestedBy || null,
     };
 
+    const party = await upsertPartyIdentity(this.prisma, {
+      companyId: company.id,
+      branchCode,
+      sourceSystem: "FINANCEIRO",
+      sourceTenantId: company.id,
+      externalEntityType: PARTY_ROLE.SUPPLIER,
+      externalEntityId:
+        existing?.id || normalizedDocument || createLocalExternalEntityId(),
+      roles: [PARTY_ROLE.SUPPLIER],
+      data: {
+        name: normalizedLegalName,
+        document: normalizedDocument,
+        stateRegistration: payload.stateRegistration,
+        email: payload.email,
+        phone: payload.phone,
+      },
+      requestedBy,
+    });
+
     if (existing) {
       return this.prisma.supplier.update({
         where: { id: existing.id },
-        data,
+        data: { ...data, partyId: party.id },
       });
     }
 
     return this.prisma.supplier.create({
       data: {
-        companyId,
+        companyId: company.id,
+        branchCode,
+        partyId: party.id,
         ...data,
         createdBy: requestedBy || null,
       },
@@ -899,7 +929,7 @@ export class PayablesService {
     }
 
     const supplier = await this.ensureSupplier(
-      company.id,
+      company,
       parsedXml.supplier,
       options?.requestedBy,
     );
