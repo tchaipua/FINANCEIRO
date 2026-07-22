@@ -1155,6 +1155,25 @@ export default function FinanceiroProdutosPage() {
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
+    const handleEmbeddedBackNavigation = (event: MessageEvent) => {
+      const data = event.data as { type?: string; screenId?: string } | null;
+      if (event.source !== window.parent) return;
+      if (!data || data.type !== 'MSINFOR_FINANCEIRO_NAVIGATE_BACK') return;
+      if (data.screenId !== EMBEDDED_PRODUCT_SCREEN_ID) return;
+
+      const params = new URLSearchParams(window.location.search);
+      params.delete('historyOrigin');
+      params.delete('productId');
+      params.delete('productName');
+      const query = params.toString();
+      window.location.replace(`/estoque${query ? `?${query}` : ''}`);
+    };
+
+    window.addEventListener('message', handleEmbeddedBackNavigation);
+    return () => window.removeEventListener('message', handleEmbeddedBackNavigation);
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setRequestedEditProductId(params.get('editProductId'));
     setReturnTo(params.get('returnTo'));
@@ -1753,6 +1772,7 @@ export default function FinanceiroProdutosPage() {
     const params = new URLSearchParams(
       buildFinanceNavigationQueryString(runtimeContext).replace(/^\?/, ''),
     );
+    params.set('historyOrigin', 'PRODUCTS');
     params.set('productId', product.id);
     params.set('productName', product.name);
     window.location.assign(`/estoque/historico-movimentacao?${params.toString()}`);
@@ -2063,7 +2083,7 @@ export default function FinanceiroProdutosPage() {
       {isFormOpen ? (
         <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
-            <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
+            <div className={`${FINANCE_GRID_PAGE_LAYOUT.modalHeader} !bg-blue-700 text-white`}>
               <div className="flex items-start gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   {runtimeContext.logoUrl ? (
@@ -2073,19 +2093,19 @@ export default function FinanceiroProdutosPage() {
                       className="h-full w-full object-contain p-1.5"
                     />
                   ) : (
-                    <span className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+                    <span className="text-xs font-black uppercase tracking-[0.18em] text-blue-100">
                       {String(runtimeContext.companyName || 'FINANCEIRO').slice(0, 3).toUpperCase()}
                     </span>
                   )}
                 </div>
                 <div>
-                  <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+                  <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-100">
                     Cadastro de produto
                   </div>
-                  <h2 className="mt-1 text-2xl font-black text-slate-900">
+                  <h2 className="mt-1 text-2xl font-black text-white">
                     {formState.id ? 'Editar produto' : 'Novo produto'}
                   </h2>
-                  <p className="mt-2 text-sm font-medium text-slate-500">
+                  <p className="mt-2 text-sm font-medium text-blue-100">
                     Este cadastro base será reutilizado por estoque, notas de entrada e vendas.
                   </p>
                 </div>
@@ -2093,7 +2113,7 @@ export default function FinanceiroProdutosPage() {
               <button
                 type="button"
                 onClick={closeProductForm}
-                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+                className="rounded-full bg-rose-600 px-3 py-2 text-white transition hover:bg-rose-700"
               >
                 ✕
               </button>
@@ -2491,27 +2511,23 @@ export default function FinanceiroProdutosPage() {
                 ) : null}
               </div>
 
-              <div className="mt-6 flex flex-wrap justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={closeProductForm}
-                  className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold uppercase tracking-[0.16em] text-slate-700 shadow-sm transition hover:bg-slate-50"
-                >
-                  Fechar
-                </button>
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-5">
+                <div className="flex flex-wrap gap-4">
+
                 <button
                   type="submit"
                   disabled={saving}
-                  className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}
+                  className="inline-flex min-w-[136px] items-center justify-center gap-2 rounded-2xl border-2 border-emerald-500 bg-white px-6 py-3 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {saving ? 'Salvando...' : 'Salvar produto'}
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h12l2 2v16H5z" /><path d="M8 3v6h8V3" /><path d="M8 21v-7h8v7" /></svg>
+                  {saving ? 'Salvando...' : 'Salvar'}
                 </button>
-              </div>
+                </div>
 
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <ScreenNameCopy
                   screenId={PRODUCT_FORM_POPUP_SCREEN_ID}
-                  className="justify-end"
+                  className="ml-auto max-w-full justify-end"
+                  compact
                   originText="Origem: Sistema Financeiro - C:/Sistemas/IA/Financeiro/frontend/src/app/produtos/page.tsx"
                   auditText={`--- LOGICA DO POPUP ---
 Cadastro e manutenção do produto financeiro.

@@ -452,7 +452,7 @@ function CertificateModal({
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
       <div className={FINANCE_GRID_PAGE_LAYOUT.modalPanel}>
-        <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
+        <div className={`${FINANCE_GRID_PAGE_LAYOUT.modalHeader} !bg-blue-700 text-white`}>
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white bg-white shadow-md">
               {logoUrl ? (
@@ -462,19 +462,19 @@ function CertificateModal({
                   className="h-full w-full object-contain p-2"
                 />
               ) : (
-                <span className="text-base font-black uppercase tracking-[0.22em] text-slate-500">
+                <span className="text-base font-black uppercase tracking-[0.22em] text-blue-100">
                   {String(companyName || 'FINANCEIRO').slice(0, 3).toUpperCase()}
                 </span>
               )}
             </div>
             <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-100">
                 Certificados digitais
               </div>
-              <h2 className="mt-1 text-2xl font-black text-slate-900">
+              <h2 className="mt-1 text-2xl font-black text-white">
                 {formState.id ? 'Alterar certificado A1' : 'Incluir certificado A1'}
               </h2>
-              <p className="mt-2 text-sm font-medium text-slate-500">
+              <p className="mt-2 text-sm font-medium text-blue-100">
                 O PFX e a senha ficam protegidos no Financeiro e a chave de
                 descriptografia permanece no backend.
               </p>
@@ -483,7 +483,7 @@ function CertificateModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+            className="rounded-full bg-rose-600 px-3 py-2 text-white transition hover:bg-rose-700"
           >
             ✕
           </button>
@@ -656,6 +656,7 @@ function CertificateModal({
               <ScreenNameCopy
                 screenId={formState.id ? EDIT_MODAL_SCREEN_ID : CREATE_MODAL_SCREEN_ID}
                 className="justify-end"
+                compact
                 originText="Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\contas-a-pagar\\certificados-digitais\\page.tsx"
                 auditText={auditText}
               />

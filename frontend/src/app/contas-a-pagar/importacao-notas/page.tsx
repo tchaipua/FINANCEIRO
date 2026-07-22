@@ -42,6 +42,8 @@ const INSTALLMENTS_MODAL_SCREEN_ID =
   'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS_PARCELAS';
 const PRODUCTS_MODAL_SCREEN_ID =
   'PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS_PRODUTOS';
+const CERTIFICATE_MODAL_SCREEN_ID =
+  'POPUP_PRINCIPAL_FINANCEIRO_CONTAS_A_PAGAR_IMPORTACAO_NOTAS_CERTIFICADO_A1';
 
 const auditText = `--- LOGICA DA TELA ---
 Esta tela centraliza a importação de notas do contas a pagar por consulta automática na SEFAZ e o acesso ao fluxo manual em tela dedicada.
@@ -705,22 +707,22 @@ function CertificateModal({
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
-        <div className={FINANCE_GRID_PAGE_LAYOUT.modalHeader}>
+        <div className={`${FINANCE_GRID_PAGE_LAYOUT.modalHeader} !bg-blue-700 text-white`}>
           <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">
+            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-100">
               Certificado fiscal
             </div>
-            <h2 className="mt-1 text-2xl font-black text-slate-900">
+            <h2 className="mt-1 text-2xl font-black text-white">
               {formState.id ? 'Editar certificado A1' : 'Novo certificado A1'}
             </h2>
-            <p className="mt-2 text-sm font-medium text-slate-500">
+            <p className="mt-2 text-sm font-medium text-blue-100">
               O PFX e a senha são gravados criptografados no Financeiro. A chave fica no backend.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 bg-white px-3 py-2 text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
+            className="rounded-full bg-rose-600 px-3 py-2 text-white transition hover:bg-rose-700"
           >
             ✕
           </button>
@@ -850,6 +852,8 @@ function CertificateModal({
               </button>
             </section>
           </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"><ScreenNameCopy screenId={CERTIFICATE_MODAL_SCREEN_ID} className="justify-end" compact /></div>
 
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <button

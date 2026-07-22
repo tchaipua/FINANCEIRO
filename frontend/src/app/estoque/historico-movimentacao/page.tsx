@@ -676,11 +676,14 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       if (data.screenId !== 'PRINCIPAL_FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO') return;
 
       const params = new URLSearchParams(window.location.search);
+      const historyOrigin = params.get('historyOrigin');
+      params.delete('historyOrigin');
       params.delete('productId');
       params.delete('productName');
       const query = params.toString();
+      const destination = historyOrigin === 'PRODUCTS' ? '/produtos' : '/estoque';
 
-      window.location.replace(`/produtos${query ? `?${query}` : ''}`);
+      window.location.replace(`${destination}${query ? `?${query}` : ''}`);
     };
 
     window.addEventListener('message', handleEmbeddedBackNavigation);

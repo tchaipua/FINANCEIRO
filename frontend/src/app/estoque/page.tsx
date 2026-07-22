@@ -208,7 +208,17 @@ function StockMenuCard({
 
 export default function FinanceiroEstoquePage() {
   const runtimeContext = useFinanceRuntimeContext();
-  const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
+  const initialNavigationQueryString = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    return window.location.search;
+  }, []);
+  const preservedQueryString =
+    runtimeContext.sourceSystem && runtimeContext.sourceTenantId
+      ? buildFinanceNavigationQueryString(runtimeContext)
+      : initialNavigationQueryString;
+  const isEmbedded =
+    runtimeContext.embedded ||
+    new URLSearchParams(initialNavigationQueryString).get('embedded') === '1';
   const [branchInventoryConfig, setBranchInventoryConfig] = useState<BranchInventoryConfig>(
     DEFAULT_BRANCH_INVENTORY_CONFIG,
   );
@@ -268,7 +278,7 @@ export default function FinanceiroEstoquePage() {
         </div>
       </section>
 
-      {!runtimeContext.embedded ? (
+      {!isEmbedded ? (
         <section className={`${cardClass} px-6 py-4`}>
           <ScreenNameCopy
             screenId={SCREEN_ID}

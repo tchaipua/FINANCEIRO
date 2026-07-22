@@ -22,6 +22,9 @@ type AuditedPopupShellProps = {
   panelClassName?: string;
   bodyClassName?: string;
   screenCopyWrapperClassName?: string;
+  headerTheme?: 'default' | 'blue';
+  showScreenIdInHeader?: boolean;
+  footerScreenIdCompact?: boolean;
 };
 
 function getInitials(value?: string | null) {
@@ -49,18 +52,22 @@ export default function AuditedPopupShell({
   panelClassName = 'max-w-4xl',
   bodyClassName = '',
   screenCopyWrapperClassName = 'mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3',
+  headerTheme = 'default',
+  showScreenIdInHeader = false,
+  footerScreenIdCompact = false,
 }: AuditedPopupShellProps) {
   if (!isOpen) {
     return null;
   }
   const isSubfolderCreationWarning = description?.startsWith('A nova subpasta será criada dentro de:');
+  const usesBlueHeader = headerTheme === 'blue';
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
       <div className={`${FINANCE_GRID_PAGE_LAYOUT.modalPanel} ${panelClassName}`}>
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4">
+        <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${usesBlueHeader ? 'border-blue-700 bg-blue-700' : 'border-slate-100 bg-slate-50'}`}>
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-white shadow-sm ${usesBlueHeader ? 'border-white/30' : 'border-slate-200'}`}>
               {logoUrl ? (
                 <img
                   src={logoUrl}
@@ -68,29 +75,30 @@ export default function AuditedPopupShell({
                   className="h-full w-full object-contain p-1.5"
                 />
               ) : (
-                <span className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+                <span className={`text-xs font-black uppercase tracking-[0.18em] ${usesBlueHeader ? 'text-blue-700' : 'text-blue-700'}`}>
                   {getInitials(brandingName)}
                 </span>
               )}
             </div>
 
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
+              <div className={`text-[10px] font-black uppercase tracking-[0.28em] ${usesBlueHeader ? 'text-blue-100' : 'text-blue-600'}`}>
                 {eyebrow}
               </div>
-              <h2 className="mt-0.5 text-xl font-black text-slate-900">{title}</h2>
+              <h2 className={`mt-0.5 text-xl font-black ${usesBlueHeader ? 'text-white' : 'text-slate-900'}`}>{title}</h2>
               {description ? (
-                <p className={isSubfolderCreationWarning ? 'mt-2 max-w-2xl text-lg font-black leading-6 text-rose-600' : 'mt-1 max-w-2xl text-xs font-medium leading-5 text-slate-500'}>{description}</p>
+                <p className={isSubfolderCreationWarning ? 'mt-2 max-w-2xl text-lg font-black leading-6 text-rose-600' : usesBlueHeader ? 'mt-1 max-w-2xl text-xs font-medium leading-5 text-blue-100' : 'mt-1 max-w-2xl text-xs font-medium leading-5 text-slate-500'}>{description}</p>
               ) : null}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {headerActions}
+            {showScreenIdInHeader ? <span className="max-w-[260px] truncate rounded-xl bg-white/15 px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white" title={screenId}>{screenId}</span> : null}
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl font-black text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700"
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border text-xl font-black shadow-sm transition ${usesBlueHeader ? 'border-rose-700 bg-rose-600 text-white hover:bg-rose-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
               aria-label="Fechar popup"
             >
               ×
@@ -109,6 +117,7 @@ export default function AuditedPopupShell({
             <ScreenNameCopy
               screenId={screenId}
               className="justify-end"
+              compact={footerScreenIdCompact}
               originText={originText}
               auditText={auditText}
               sqlText={sqlText}

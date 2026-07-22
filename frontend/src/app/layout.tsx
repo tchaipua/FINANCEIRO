@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import RootShell from "@/app/components/root-shell";
+import GlobalProcessingOverlay from "@/app/components/global-processing-overlay";
 import SystemMessageProvider from "@/app/components/system-message-provider";
 
 export const metadata: Metadata = {
@@ -38,7 +39,7 @@ export default function RootLayout({
             })();
           `}
         </Script>
-        <SystemMessageProvider><RootShell>{children}</RootShell></SystemMessageProvider>
+        <SystemMessageProvider><GlobalProcessingOverlay /><RootShell>{children}</RootShell></SystemMessageProvider>
       </body>
     </html>
   );

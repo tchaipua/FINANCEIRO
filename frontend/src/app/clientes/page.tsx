@@ -30,6 +30,7 @@ const CUSTOMER_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_CADASTRO_MODAL';
 const CUSTOMER_DETAILS_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_DETALHES_MODAL';
 const CUSTOMER_STATUS_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_STATUS_MODAL';
 const CUSTOMER_COLUMNS_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_COLUNAS_MODAL';
+const CUSTOMER_EXPORT_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_EXPORTACAO_MODAL';
 
 type Customer = {
   id: string;
@@ -703,7 +704,7 @@ ORDER BY PA.name ASC;`,
             auditText="Configuração visual local das colunas do grid de clientes. Não altera dados financeiros."
             sqlText="-- Configuração visual do grid; nenhuma consulta SQL adicional é executada."
             onClose={() => setColumnsModalOpen(false)}
-            panelClassName="max-w-2xl"
+            panelClassName="max-w-2xl" headerTheme="blue" footerScreenIdCompact
           >
             <div className="grid gap-3 sm:grid-cols-2">
               {CUSTOMER_GRID_COLUMNS.map((column) => {
@@ -742,6 +743,7 @@ ORDER BY PA.name ASC;`,
             storageKey={`financeiro:clientes:export:${runtimeContext.sourceTenantId || 'sem-tenant'}`}
             brandingName={runtimeContext.companyName}
             brandingLogoUrl={runtimeContext.logoUrl}
+            blueHeader
             onClose={() => setExportModalOpen(false)}
             onExport={async (config) => {
               try {
@@ -780,7 +782,7 @@ ORDER BY PA.name ASC;`,
         brandingName={runtimeContext.companyName}
         logoUrl={runtimeContext.logoUrl}
         onClose={closeEditor}
-        panelClassName="max-w-4xl"
+        panelClassName="max-w-4xl" headerTheme="blue" footerScreenIdCompact
       >
         <form onSubmit={saveCustomer} className="grid gap-4 md:grid-cols-2">
           {([
@@ -841,7 +843,7 @@ ORDER BY PA.name ASC;`,
         brandingName={runtimeContext.companyName}
         logoUrl={runtimeContext.logoUrl}
         onClose={() => setViewingCustomer(null)}
-        panelClassName="max-w-3xl"
+        panelClassName="max-w-3xl" headerTheme="blue" footerScreenIdCompact
       >
         {viewingCustomer ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -895,7 +897,7 @@ ORDER BY PA.name ASC;`,
         brandingName={runtimeContext.companyName}
         logoUrl={runtimeContext.logoUrl}
         onClose={() => setStatusCustomer(null)}
-        panelClassName="max-w-xl"
+        panelClassName="max-w-xl" headerTheme="blue" footerScreenIdCompact
         footerActions={
           <>
             <button type="button" onClick={() => setStatusCustomer(null)} className={FINANCE_GRID_PAGE_LAYOUT.secondaryButton}>Cancelar</button>

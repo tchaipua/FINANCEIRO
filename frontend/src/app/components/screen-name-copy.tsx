@@ -15,6 +15,7 @@ type ScreenNameCopyProps = {
   originText?: string;
   auditText?: string;
   sqlText?: string;
+  compact?: boolean;
 };
 
 type ScreenAuditMetadata = {
@@ -571,6 +572,7 @@ export default function ScreenNameCopy({
   originText,
   auditText,
   sqlText,
+  compact = false,
 }: ScreenNameCopyProps) {
   const [status, setStatus] = useState<CopyStatus>('idle');
   const [isAuditOpen, setIsAuditOpen] = useState(false);
@@ -610,8 +612,8 @@ export default function ScreenNameCopy({
 
   return (
     <>
-      <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 ${className}`}>
-        <span className="flex-1 truncate">
+      <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 ${compact ? 'justify-end' : ''} ${className}`}>
+        <span className={compact ? 'max-w-[calc(100%-42px)] truncate' : 'flex-1 truncate'}>
           {label}:{' '}
           <span className="font-normal text-[10px] tracking-[0.35em] text-slate-500">{screenId}</span>
         </span>
@@ -627,7 +629,7 @@ export default function ScreenNameCopy({
             <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
           </svg>
         </button>
-        <span className="min-w-[48px] text-[9px] font-semibold uppercase tracking-[0.4em] text-emerald-600">
+        <span className={`${compact ? 'min-w-0' : 'min-w-[48px]'} text-[9px] font-semibold uppercase tracking-[0.4em] text-emerald-600`}>
           {status === 'copied' ? 'COPIADO' : status === 'error' ? 'FALHA' : ''}
         </span>
       </div>

@@ -21,6 +21,8 @@ type GridExportModalProps<ColumnKey extends string> = {
   storageKey?: string;
   brandingName?: string | null;
   brandingLogoUrl?: string | null;
+  screenId?: string;
+  blueHeader?: boolean;
   onClose: () => void;
   onExport: (config: {
     selectedColumns: Record<ColumnKey, boolean>;
@@ -125,6 +127,8 @@ export default function GridExportModal<ColumnKey extends string>({
   storageKey,
   brandingName,
   brandingLogoUrl,
+  screenId,
+  blueHeader = false,
   onClose,
   onExport,
 }: GridExportModalProps<ColumnKey>) {
@@ -185,7 +189,7 @@ export default function GridExportModal<ColumnKey extends string>({
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
       <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-6 py-4">
+        <div className={`flex items-start justify-between gap-4 border-b px-6 py-4 ${blueHeader ? 'border-blue-700 bg-blue-700' : 'border-slate-100 bg-slate-50'}`}>
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               {brandingLogoUrl ? (
@@ -195,11 +199,11 @@ export default function GridExportModal<ColumnKey extends string>({
               )}
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-600">
+              <div className={`text-[11px] font-bold uppercase tracking-[0.28em] ${blueHeader ? 'text-blue-100' : 'text-blue-600'}`}>
                 {brandingName || 'Financeiro'}
               </div>
-              <h2 className="truncate text-xl font-bold text-[#153a6a]">{title}</h2>
-              <p className="mt-1 text-sm font-medium text-slate-500">{description}</p>
+              <h2 className={`truncate text-xl font-bold ${blueHeader ? 'text-white' : 'text-[#153a6a]'}`}>{title}</h2>
+              <p className={`mt-1 text-sm font-medium ${blueHeader ? 'text-blue-100' : 'text-slate-500'}`}>{description}</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-red-500">

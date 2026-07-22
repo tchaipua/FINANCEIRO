@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 function booleanInput(value: unknown) {
   if (typeof value === "boolean") return value;
@@ -37,11 +37,17 @@ export class ListS3ObjectsDto extends S3ControlContextDto {
   @IsOptional() @IsString() @MaxLength(3000) continuationToken?: string;
 }
 
+export class S3UsageDto extends S3ControlContextDto {
+  @IsOptional() @IsString() @MaxLength(600) prefix?: string;
+  @Transform(({ value }) => booleanInput(value)) @IsOptional() @IsBoolean() all?: boolean;
+}
+
 export class S3FolderStatusDto extends S3ControlContextDto {
   @IsString() @MaxLength(600) prefix!: string;
 }
 
 export class SearchS3ObjectsDto extends S3ControlContextDto {
+  @IsOptional() @IsString() @MaxLength(600) prefix?: string;
   @IsOptional() @IsString() @MaxLength(255) term?: string;
   @IsOptional() @IsString() @MaxLength(30) extension?: string;
 }
@@ -61,4 +67,9 @@ export class DeleteS3FolderDto extends S3ControlMutationContextDto {
 
 export class DeleteS3ObjectDto extends S3ControlMutationContextDto {
   @IsString() @MaxLength(1000) key!: string;
+}
+
+
+export class DeleteS3ObjectsBatchDto extends S3ControlMutationContextDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1000) @IsString({ each: true }) @MaxLength(1000, { each: true }) keys!: string[];
 }

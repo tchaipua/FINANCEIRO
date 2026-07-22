@@ -1,9 +1,9 @@
 import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { DeleteObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { normalizeText } from "../../../common/finance-core.utils";
 import { decryptSecret } from "../../../common/secret-crypto.utils";
-import { CreateS3FolderDto, DeleteS3FolderDto, DeleteS3ObjectDto, ListS3ObjectsDto, S3FolderStatusDto, SaveS3ConfigurationDto, SearchS3ObjectsDto, S3ControlContextDto, UploadS3ObjectDto } from "./dto/s3-control.dto";
+import { CreateS3FolderDto, DeleteS3FolderDto, DeleteS3ObjectDto, DeleteS3ObjectsBatchDto, ListS3ObjectsDto, S3FolderStatusDto, SaveS3ConfigurationDto, SearchS3ObjectsDto, S3ControlContextDto, S3UsageDto, UploadS3ObjectDto } from "./dto/s3-control.dto";
 
 const MAX_USAGE_OBJECTS = 10_000;
 const MAX_SEARCH_OBJECTS = 10_000;
@@ -134,12 +134,55 @@ export class S3ControlService {
     }
   }
 
+  async usage(query: S3UsageDto) {
+    this.assertAdmin(query.userRole);
+    const { configuration } = await this.configuration(query);
+    if (!configuration || configuration.status !== "ACTIVE") throw new BadRequestException("CONFIGURE O S3 NO CADASTRO DA EMPRESA, FILIAL OU SOFTHOUSE DE ORIGEM ANTES DE CALCULAR O USO.");
+    const requestedPrefix = this.relativePrefix(query.prefix);
+    const client = this.client(configuration);
+    try {
+      if (!query.all) {
+        const summary = await this.calculatePrefixUsage(client, configuration.bucket, requestedPrefix);
+        return { prefix: requestedPrefix, summary };
+      }
+      const summaries = new Map<string, { objectCount: number; totalBytes: number }>();
+      const add = (key: string, size: number) => { const current = summaries.get(key) || { objectCount: 0, totalBytes: 0 }; current.objectCount += 1; current.totalBytes += size; summaries.set(key, current); };
+      let continuationToken: string | undefined;
+      do {
+        const page = await client.send(new ListObjectsV2Command({ Bucket: configuration.bucket, MaxKeys: 1000, ContinuationToken: continuationToken }));
+        for (const item of page.Contents || []) {
+          const key = String(item.Key || ""); if (!key || key.endsWith("/")) continue;
+          const parts = key.split("/"); const size = Number(item.Size || 0); if (parts.length === 1) add("", size);
+          for (let index = 1; index < parts.length; index += 1) add(parts.slice(0, index).join("/"), size);
+        }
+        continuationToken = page.NextContinuationToken;
+      } while (continuationToken);
+      return { prefix: "", summaries: Array.from(summaries.entries()).map(([prefix, summary]) => ({ prefix, ...summary })).sort((left, right) => left.prefix.localeCompare(right.prefix)) };
+    } catch (error: any) {
+      if (error?.name === "NoSuchBucket") throw new BadRequestException("O BUCKET CONFIGURADO NÃO FOI LOCALIZADO.");
+      throw new BadGatewayException("NÃO FOI POSSÍVEL CALCULAR O USO DO S3. VERIFIQUE A CONFIGURAÇÃO.");
+    }
+  }
+
+  private async calculatePrefixUsage(client: S3Client, bucket: string, prefix: string) {
+    let continuationToken: string | undefined; let objectCount = 0; let totalBytes = 0;
+    const fullPrefix = prefix ? `${prefix}/` : undefined;
+    do {
+      const page = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: fullPrefix, MaxKeys: 1000, ContinuationToken: continuationToken }));
+      for (const item of page.Contents || []) { const key = String(item.Key || ""); if (!key || key.endsWith("/") || (!prefix && key.includes("/"))) continue; objectCount += 1; totalBytes += Number(item.Size || 0); }
+      continuationToken = page.NextContinuationToken;
+    } while (continuationToken);
+    return { objectCount, totalBytes };
+  }
+
   async searchObjects(query: SearchS3ObjectsDto) {
     this.assertAdmin(query.userRole);
     const { configuration } = await this.configuration(query);
     if (!configuration || configuration.status !== "ACTIVE") throw new BadRequestException("CONFIGURE O S3 NA EMPRESA OU FILIAL DO SISTEMA DE ORIGEM ANTES DE PESQUISAR OS ARQUIVOS.");
     const term = normalizeText(query.term) || "";
     const extension = (normalizeText(query.extension) || "").replace(/^\.+/, "");
+    const prefix = this.relativePrefix(query.prefix);
+    const fullPrefix = prefix ? `${prefix}/` : undefined;
     if (!term && !extension) throw new BadRequestException("INFORME O NOME OU A EXTENSÃO DO ARQUIVO PARA PESQUISAR.");
 
     const client = this.client(configuration);
@@ -147,7 +190,7 @@ export class S3ControlService {
     const files: Array<{ name: string; key: string; size: number; lastModified: string | null }> = [];
     try {
       do {
-        const page = await client.send(new ListObjectsV2Command({ Bucket: configuration.bucket, MaxKeys: Math.min(1000, MAX_SEARCH_OBJECTS - scannedObjectCount), ContinuationToken: continuationToken }));
+        const page = await client.send(new ListObjectsV2Command({ Bucket: configuration.bucket, Prefix: fullPrefix, MaxKeys: Math.min(1000, MAX_SEARCH_OBJECTS - scannedObjectCount), ContinuationToken: continuationToken }));
         for (const item of page.Contents || []) {
           scannedObjectCount += 1;
           const key = String(item.Key || "");
@@ -249,6 +292,27 @@ export class S3ControlService {
     return { objectCount, totalBytes, complete: !continuationToken };
   }
 
+  async deleteObjectsBatch(payload: DeleteS3ObjectsBatchDto) {
+    this.assertAdmin(payload.userRole);
+    const { company, branchCode, configuration } = await this.configuration(payload);
+    if (!configuration || configuration.status !== "ACTIVE") throw new BadRequestException("CONFIGURAÇÃO S3 ATIVA NÃO ENCONTRADA.");
+    const keys = Array.from(new Set(payload.keys.map((key) => normalizePrefix(key))));
+    if (!keys.length || keys.some((key) => !key || key.split("/").some((part) => part === "." || part === ".."))) throw new BadRequestException("ARQUIVO S3 INVÁLIDO.");
+    const actor = this.actor(payload.requestedBy);
+    await Promise.all(keys.map((key) => this.audit(company.id, branchCode, "DELETE_REQUESTED", "SOLICITADA EXCLUSÃO DE ARQUIVO S3 EM LOTE.", actor, key, { objectKey: key })));
+    try {
+      const response = await this.client(configuration).send(new DeleteObjectsCommand({ Bucket: configuration.bucket, Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true } }));
+      const errors = response.Errors || [];
+      const failedKeys = new Set(errors.map((item) => item.Key).filter(Boolean));
+      await Promise.all(keys.filter((key) => !failedKeys.has(key)).map((key) => this.audit(company.id, branchCode, "DELETE_COMPLETED", "ARQUIVO S3 EXCLUÍDO EM LOTE.", actor, key, { objectKey: key })));
+      await Promise.all(errors.map((item) => this.audit(company.id, branchCode, "DELETE_FAILED", "FALHA AO EXCLUIR ARQUIVO S3 EM LOTE.", actor, item.Key || "LOTE", { objectKey: item.Key, code: item.Code })));
+      if (errors.length) throw new BadGatewayException(`NÃO FOI POSSÍVEL EXCLUIR ${errors.length} ARQUIVO(S) NO S3.`);
+      return { success: true, deletedCount: keys.length };
+    } catch (error) {
+      if (error instanceof BadGatewayException) throw error;
+      throw new BadGatewayException("NÃO FOI POSSÍVEL EXCLUIR OS ARQUIVOS NO S3.");
+    }
+  }
   async deleteObject(payload: DeleteS3ObjectDto) {
     this.assertAdmin(payload.userRole);
     const { company, branchCode, configuration } = await this.configuration(payload);

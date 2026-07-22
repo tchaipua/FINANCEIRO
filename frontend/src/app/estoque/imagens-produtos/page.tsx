@@ -31,6 +31,14 @@ type LocalImageState = {
   url: string | null;
 };
 
+type S3Configuration = {
+  imagesFolder?: string;
+};
+
+type LocalImageAgentConfiguration = {
+  imagesDirectory?: string;
+};
+
 type ImageSearchItem = {
   imageUrl: string;
   thumbnailUrl: string;
@@ -61,14 +69,14 @@ function ProductImagePreview({
   productName,
   imageUrlOverride,
   noImage,
-  onClick,
+  onPreview,
   onResolved,
 }: {
   productCode: string | null | undefined;
   productName: string;
   imageUrlOverride?: string | null;
   noImage?: boolean;
-  onClick: () => void;
+  onPreview: (imageUrl: string) => void;
   onResolved: (state: LocalImageState) => void;
 }) {
   const normalizedProductCode = normalizeProductCode(productCode);
@@ -92,7 +100,7 @@ function ProductImagePreview({
 
   if (!imageUrl || noImage) {
     return (
-      <button type="button" onClick={onClick} className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${noImage ? 'border-rose-200 bg-rose-50 text-rose-600 hover:border-rose-300 hover:bg-rose-100' : 'border-slate-200 bg-slate-100 text-slate-400 hover:border-violet-300 hover:bg-violet-50'}`} title="Trocar imagem do produto" aria-label={`Trocar imagem do produto ${productName}`}>
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${noImage ? 'border-rose-200 bg-rose-50 text-rose-600' : 'border-slate-200 bg-slate-100 text-slate-400'}`}>
         {noImage ? (
           <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
             <path strokeLinecap="round" d="M6 6 18 18M18 6 6 18" />
@@ -103,12 +111,12 @@ function ProductImagePreview({
             <path strokeLinecap="round" strokeLinejoin="round" d="m4 18 5-5 3.5 3.5 2.5-2.5L20 18" />
           </svg>
         )}
-      </button>
+      </div>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className="rounded-xl" title="Trocar imagem do produto" aria-label={`Trocar imagem do produto ${productName}`}>
+    <button type="button" onClick={() => onPreview(imageUrl)} className="rounded-xl" title="Ampliar imagem" aria-label={`Ampliar imagem de ${productName}`}>
       <img
         src={imageUrl}
         alt={`Imagem de ${productName}`}
@@ -345,6 +353,37 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
   const [imageSelectionProduct, setImageSelectionProduct] = useState<ProductItem | null>(null);
   const [replacementError, setReplacementError] = useState<string | null>(null);
   const [isReplacing, setIsReplacing] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [s3ImagesFolder, setS3ImagesFolder] = useState('');
+  const [localImagesDirectory, setLocalImagesDirectory] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    const loadImageLocations = async () => {
+      const localResult = await fetch(`${LOCAL_IMAGE_AGENT_URL}/configuracao`, { cache: 'no-store' }).then(async (response) => {
+        if (!response.ok) throw new Error('Agente local indisponível');
+        return response.json() as Promise<LocalImageAgentConfiguration>;
+      }).catch(() => null);
+
+      if (!active) return;
+      setLocalImagesDirectory(String(localResult?.imagesDirectory || '').trim());
+
+      if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+        setS3ImagesFolder('');
+        return;
+      }
+
+      const s3Result = await getJson<S3Configuration>(
+        `/s3-control/configuration${buildFinanceApiQueryString(runtimeContext)}`,
+      ).catch(() => null);
+      if (active) setS3ImagesFolder(String(s3Result?.imagesFolder || '').trim());
+    };
+
+    void loadImageLocations();
+
+    return () => { active = false; };
+  }, [runtimeContext]);
 
   const loadProducts = useCallback(async () => {
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
@@ -490,6 +529,12 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
               Imagens localizadas: {availableImageCount}
             </div>
+            <div className="max-w-full rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-bold text-blue-800" title={localImagesDirectory || 'Diretório não informado pelo agente local'}>
+              <span className="font-black uppercase tracking-[0.12em]">Diretório local:</span> {localImagesDirectory || 'NÃO INFORMADO'}
+            </div>
+            <div className="max-w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800" title={s3ImagesFolder || 'Pasta não configurada no S3'}>
+              <span className="font-black uppercase tracking-[0.12em]">Pasta S3:</span> {s3ImagesFolder || 'NÃO INFORMADA'}
+            </div>
           </div>
           <label className="relative block w-full lg:max-w-md">
             <span className="sr-only">Pesquisar produto ou código</span>
@@ -549,7 +594,7 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
                           productName={product.name}
                           imageUrlOverride={imageState?.available ? imageState.url : null}
                           noImage={imageState?.available === false}
-                          onClick={() => openImageReplacement(product)}
+                          onPreview={setPreviewImageUrl}
                           onResolved={(state) => handleImageResolved(product.id, state)}
                         />
                       </td>
@@ -659,6 +704,11 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
           onClose={() => setImageSelectionProduct(null)}
           onChoose={(url) => void replaceProductImage(url, imageSelectionProduct)}
         />
+      ) : null}
+      {previewImageUrl ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-6" role="dialog" aria-modal="true" onClick={() => setPreviewImageUrl(null)}>
+          <img src={previewImageUrl} alt="Imagem ampliada do produto" className="max-h-full max-w-full rounded-xl bg-white object-contain shadow-2xl" />
+        </div>
       ) : null}
 
       {!runtimeContext.embedded ? (
