@@ -33,6 +33,12 @@ const BRANCH_MODELS = [
   "SuperTefCheckout",
   "SuperTefCheckoutRoute",
   "SuperTefAuditEvent",
+  "PrintTemplate",
+  "PrintTemplateVersion",
+  "PrinterProfile",
+  "PrintTemplateBinding",
+  "PrintJob",
+  "PrintAuditEvent",
 ];
 
 function modelSupportsBranchScope(model?: string | null) {

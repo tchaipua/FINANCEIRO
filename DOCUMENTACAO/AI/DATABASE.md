@@ -652,3 +652,16 @@ Espelho técnico das configurações compartilhadas pela empresa/filial do siste
 ### `source_integration_audit_events`
 
 Trilha append-only de cada sincronização das configurações de origem. Registra origem, empresa, filial, ator e somente indicadores não sensíveis; nunca registra senha SMTP, token ou credenciais S3.
+
+## Impressão configurável
+
+- `print_templates`: identidade do modelo por empresa, filial, código, tipo de documento e mídia; usa soft delete;
+- `print_template_versions`: versões imutáveis do layout e dados de exemplo, com publicação e arquivamento;
+- `printer_profiles`: nome físico do Windows, linguagem, mídia, colunas, DPI, cópias e guilhotina;
+- `print_template_bindings`: vínculo único por empresa, filial, sistema de origem e evento;
+- `print_jobs`: snapshot do payload, conteúdo renderizado, hash, idempotência, impressora, situação e retorno local;
+- `print_audit_events`: trilha append-only de todas as configurações, publicações e tentativas.
+
+Todas as tabelas carregam `companyId` e `branchCode`. Modelos de negócio respeitam cancelamento lógico; auditoria e histórico de impressão não são apagados.
+
+Pacotes `.msreport.json` não criam uma tabela paralela. A importação validada reutiliza `print_templates` e sempre acrescenta uma nova linha em `print_template_versions`; importação, publicação e exportação são registradas em `print_audit_events`. O pacote não persiste nem transporta `companyId`, `sourceTenantId`, `branchCode`, credenciais ou IDs internos do banco.

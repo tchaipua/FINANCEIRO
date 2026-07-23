@@ -123,3 +123,17 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
   existe XML autorizado/DANFSe e o e-mail não pode ser enviado
 - pendente de acompanhamento: adotar CNPJ alfanumérico na DPS quando o Governo
   publicar XSD NFS-e que substitua a restrição numérica do leiaute 1.01
+
+## Impressão configurável
+
+- concluído: editor visual e modo avançado para recibos térmicos e etiquetas;
+- concluído: modelos versionados de venda, baixa de parcelas e produto;
+- concluído: perfis por filial, detecção das impressoras Windows e automação por evento;
+- concluído: fila idempotente, histórico, reimpressão e auditoria append-only;
+- concluído: Venda 2 imprime após confirmação sem alterar a leitura das imagens locais;
+- concluído: baixa manual gera recibo do grupo recebido;
+- concluído: API de etiqueta disponível para os sistemas integrados;
+- concluído: agente local ampliado para imagens, driver Windows, ESC/POS, código de barras e QR Code;
+- concluído: central `CONFIGURAÇÃO RECIBOS` com acesso ao editor atual e ao fluxo por imagem;
+- concluído: pacote portátil `.msreport.json` com hash, validação, prévia, importação em rascunho/publicada e exportação;
+- concluído: cada importação aplica exclusivamente o tenant e a filial atuais, criando nova versão sem sobrescrever histórico.

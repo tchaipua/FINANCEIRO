@@ -18,6 +18,7 @@ import {
 } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
+import { createAndDispatchPrintJob } from '@/app/lib/local-print-agent';
 
 type ProductItem = {
   id: string;
@@ -2449,6 +2450,14 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         fallbackMessage: 'Não foi possível confirmar a venda à vista.',
       });
 
+      if (visualVariant === 'v2') {
+        void createAndDispatchPrintJob(
+          `/printing/jobs/sales/${created.id}`,
+          runtimeContext,
+          `SALE_RECEIPT:${created.id}`,
+        ).catch((printError) => console.warn('Falha na impressão automática da venda:', printError));
+      }
+
       clearSale();
       setSuccessSale(created);
       setQuickCashSale((current) =>
@@ -2498,6 +2507,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     runtimeContext,
     saleChannel,
     saleDiscount,
+    visualVariant,
   ]);
 
   const submitSale = useCallback(
@@ -2705,6 +2715,14 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           fallbackMessage: 'Não foi possível confirmar a venda.',
         });
 
+        if (visualVariant === 'v2') {
+          void createAndDispatchPrintJob(
+            `/printing/jobs/sales/${created.id}`,
+            runtimeContext,
+            `SALE_RECEIPT:${created.id}`,
+          ).catch((printError) => console.warn('Falha na impressão automática da venda:', printError));
+        }
+
         clearSale();
         setPaidPixIntent(null);
         setSuccessSale(created);
@@ -2741,6 +2759,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       saleDiscount,
       branchSaleConfig.allowSaleItemDiscount,
       cartTotals.total,
+      visualVariant,
     ],
   );
 

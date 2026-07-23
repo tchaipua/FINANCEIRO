@@ -3,6 +3,14 @@
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import {
+  applyFinanceColorPreference,
+  isFinanceColorThemeId,
+  normalizeFinanceColorIntensity,
+  readFinanceColorPreference,
+  saveFinanceColorPreference,
+  type FinanceColorPreference,
+} from '@/app/lib/color-theme';
 
 function hasIntegratedNavigationContext() {
   if (typeof window === 'undefined') return false;
@@ -122,6 +130,72 @@ export default function RootShell({
 
     delete document.body.dataset.financeEmbedded;
   }, [runtimeContext.embedded]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const applyAndStore = (preference: FinanceColorPreference) => {
+      applyFinanceColorPreference(preference);
+      saveFinanceColorPreference(
+        preference,
+        runtimeContext.sourceSystem,
+        runtimeContext.sourceTenantId,
+        runtimeContext.cashierUserId,
+      );
+    };
+
+    const initialPreference: FinanceColorPreference = runtimeContext.colorTheme
+      ? {
+          colorTheme: runtimeContext.colorTheme,
+          colorIntensity: runtimeContext.colorIntensity,
+        }
+      : readFinanceColorPreference(
+          runtimeContext.sourceSystem,
+          runtimeContext.sourceTenantId,
+          runtimeContext.cashierUserId,
+        );
+    applyAndStore(initialPreference);
+
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; colorTheme?: unknown; colorIntensity?: unknown } | null;
+      if (!data || data.type !== 'MSINFOR_COLOR_THEME_CHANGED' || !isFinanceColorThemeId(data.colorTheme)) return;
+      applyAndStore({
+        colorTheme: data.colorTheme,
+        colorIntensity: normalizeFinanceColorIntensity(data.colorIntensity),
+      });
+    };
+
+    const handleLocalThemeChange = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { colorTheme?: unknown; colorIntensity?: unknown } | null;
+      if (!detail || !isFinanceColorThemeId(detail.colorTheme)) return;
+      const preference = {
+        colorTheme: detail.colorTheme,
+        colorIntensity: normalizeFinanceColorIntensity(detail.colorIntensity),
+      };
+      applyAndStore(preference);
+      if (runtimeContext.embedded && window.parent !== window) {
+        window.parent.postMessage({ type: 'MSINFOR_COLOR_THEME_CHANGED', ...preference }, '*');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('msinfor-finance-color-theme-changed', handleLocalThemeChange);
+    if (runtimeContext.embedded && window.parent !== window) {
+      window.parent.postMessage({ type: 'MSINFOR_COLOR_THEME_REQUEST' }, '*');
+    }
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('msinfor-finance-color-theme-changed', handleLocalThemeChange);
+    };
+  }, [
+    runtimeContext.cashierUserId,
+    runtimeContext.colorIntensity,
+    runtimeContext.colorTheme,
+    runtimeContext.embedded,
+    runtimeContext.sourceSystem,
+    runtimeContext.sourceTenantId,
+  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

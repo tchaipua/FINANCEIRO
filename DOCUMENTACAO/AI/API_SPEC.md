@@ -1122,3 +1122,29 @@ perfil substitui o e-mail real do cadastro.
 O módulo operacional pertence exclusivamente ao Financeiro. A configuração pode ser abastecida automaticamente pelo cadastro da empresa/filial do sistema de origem. Credenciais nunca são retornadas pela API, e os caminhos `.` e `..` são rejeitados.
 
 Nos envios de NF-e e NFS-e, um SMTP completo do perfil fiscal tem prioridade. Quando ele estiver incompleto, o Financeiro usa o SMTP sincronizado da empresa/filial de origem.
+
+## Modelos e impressão local
+
+Todas as rotas usam `sourceSystem`, `sourceTenantId` e `sourceBranchCode`. A configuração exige perfil `ADMIN`; a geração operacional valida empresa, filial e o registro de negócio na própria API.
+
+- `POST /printing/bootstrap`: cria os modelos publicados padrão de venda, baixa de parcelas e etiqueta;
+- `GET|POST /printing/templates`: lista ou cria modelos;
+- `GET|PATCH|DELETE /printing/templates/:id`: consulta, altera ou inativa logicamente;
+- `POST /printing/templates/:id/versions`: cria versão imutável em rascunho;
+- `POST /printing/templates/:id/versions/:versionId/publish`: publica uma versão e arquiva a anterior;
+- `POST /printing/preview`: renderiza prévia sem imprimir;
+- `POST /printing/packages/validate`: valida schema, mídia, renderização e hash SHA-256 sem persistir;
+- `POST /printing/packages/import`: cria uma nova versão no tenant/filial atual e publica somente quando `publish=true`;
+- `POST /printing/templates/:id/export-package`: exporta `.msreport.json` sem IDs de empresa, tenant, filial ou credenciais;
+- `GET|POST /printing/printers`: lista ou grava perfis de impressora por filial;
+- `GET|PUT /printing/bindings`: configura modelo, impressora, cópias e automação por evento;
+- `POST /printing/jobs/sales/:saleId`: gera recibo da venda;
+- `POST /printing/jobs/settlement-groups/:groupId`: gera recibo do recebimento;
+- `POST /printing/jobs/products/:productId`: gera etiqueta com snapshot atual do produto;
+- `GET /printing/jobs`: histórico auditável;
+- `PATCH /printing/jobs/:jobId/status`: retorno do agente local;
+- `POST /printing/jobs/:jobId/reprint`: cria nova tentativa vinculada ao documento original.
+
+O navegador nunca recebe acesso direto à rede ou aos arquivos do cliente. O agente Windows escuta somente `127.0.0.1:47821`, concede sessão curta apenas às origens locais autorizadas e envia o conteúdo à impressora instalada.
+
+O pacote portátil usa `format=MSINFOR_REPORT_PACKAGE` e `schemaVersion=1`. Ele contém layout, variáveis, dados de exemplo anônimos, compatibilidade, origem técnica e hash. A empresa e a filial de destino nunca vêm no arquivo: são resolvidas pelo contexto autenticado no momento da importação. Código já existente cria nova versão; publicação arquiva a versão anterior sem exclusão física.

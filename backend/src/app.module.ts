@@ -14,6 +14,7 @@ import { FiscalDocumentsModule } from "./modules/fiscal-documents/fiscal-documen
 import { CustomersModule } from "./modules/customers/customers.module";
 import { SuperTefModule } from "./modules/supertef/supertef.module";
 import { S3ControlModule } from "./modules/s3-control/s3-control.module";
+import { PrintingModule } from "./modules/printing/printing.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { S3ControlModule } from "./modules/s3-control/s3-control.module";
     CustomersModule,
     SuperTefModule,
     S3ControlModule,
+    PrintingModule,
   ],
 })
 export class AppModule implements NestModule {

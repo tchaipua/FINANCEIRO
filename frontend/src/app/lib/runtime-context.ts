@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import {
+  isFinanceColorThemeId,
+  normalizeFinanceColorIntensity,
+  type FinanceColorIntensity,
+  type FinanceColorThemeId,
+} from '@/app/lib/color-theme';
 
 export type BranchStockParameterMode = 'NO' | 'YES' | 'BY_PRODUCT';
 
@@ -22,6 +28,8 @@ export type FinanceRuntimeContext = {
   cashierDisplayName: string | null;
   userRole: string | null;
   permissions: string[];
+  colorTheme: FinanceColorThemeId | null;
+  colorIntensity: FinanceColorIntensity;
 };
 
 export function normalizeFinanceDisplayText(value: string | null | undefined) {
@@ -67,6 +75,8 @@ const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
   cashierDisplayName: null,
   userRole: null,
   permissions: [],
+  colorTheme: null,
+  colorIntensity: 3,
 };
 
 function normalizePermissions(value: string | null) {
@@ -116,6 +126,10 @@ function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
     ),
     userRole: normalizeQueryValue(searchParams.get('userRole')),
     permissions: normalizePermissions(searchParams.get('permissions')),
+    colorTheme: isFinanceColorThemeId(searchParams.get('colorTheme'))
+      ? searchParams.get('colorTheme') as FinanceColorThemeId
+      : null,
+    colorIntensity: normalizeFinanceColorIntensity(searchParams.get('colorIntensity')),
   };
 }
 
@@ -202,6 +216,11 @@ export function buildFinanceNavigationQueryString(
 
   if (runtimeContext.permissions.length) {
     params.set('permissions', runtimeContext.permissions.join(','));
+  }
+
+  if (runtimeContext.colorTheme) {
+    params.set('colorTheme', runtimeContext.colorTheme);
+    params.set('colorIntensity', String(runtimeContext.colorIntensity));
   }
 
   const query = params.toString();

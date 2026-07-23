@@ -1,0 +1,384 @@
+{
+  "format": "MSINFOR_REPORT_PACKAGE",
+  "schemaVersion": 1,
+  "packageId": "e8820933-6889-4c27-a3d7-9429180bb914",
+  "exportedAt": "2026-07-23T21:45:19.331Z",
+  "report": {
+    "code": "RECIBO_VENDA_PRAZO_80MM",
+    "name": "RECIBO DE VENDA A PRAZO 80MM",
+    "description": "MODELO GENÉRICO DA SOFTHOUSE PARA VENDA A PRAZO EM IMPRESSORA TÉRMICA DE 80 MM.",
+    "documentType": "SALE_RECEIPT",
+    "mediaType": "RECEIPT",
+    "layout": {
+      "schemaVersion": 1,
+      "media": {
+        "type": "RECEIPT",
+        "columns": 40,
+        "widthMm": 80
+      },
+      "blocks": [
+        {
+          "id": "company",
+          "type": "TEXT",
+          "value": "{{company.name}}",
+          "align": "CENTER",
+          "bold": true
+        },
+        {
+          "id": "company-doc",
+          "type": "TEXT",
+          "value": "CNPJ {{company.document}}",
+          "align": "CENTER"
+        },
+        {
+          "id": "sep-1",
+          "type": "SEPARATOR",
+          "character": "="
+        },
+        {
+          "id": "title",
+          "type": "TEXT",
+          "value": "{{sale.receiptTitle}}",
+          "align": "CENTER",
+          "bold": true
+        },
+        {
+          "id": "sep-2",
+          "type": "SEPARATOR",
+          "character": "-"
+        },
+        {
+          "id": "date",
+          "type": "FIELD",
+          "label": "{{sale.date}} {{sale.time}}",
+          "path": "sale.displayCode"
+        },
+        {
+          "id": "operator",
+          "type": "FIELD",
+          "label": "OPERADOR ",
+          "path": "operator.shortName"
+        },
+        {
+          "id": "customer",
+          "type": "FIELD",
+          "label": "CLIENTE ",
+          "path": "customer.name",
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "document",
+          "type": "FIELD",
+          "label": "CPF/CNPJ ",
+          "path": "customer.document",
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "sep-items",
+          "type": "SEPARATOR",
+          "character": "-"
+        },
+        {
+          "id": "items",
+          "type": "TABLE",
+          "path": "items",
+          "columns": [
+            {
+              "header": "PRODUTO",
+              "path": "name",
+              "width": 18,
+              "align": "LEFT"
+            },
+            {
+              "header": "QTD",
+              "path": "quantity",
+              "width": 5,
+              "align": "RIGHT",
+              "format": "NUMBER"
+            },
+            {
+              "header": "V.UNIT",
+              "path": "unitPrice",
+              "width": 8,
+              "align": "RIGHT",
+              "format": "NUMBER"
+            },
+            {
+              "header": "TOTAL",
+              "path": "total",
+              "width": 9,
+              "align": "RIGHT",
+              "format": "NUMBER"
+            }
+          ]
+        },
+        {
+          "id": "sep-total",
+          "type": "SEPARATOR",
+          "character": "="
+        },
+        {
+          "id": "subtotal",
+          "type": "TOTAL",
+          "label": "TOTAL PRODUTOS ",
+          "path": "totals.subtotal",
+          "format": "CURRENCY",
+          "visibleWhen": {
+            "path": "totals.hasDiscount",
+            "truthy": true
+          }
+        },
+        {
+          "id": "discount",
+          "type": "TOTAL",
+          "label": "DESCONTOS ",
+          "path": "totals.discount",
+          "format": "CURRENCY",
+          "visibleWhen": {
+            "path": "totals.hasDiscount",
+            "truthy": true
+          }
+        },
+        {
+          "id": "total",
+          "type": "TOTAL",
+          "label": "TOTAL DA VENDA ",
+          "path": "totals.total",
+          "format": "CURRENCY",
+          "bold": true
+        },
+        {
+          "id": "sep-balance",
+          "type": "SEPARATOR",
+          "character": "="
+        },
+        {
+          "id": "previous",
+          "type": "TOTAL",
+          "label": "SALDO ANTERIOR ",
+          "path": "balance.previousOpen",
+          "format": "CURRENCY",
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "current",
+          "type": "TOTAL",
+          "label": "SALDO ATUAL ",
+          "path": "balance.currentOpen",
+          "format": "CURRENCY",
+          "bold": true,
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "open-since-and-customer-sequence",
+          "type": "FIELD",
+          "label": "{{customer.openSinceLabel}}",
+          "path": "customer.saleSequenceDisplay",
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "customer-signature-space",
+          "type": "SPACER",
+          "lines": 2,
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "customer-signature-line",
+          "type": "TEXT",
+          "value": "------------------------",
+          "align": "CENTER",
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "customer-signature-name",
+          "type": "TEXT",
+          "value": "{{customer.name}}",
+          "align": "CENTER",
+          "visibleWhen": {
+            "path": "customer.identified",
+            "truthy": true
+          }
+        },
+        {
+          "id": "observe",
+          "type": "TEXT",
+          "value": "*********** OBSERVAR ***********",
+          "align": "CENTER",
+          "bold": true
+        },
+        {
+          "id": "thanks",
+          "type": "TEXT",
+          "value": "OBRIGADO PELA PREFERÊNCIA",
+          "align": "CENTER"
+        },
+        {
+          "id": "fiscal",
+          "type": "TEXT",
+          "value": "NÃO É DOCUMENTO FISCAL",
+          "align": "CENTER"
+        },
+        {
+          "id": "end",
+          "type": "SPACER",
+          "lines": 3
+        }
+      ]
+    },
+    "sampleData": {
+      "company": {
+        "name": "MSINFOR SISTEMAS",
+        "document": "69.342.038/0001-49"
+      },
+      "sale": {
+        "number": "VENDA-DEMONSTRACAO-000001",
+        "shortNumber": "A000001",
+        "code": "A000001",
+        "displayCode": "VENDA: A000001",
+        "receiptTitle": "RECIBO DE VENDA A PRAZO",
+        "date": "16/07/2026",
+        "time": "14:28:59"
+      },
+      "customer": {
+        "identified": true,
+        "name": "MARÇAL ROCHA SACCARDO",
+        "document": "852.887.306-44",
+        "saleSequence": "000001",
+        "saleSequenceDisplay": "SEQ: 000001",
+        "openSinceLabel": "ABERTA DESDE: 16/08/2026"
+      },
+      "operator": {
+        "name": "MARÇAL ROCHA SACCARDO",
+        "shortName": "MARÇAL"
+      },
+      "items": [
+        {
+          "name": "UNIFORME CAMISETA TESTE",
+          "quantity": 13,
+          "unitPrice": 59.9,
+          "total": 778.7
+        },
+        {
+          "name": "CADERNO CAPA DURA TESTE",
+          "quantity": 10,
+          "unitPrice": 24.9,
+          "total": 249
+        },
+        {
+          "name": "LAPIS GRAFITE TESTE",
+          "quantity": 1,
+          "unitPrice": 2.5,
+          "total": 2.5
+        },
+        {
+          "name": "GARRAFA AGUA TESTE",
+          "quantity": 1,
+          "unitPrice": 4.5,
+          "total": 4.5
+        },
+        {
+          "name": "APOSTILA MATEMATICA TESTE",
+          "quantity": 1,
+          "unitPrice": 89.9,
+          "total": 89.9
+        },
+        {
+          "name": "UNIFORME SHORT TESTE",
+          "quantity": 1,
+          "unitPrice": 44.9,
+          "total": 44.9
+        },
+        {
+          "name": "APOSTILA PORTUGUES TESTE",
+          "quantity": 3,
+          "unitPrice": 89.9,
+          "total": 269.7
+        },
+        {
+          "name": "PRODUTO TESTE NFC-E HOMOLOGACAO",
+          "quantity": 1,
+          "unitPrice": 1,
+          "total": 1
+        }
+      ],
+      "payment": {
+        "label": "PRAZO",
+        "installment": "1/1",
+        "dueDate": "16/08/2026"
+      },
+      "totals": {
+        "subtotal": 1440.2,
+        "discount": 0,
+        "hasDiscount": false,
+        "total": 1440.2
+      },
+      "balance": {
+        "previousOpen": 0,
+        "currentOpen": 1440.2,
+        "sinceDate": "16/08/2026",
+        "firstOpenInstallmentDate": "16/08/2026"
+      }
+    },
+    "variables": [
+      "balance.currentOpen",
+      "balance.previousOpen",
+      "company.document",
+      "company.name",
+      "customer.document",
+      "customer.identified",
+      "customer.name",
+      "customer.openSinceLabel",
+      "customer.saleSequenceDisplay",
+      "items",
+      "name",
+      "operator.shortName",
+      "quantity",
+      "sale.date",
+      "sale.displayCode",
+      "sale.receiptTitle",
+      "sale.time",
+      "total",
+      "totals.discount",
+      "totals.hasDiscount",
+      "totals.subtotal",
+      "totals.total",
+      "unitPrice"
+    ]
+  },
+  "compatibility": {
+    "rendererSchemaVersion": 1,
+    "minColumns": 16,
+    "maxColumns": 160
+  },
+  "source": {
+    "createdWith": "MSINFOR/CODEX",
+    "templateVersion": null,
+    "referenceImageName": "modelo-softhouse-venda-prazo-80mm.png",
+    "referenceImageSha256": "b30a44d7aaae82deac816b606702493f78bc257e09b103cc6400a851561ea012"
+  },
+  "integrity": {
+    "algorithm": "SHA-256",
+    "contentHash": "e63c8d8171d34501104f73003cc2babf359e45416ffe72c5b2677e9e966e95b9"
+  }
+}

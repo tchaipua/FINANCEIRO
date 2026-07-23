@@ -111,6 +111,7 @@ Estrutura atual:
 - card SUPERTEF abre a administração da integração em uma tela única com abas
 - card PARÂMETROS FISCAIS abre a central de cadastros necessários à emissão fiscal por filial
 - card CONTROLE S3 abre a administração do armazenamento no próprio Financeiro
+- card CONFIGURAÇÃO RECIBOS abre o editor atual e a importação de pacotes criados por imagem
 - credenciais do S3 são mantidas criptografadas no banco do Financeiro e nunca exibidas na tela
 - todas as integrações futuras devem preservar o isolamento por sourceSystem + sourceTenantId`;
 
@@ -187,6 +188,19 @@ Estrutura atual:
               <div className="text-sm font-black text-slate-800">CONTROLE S3</div>
             </div>
           </button>
+
+          <Link
+            href={`/msinfor/configuracao-recibos${preservedQueryString}`}
+            title="Configurar recibos e etiquetas pelo editor atual ou por pacote criado a partir de uma imagem."
+            className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+          >
+            <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3 text-4xl">
+              🖨️
+            </div>
+            <div className="flex min-h-11 items-center justify-center p-2.5 text-center">
+              <div className="text-sm font-black text-slate-800">CONFIGURAÇÃO RECIBOS</div>
+            </div>
+          </Link>
         </div>
       </section>
 

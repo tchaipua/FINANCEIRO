@@ -8,6 +8,7 @@ import { requestJson } from '@/app/lib/api';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
+import { createAndDispatchPrintJob } from '@/app/lib/local-print-agent';
 
 type ManualPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CHECK' | 'CUSTOMER_CREDIT';
 
@@ -847,6 +848,11 @@ export default function FinanceiroManualSettlementPage() {
       }
 
       if (failureMessages.length === 0) {
+        void createAndDispatchPrintJob(
+          `/printing/jobs/settlement-groups/${settlementGroupId}`,
+          runtimeContext,
+          `SETTLEMENT_RECEIPT:${settlementGroupId}`,
+        ).catch((printError) => console.warn('Falha na impressão automática do recebimento:', printError));
         setSuperTefAuthorization(null);
         setInstallments([]);
         setSettlementPreview(null);

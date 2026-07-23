@@ -8,89 +8,95 @@ datasource db {
 }
 
 model Company {
-  id                         String                        @id @default(uuid())
-  sourceSystem               String
-  sourceTenantId             String
-  name                       String
-  document                   String?
-  status                     String                        @default("ACTIVE")
-  interestRate               Float?
-  interestGracePeriod        Int?
-  penaltyRate                Float?
-  penaltyValue               Float?
-  penaltyGracePeriod         Int?
-  createdAt                  DateTime                      @default(now())
-  createdBy                  String?
-  updatedAt                  DateTime                      @updatedAt
-  updatedBy                  String?
-  canceledAt                 DateTime?
-  canceledBy                 String?
-  bankAccounts               BankAccount[]
-  fiscalCertificates         FiscalCertificate[]
-  nfceProfiles               NfceProfile[]
-  nfeProfiles                NfeProfile[]
-  nfseProfiles               NfseProfile[]
-  nfseServiceItems           NfseServiceItem[]
-  nfseServiceDescriptions    NfseServiceDescription[]
-  nfseDocuments              NfseDocument[]
-  nfseDocumentAttempts       NfseDocumentAttempt[]
-  nfseDocumentEmails         NfseEmailDelivery[]
-  nfseMunicipalParameters    NfseMunicipalParameter[]
-  fiscalOperationNatures     FiscalOperationNature[]
-  fiscalTaxRules             FiscalTaxRule[]
-  fiscalBenefitCodes         FiscalBenefitCode[]
-  fiscalDocuments            FiscalDocument[]
-  fiscalDocumentAttempts     FiscalDocumentAttempt[]
-  fiscalDocumentItems        FiscalDocumentItem[]
-  fiscalDocumentInstallments FiscalDocumentInstallment[]
-  fiscalDocumentEvents       FiscalDocumentEvent[]
-  fiscalDocumentEmails       FiscalDocumentEmailDelivery[]
-  fiscalNumberInutilizations FiscalNumberInutilization[]
-  fiscalAuditEvents          FiscalAuditEvent[]
-  products                   Product[]
-  suppliers                  Supplier[]
-  parties                    Party[]
-  partyRoles                 PartyRole[]
-  partyExternalReferences    PartyExternalReference[]
-  partyAuditEvents           PartyAuditEvent[]
-  payableInvoiceImports      PayableInvoiceImport[]
-  payableTitles              PayableTitle[]
-  payableInstallments        PayableInstallment[]
-  stockMovements             StockMovement[]
-  productStockBalances       ProductStockBalance[]
-  receivableBatches          ReceivableBatch[]
-  receivableTitles           ReceivableTitle[]
-  receivableInstallments     ReceivableInstallment[]
-  bankReturnImports          BankReturnImport[]
-  bankReturnImportItems      BankReturnImportItem[]
-  bankStatementImports       BankStatementImport[]
-  bankStatementMovements     BankStatementMovement[]
-  bankDdaRecords             BankDdaRecord[]
-  bankDdaAuditEvents         BankDdaAuditEvent[]
-  cashSessions               CashSession[]
-  cashMovements              CashMovement[]
-  settlements                InstallmentSettlement[]
-  customerCredits            CustomerCredit[]
-  customerCreditMovements    CustomerCreditMovement[]
-  branches                   CompanyBranch[]
-  sales                      Sale[]
-  saleReturns                SaleReturn[]
-  saleItems                  SaleItem[]
-  saleReturnItems            SaleReturnItem[]
-  salePayments               SalePayment[]
-  salePixIntents             SalePixIntent[]
-  receivablePixIntents       ReceivablePixIntent[]
-  screenParameters           ScreenParameter[]
-  superTefConfigurations     SuperTefConfiguration[]
-  superTefTerminals          SuperTefTerminal[]
-  superTefCheckouts          SuperTefCheckout[]
-  superTefCheckoutRoutes     SuperTefCheckoutRoute[]
-  superTefPayments           SuperTefPayment[]
-  superTefAuditEvents        SuperTefAuditEvent[]
-  s3Configurations          S3Configuration[]
-  s3AuditEvents             S3AuditEvent[]
+  id                              String                           @id @default(uuid())
+  sourceSystem                    String
+  sourceTenantId                  String
+  name                            String
+  document                        String?
+  status                          String                           @default("ACTIVE")
+  interestRate                    Float?
+  interestGracePeriod             Int?
+  penaltyRate                     Float?
+  penaltyValue                    Float?
+  penaltyGracePeriod              Int?
+  createdAt                       DateTime                         @default(now())
+  createdBy                       String?
+  updatedAt                       DateTime                         @updatedAt
+  updatedBy                       String?
+  canceledAt                      DateTime?
+  canceledBy                      String?
+  bankAccounts                    BankAccount[]
+  fiscalCertificates              FiscalCertificate[]
+  nfceProfiles                    NfceProfile[]
+  nfeProfiles                     NfeProfile[]
+  nfseProfiles                    NfseProfile[]
+  nfseServiceItems                NfseServiceItem[]
+  nfseServiceDescriptions         NfseServiceDescription[]
+  nfseDocuments                   NfseDocument[]
+  nfseDocumentAttempts            NfseDocumentAttempt[]
+  nfseDocumentEmails              NfseEmailDelivery[]
+  nfseMunicipalParameters         NfseMunicipalParameter[]
+  fiscalOperationNatures          FiscalOperationNature[]
+  fiscalTaxRules                  FiscalTaxRule[]
+  fiscalBenefitCodes              FiscalBenefitCode[]
+  fiscalDocuments                 FiscalDocument[]
+  fiscalDocumentAttempts          FiscalDocumentAttempt[]
+  fiscalDocumentItems             FiscalDocumentItem[]
+  fiscalDocumentInstallments      FiscalDocumentInstallment[]
+  fiscalDocumentEvents            FiscalDocumentEvent[]
+  fiscalDocumentEmails            FiscalDocumentEmailDelivery[]
+  fiscalNumberInutilizations      FiscalNumberInutilization[]
+  fiscalAuditEvents               FiscalAuditEvent[]
+  products                        Product[]
+  suppliers                       Supplier[]
+  parties                         Party[]
+  partyRoles                      PartyRole[]
+  partyExternalReferences         PartyExternalReference[]
+  partyAuditEvents                PartyAuditEvent[]
+  payableInvoiceImports           PayableInvoiceImport[]
+  payableTitles                   PayableTitle[]
+  payableInstallments             PayableInstallment[]
+  stockMovements                  StockMovement[]
+  productStockBalances            ProductStockBalance[]
+  receivableBatches               ReceivableBatch[]
+  receivableTitles                ReceivableTitle[]
+  receivableInstallments          ReceivableInstallment[]
+  bankReturnImports               BankReturnImport[]
+  bankReturnImportItems           BankReturnImportItem[]
+  bankStatementImports            BankStatementImport[]
+  bankStatementMovements          BankStatementMovement[]
+  bankDdaRecords                  BankDdaRecord[]
+  bankDdaAuditEvents              BankDdaAuditEvent[]
+  cashSessions                    CashSession[]
+  cashMovements                   CashMovement[]
+  settlements                     InstallmentSettlement[]
+  customerCredits                 CustomerCredit[]
+  customerCreditMovements         CustomerCreditMovement[]
+  branches                        CompanyBranch[]
+  sales                           Sale[]
+  saleReturns                     SaleReturn[]
+  saleItems                       SaleItem[]
+  saleReturnItems                 SaleReturnItem[]
+  salePayments                    SalePayment[]
+  salePixIntents                  SalePixIntent[]
+  receivablePixIntents            ReceivablePixIntent[]
+  screenParameters                ScreenParameter[]
+  printTemplates                  PrintTemplate[]
+  printTemplateVersions           PrintTemplateVersion[]
+  printTemplateBindings           PrintTemplateBinding[]
+  printerProfiles                 PrinterProfile[]
+  printJobs                       PrintJob[]
+  printAuditEvents                PrintAuditEvent[]
+  superTefConfigurations          SuperTefConfiguration[]
+  superTefTerminals               SuperTefTerminal[]
+  superTefCheckouts               SuperTefCheckout[]
+  superTefCheckoutRoutes          SuperTefCheckoutRoute[]
+  superTefPayments                SuperTefPayment[]
+  superTefAuditEvents             SuperTefAuditEvent[]
+  s3Configurations                S3Configuration[]
+  s3AuditEvents                   S3AuditEvent[]
   sourceIntegrationConfigurations SourceIntegrationConfiguration[]
-  sourceIntegrationAuditEvents SourceIntegrationAuditEvent[]
+  sourceIntegrationAuditEvents    SourceIntegrationAuditEvent[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
@@ -98,26 +104,26 @@ model Company {
 }
 
 model S3Configuration {
-  id                   String   @id @default(uuid())
-  companyId            String
-  branchCode           Int      @default(1)
-  status               String   @default("ACTIVE")
-  endpoint             String?
-  region               String   @default("us-east-1")
-  bucket               String
-  basePrefix           String
-  capacityGb           Float?
-  imagesFolder         String?
-  sourceScope          String?
-  accessKeyEncrypted   String
-  secretKeyEncrypted   String
-  forcePathStyle       Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  createdBy            String?
-  updatedAt            DateTime @updatedAt
-  updatedBy            String?
-  canceledAt           DateTime?
-  canceledBy           String?
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  status             String    @default("ACTIVE")
+  endpoint           String?
+  region             String    @default("us-east-1")
+  bucket             String
+  basePrefix         String
+  capacityGb         Float?
+  imagesFolder       String?
+  sourceScope        String?
+  accessKeyEncrypted String
+  secretKeyEncrypted String
+  forcePathStyle     Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+  updatedBy          String?
+  canceledAt         DateTime?
+  canceledBy         String?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
@@ -271,6 +277,189 @@ model ScreenParameter {
   @@unique([companyId, branchId, screenId])
   @@index([companyId, branchId, screenId, canceledAt])
   @@map("screen_parameters")
+}
+
+model PrintTemplate {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int       @default(1)
+  code           String
+  name           String
+  description    String?
+  documentType   String
+  mediaType      String
+  status         String    @default("DRAFT")
+  currentVersion Int       @default(0)
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  versions PrintTemplateVersion[]
+  bindings PrintTemplateBinding[]
+  jobs     PrintJob[]
+
+  @@unique([companyId, branchCode, code])
+  @@index([companyId, branchCode, documentType, status, canceledAt])
+  @@map("print_templates")
+}
+
+model PrintTemplateVersion {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int       @default(1)
+  templateId     String
+  version        Int
+  status         String    @default("DRAFT")
+  layoutJson     String
+  sampleDataJson String?
+  publishedAt    DateTime?
+  publishedBy    String?
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  template PrintTemplate          @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  bindings PrintTemplateBinding[]
+  jobs     PrintJob[]
+
+  @@unique([templateId, version])
+  @@index([companyId, branchCode, status, publishedAt])
+  @@map("print_template_versions")
+}
+
+model PrinterProfile {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int       @default(1)
+  name           String
+  printerName    String
+  printerType    String
+  connectionType String    @default("WINDOWS")
+  language       String    @default("WINDOWS_DRIVER")
+  paperWidthMm   Float     @default(80)
+  paperHeightMm  Float?
+  columns        Int       @default(40)
+  dpi            Int       @default(203)
+  copies         Int       @default(1)
+  cutterEnabled  Boolean   @default(false)
+  settingsJson   String?
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bindings PrintTemplateBinding[]
+  jobs     PrintJob[]
+
+  @@unique([companyId, branchCode, name])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("printer_profiles")
+}
+
+model PrintTemplateBinding {
+  id                String    @id @default(uuid())
+  companyId         String
+  branchCode        Int       @default(1)
+  sourceSystem      String
+  eventType         String
+  templateId        String
+  templateVersionId String?
+  printerProfileId  String?
+  autoPrint         Boolean   @default(false)
+  copies            Int       @default(1)
+  status            String    @default("ACTIVE")
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt
+  updatedBy         String?
+  canceledAt        DateTime?
+  canceledBy        String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  template        PrintTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion PrintTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  printerProfile  PrinterProfile?       @relation(fields: [printerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, sourceSystem, eventType])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("print_template_bindings")
+}
+
+model PrintJob {
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  sourceSystem       String
+  sourceTenantId     String
+  eventType          String
+  businessEntityType String
+  businessEntityId   String
+  idempotencyKey     String
+  templateId         String
+  templateVersionId  String
+  printerProfileId   String?
+  payloadJson        String
+  renderedFormat     String
+  renderedContent    String
+  contentHash        String
+  copies             Int       @default(1)
+  status             String    @default("PENDING")
+  requestedAt        DateTime  @default(now())
+  requestedBy        String?
+  dispatchedAt       DateTime?
+  completedAt        DateTime?
+  errorMessage       String?
+  localPrinterName   String?
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt
+  updatedBy          String?
+  canceledAt         DateTime?
+  canceledBy         String?
+
+  company         Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  template        PrintTemplate        @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion PrintTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  printerProfile  PrinterProfile?      @relation(fields: [printerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, idempotencyKey])
+  @@index([companyId, branchCode, eventType, status, requestedAt])
+  @@index([companyId, businessEntityType, businessEntityId])
+  @@map("print_jobs")
+}
+
+model PrintAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  entityType   String
+  entityId     String?
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now())
+  performedBy  String?
+  createdAt    DateTime @default(now())
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, entityType, entityId, occurredAt])
+  @@map("print_audit_events")
 }
 
 model SuperTefConfiguration {

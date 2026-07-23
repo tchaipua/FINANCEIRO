@@ -18,6 +18,7 @@
     "test:nfe": "npm run build && ts-node test/brazil-tax-id.test.ts && ts-node test/nfe-core.test.ts",
     "test:nfse": "npm run build && ts-node test/nfse-core.test.ts",
     "test:supertef": "npm run build && ts-node test/supertef-core.test.ts",
+    "test:printing": "npm run build && ts-node test/printing-core.test.ts",
     "test:nfce:homologation": "ts-node scripts/nfce-homologation-smoke.ts",
     "sefaz:cadastro": "ts-node scripts/sefaz-cadastro-query.ts"
   },

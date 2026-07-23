@@ -499,3 +499,54 @@ Motivo:
 
 - impedir duplicidade e divergência cadastral entre sistemas;
 - manter uma única autoridade para empresa e filial sem retirar do Financeiro as parametrizações operacionais necessárias.
+
+## D031 - Herança bidirecional da preferência visual
+
+Decisão:
+
+- o sistema hospedeiro é a fonte oficial da cor quando o Financeiro estiver embutido;
+- o contexto visual aceita `colorTheme` e `colorIntensity` como parâmetros opcionais;
+- a comunicação em tempo real usa `MSINFOR_COLOR_THEME_REQUEST` e `MSINFOR_COLOR_THEME_CHANGED` por `postMessage`;
+- o Financeiro mantém a preferência local isolada por `sourceSystem`, `sourceTenantId` e usuário;
+- uma alteração originada no Financeiro deve ser devolvida ao hospedeiro para refletir no projeto atualmente acoplado;
+- prévias canceladas devem ser revertidas simultaneamente no hospedeiro e no Financeiro.
+
+Motivo:
+
+- manter identidade visual contínua entre sistemas integrados;
+- impedir que a preferência de uma empresa, origem ou usuário seja aplicada em outro contexto.
+
+## D032 - Modelos centralizados e agente local de impressão
+
+Decisão:
+
+- manter modelos, versões, vínculos, trabalhos e auditoria no módulo Financeiro;
+- isolar toda configuração por empresa, filial e sistema de origem;
+- renderizar recibos e etiquetas no backend a partir de dados oficiais, preservando snapshot e hash;
+- usar o agente Windows já existente para acessar somente as impressoras e imagens locais;
+- permitir impressão por driver Windows e ESC/POS, incluindo impressoras térmicas e de etiqueta como Argox;
+- autorizar impressão no loopback por sessão curta e lista explícita de origens;
+- preservar integralmente o endpoint de imagens usado pela Venda 2.
+
+Motivo:
+
+- oferecer uma única configuração reutilizável por todos os sistemas integrados;
+- evitar que o navegador acesse hardware ou arquivos diretamente;
+- garantir versionamento, idempotência, rastreabilidade e reimpressão auditada.
+
+## D033 - Pacote portátil de relatório preparado no Codex
+
+Decisão:
+
+- a interpretação visual e o refinamento da imagem acontecem no Codex, sem IA embarcada no sistema e sem chave de API distribuída aos clientes;
+- o resultado é transportado em `.msreport.json`, com schema versionado, layout, variáveis, dados de exemplo anônimos, compatibilidade e hash SHA-256;
+- o pacote nunca contém empresa, tenant, filial, credenciais ou IDs internos do banco;
+- a importação resolve o escopo atual no backend, exige `ADMIN`, valida a renderização e cria sempre uma nova versão;
+- publicar é uma ação explícita; a versão publicada anterior é arquivada e permanece no histórico;
+- a imagem de referência pode ser colada na tela apenas para comparação local e não é enviada nem persistida.
+
+Motivo:
+
+- permitir um modelo separado por cliente sem custo de IA em tempo de execução;
+- evitar vazamento cross-tenant e impedir que um arquivo substitua histórico silenciosamente;
+- manter o mesmo motor de recibos, etiquetas, impressoras e auditoria já centralizado no Financeiro.
