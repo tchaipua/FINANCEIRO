@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { BadRequestException } from "@nestjs/common";
 
+const SECRET_ENVELOPE_PREFIX = "v1:";
+
 function getSecretKey() {
   const rawSecret =
     process.env.FINANCEIRO_CERTIFICATE_SECRET ||
@@ -27,11 +29,15 @@ export function encryptSecret(value: string) {
   ]);
   const tag = cipher.getAuthTag();
 
-  return Buffer.concat([iv, tag, encrypted]).toString("base64");
+  return `${SECRET_ENVELOPE_PREFIX}${Buffer.concat([iv, tag, encrypted]).toString("base64")}`;
 }
 
 export function decryptSecret(value: string) {
-  const payload = Buffer.from(String(value || ""), "base64");
+  const normalizedValue = String(value || "");
+  const encodedPayload = normalizedValue.startsWith(SECRET_ENVELOPE_PREFIX)
+    ? normalizedValue.slice(SECRET_ENVELOPE_PREFIX.length)
+    : normalizedValue;
+  const payload = Buffer.from(encodedPayload, "base64");
   if (payload.length < 29) {
     throw new BadRequestException("Segredo criptografado inválido.");
   }
@@ -46,4 +52,19 @@ export function decryptSecret(value: string) {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString(
     "utf8",
   );
+}
+
+export function isVersionedEncryptedSecret(value: unknown) {
+  return String(value || "").startsWith(SECRET_ENVELOPE_PREFIX);
+}
+
+export function decryptStoredBankSecret(value: string | null | undefined) {
+  const normalizedValue = String(value || "");
+  if (!normalizedValue) {
+    return "";
+  }
+
+  return isVersionedEncryptedSecret(normalizedValue)
+    ? decryptSecret(normalizedValue)
+    : normalizedValue;
 }

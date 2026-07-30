@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -14,6 +16,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
@@ -1460,16 +1463,13 @@ export default function FinanceiroEmpresasPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: embeddedParentCompanyScreenId,
         originText: EMPRESAS_ORIGIN_TEXT,
         auditText: empresasAuditContext.auditText,
         sqlText: empresasAuditContext.sqlText,
-      },
-      '*',
-    );
+      });
   }, [
     embeddedParentCompanyScreenId,
     empresasAuditContext.auditText,
@@ -1482,7 +1482,7 @@ export default function FinanceiroEmpresasPage() {
       window.history.back();
       return;
     }
-    window.location.href = '/';
+    window.location.href = withFinanceBasePath('/');
   }
 
   const embeddedSuccessPopup =
@@ -1553,7 +1553,7 @@ export default function FinanceiroEmpresasPage() {
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = '/';
+                  window.location.href = withFinanceBasePath('/');
                 }}
                 className="inline-flex items-center self-start rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
               >

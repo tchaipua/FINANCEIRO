@@ -1,10 +1,12 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { API_BASE_URL, getJson } from '@/app/lib/api';
+import { financeApiFetch, getJson } from '@/app/lib/api';
 import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildDefaultExportColumns,
@@ -13,6 +15,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
@@ -628,7 +631,7 @@ export default function FinanceiroCashPage() {
         runtimeContext.cashierDisplayName &&
         !currentCashierHasOpenSession
       ) {
-        const response = await fetch(`${API_BASE_URL}/cash-sessions/open`, {
+        const response = await financeApiFetch('/cash-sessions/open', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -672,13 +675,10 @@ export default function FinanceiroCashPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
@@ -863,9 +863,11 @@ export default function FinanceiroCashPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            window.location.href = buildCloseCashSessionDetailHref(
-                              item.id,
-                              preservedQueryString,
+                            window.location.href = withFinanceBasePath(
+                              buildCloseCashSessionDetailHref(
+                                item.id,
+                                preservedQueryString,
+                              ),
                             );
                           }}
                           className="rounded-xl bg-emerald-600 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-emerald-700"

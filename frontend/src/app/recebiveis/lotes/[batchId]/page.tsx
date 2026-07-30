@@ -1,11 +1,13 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { API_BASE_URL, getJson } from '@/app/lib/api';
+import { financeApiFetch, getJson } from '@/app/lib/api';
 import {
   formatCurrency,
   formatDateLabel,
@@ -410,10 +412,7 @@ export default function FinanceiroReceivableBatchDetailPage() {
   useEffect(() => {
     if (!isEmbedded) return;
 
-    window.parent.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: EMBEDDED_SCREEN_ID },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: EMBEDDED_SCREEN_ID });
   }, [isEmbedded]);
 
   useEffect(
@@ -662,8 +661,8 @@ export default function FinanceiroReceivableBatchDetailPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/receivables/batches/${batch.id}/assign-bank`,
+      const response = await financeApiFetch(
+        `/receivables/batches/${batch.id}/assign-bank`,
         {
           method: 'POST',
           headers: {
@@ -723,8 +722,8 @@ export default function FinanceiroReceivableBatchDetailPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/receivables/batches/${batch.id}/reverse-bank-preparation`,
+      const response = await financeApiFetch(
+        `/receivables/batches/${batch.id}/reverse-bank-preparation`,
         {
           method: 'POST',
           headers: {
@@ -778,8 +777,8 @@ export default function FinanceiroReceivableBatchDetailPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/receivables/batches/${batch.id}/exclude-installments`,
+      const response = await financeApiFetch(
+        `/receivables/batches/${batch.id}/exclude-installments`,
         {
           method: 'POST',
           headers: {
@@ -841,8 +840,8 @@ export default function FinanceiroReceivableBatchDetailPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/receivables/batches/${batch.id}/issue-bank-slips`,
+      const response = await financeApiFetch(
+        `/receivables/batches/${batch.id}/issue-bank-slips`,
         {
           method: 'POST',
           headers: {

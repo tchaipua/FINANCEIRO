@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -7,6 +9,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CONTAS_A_RECEBER';
 const STANDALONE_SCREEN_ID = 'FINANCEIRO_CONTAS_A_RECEBER_CENTRAL';
@@ -88,15 +91,12 @@ export default function FinanceiroContasAReceberPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
         originText: ORIGIN_TEXT,
         auditText: AUDIT_TEXT,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   return (
@@ -113,7 +113,7 @@ export default function FinanceiroContasAReceberPage() {
               >
                 <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
                   <img
-                    src={item.image}
+                    src={withFinanceBasePath(item.image)}
                     alt={item.label}
                     className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
                   />

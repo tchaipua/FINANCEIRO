@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -8,6 +10,7 @@ import {
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import { FISCAL_PARAMETER_CATALOG } from './fiscal-parameter-catalog';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const FINANCE_SCREEN_ID = 'FINANCEIRO_MSINFOR_PARAMETROS_FISCAIS';
@@ -27,13 +30,10 @@ export default function FiscalParametersPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   if (!isMounted) {
@@ -93,7 +93,7 @@ Regras:
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white shadow-lg">
                 <img
-                  src="/logo-msinfor.jpg"
+                  src={withFinanceBasePath('/logo-msinfor.jpg')}
                   alt="Logo MSINFOR"
                   className="h-full w-full object-cover"
                 />
@@ -126,7 +126,7 @@ Regras:
               >
                 <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
                   <img
-                    src={item.icon}
+                    src={withFinanceBasePath(item.icon)}
                     alt={item.title}
                     className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
                   />

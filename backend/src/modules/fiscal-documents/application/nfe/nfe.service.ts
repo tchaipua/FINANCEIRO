@@ -20,6 +20,8 @@ import {
   normalizeTaxId,
 } from "../../../../common/brazil-tax-id.utils";
 import { decryptSecret } from "../../../../common/secret-crypto.utils";
+import { hasAuthenticatedFinanceScope } from "../../../../common/finance-context";
+import { getFiscalArtifactStorageConfig } from "../../../../common/security-config";
 import {
   CancelNfeDto,
   CorrectNfeDto,
@@ -120,17 +122,12 @@ export class NfeService {
     return Math.max(1, normalizeBranchCode(value, fallback));
   }
 
-  private assertOperator(context: NfeContextDto) {
-    const permissions = String(context.permissions || "")
-      .split(",")
-      .map((item) => normalizeText(item))
-      .filter(Boolean);
+  private assertOperator(_context: NfeContextDto) {
     if (
-      normalizeText(context.userRole) !== "ADMIN" &&
-      !permissions.includes("MANAGE_FINANCIAL")
+      !hasAuthenticatedFinanceScope("FINANCE_ADMIN", "MANAGE_FINANCIAL")
     ) {
       throw new ForbiddenException(
-        "A EMISSÃO DA NF-E EXIGE PERFIL ADMIN OU PERMISSÃO MANAGE_FINANCIAL.",
+        "A EMISSÃO DA NF-E EXIGE ESCOPO FINANCE_ADMIN OU MANAGE_FINANCIAL.",
       );
     }
   }
@@ -1103,24 +1100,36 @@ export class NfeService {
     });
     const fileName = `DANFE-NFE-${updated.accessKey}.pdf`;
     const issueDate = updated.issuedAt as Date;
-    const artifactDirectory = path.resolve(
-      process.cwd(),
-      "storage",
-      "nfe",
-      sale.companyId,
-      String(sale.branchCode),
-      String(issueDate.getFullYear()),
-      String(issueDate.getMonth() + 1).padStart(2, "0"),
-    );
-    await fs.mkdir(artifactDirectory, { recursive: true });
-    await Promise.all([
-      fs.writeFile(path.join(artifactDirectory, fileName), danfe),
-      fs.writeFile(
-        path.join(artifactDirectory, `NFE-${updated.accessKey}.xml`),
-        updated.processedXml,
-        "utf8",
-      ),
-    ]);
+    const artifactStorage = getFiscalArtifactStorageConfig();
+    if (artifactStorage.persistToFilesystem) {
+      const artifactRoot = path.resolve(
+        process.cwd(),
+        artifactStorage.directory,
+      );
+      const artifactDirectory = path.resolve(
+        artifactRoot,
+        "nfe",
+        sale.companyId,
+        String(sale.branchCode),
+        String(issueDate.getFullYear()),
+        String(issueDate.getMonth() + 1).padStart(2, "0"),
+      );
+      if (
+        artifactDirectory !== artifactRoot &&
+        !artifactDirectory.startsWith(`${artifactRoot}${path.sep}`)
+      ) {
+        throw new Error("O diretório fiscal calculado escapou da raiz segura.");
+      }
+      await fs.mkdir(artifactDirectory, { recursive: true });
+      await Promise.all([
+        fs.writeFile(path.join(artifactDirectory, fileName), danfe),
+        fs.writeFile(
+          path.join(artifactDirectory, `NFE-${updated.accessKey}.xml`),
+          updated.processedXml,
+          "utf8",
+        ),
+      ]);
+    }
     return this.prisma.$transaction(async (tx: any) => {
       const saved = await tx.fiscalDocument.update({
         where: { id: updated.id },

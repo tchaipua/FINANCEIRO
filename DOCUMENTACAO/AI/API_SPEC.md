@@ -217,6 +217,7 @@ Regras:
 - estoque negativo so e permitido quando a regra efetiva da filial/produto permitir
 - filial com `allowSaleUnitPriceEdit = false` rejeita preco unitario diferente do produto, exceto produto generico
 - filial com `allowSaleItemDiscount = false` rejeita desconto por item
+- filial com `allowProductImageEdit = true` permite que a Venda 2 grave a imagem no agente local e sincronize o mesmo arquivo na pasta de imagens do S3
 - no fluxo `VP`, a confirmação envia explicitamente o cliente selecionado e uma cobrança `TERM` de uma parcela; após sucesso, a tela limpa carrinho, pesquisas, pagamento e cliente
 - venda, recebível, baixa de estoque e histórico com `previousStock` e `resultingStock` são persistidos na mesma transação; qualquer falha mantém a tela preenchida e deve ser exibida ao operador
 - venda confirmada nao apaga historico; cancelamento futuro deve gerar estorno operacional
@@ -1116,6 +1117,8 @@ perfil substitui o e-mail real do cadastro.
 
 - `GET /s3-control/configuration`: consulta a configuração da empresa e filial sem expor credenciais;
 - `PUT /s3-control/configuration`: cria ou atualiza as credenciais criptografadas; exige `ADMIN`;
+- `GET /s3-control/product-image-readiness`: valida a permissão da Venda 2 e a pasta de imagens S3 sem expor credenciais;
+- `POST /s3-control/product-image`: recebe a imagem já gravada localmente, valida empresa, filial, produto e parâmetro da Venda 2, envia ao S3 e audita o resultado;
 - `GET /s3-control/objects`: lista somente arquivos e pastas abaixo de `basePrefix`; exige `ADMIN`;
 - `DELETE /s3-control/object`: remove um arquivo S3 e grava os eventos append-only da solicitação e resultado; exige `ADMIN`.
 

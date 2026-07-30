@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import {
   ChangeEvent,
@@ -1543,13 +1545,10 @@ export default function FinanceiroImportacaoNotasPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   const recentImportStatusOptions = useMemo(() => {

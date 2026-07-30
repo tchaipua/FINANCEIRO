@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import {
   type ChangeEvent,
   type ClipboardEvent,
@@ -12,6 +14,7 @@ import {
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { requestJson } from '@/app/lib/api';
 import { printingScope } from '@/app/lib/local-print-agent';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import { useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 
 type PrintTemplate = {
@@ -121,10 +124,7 @@ export default function ReceiptByImagePage() {
 
   useEffect(() => {
     if (!runtime.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtime.embedded]);
 
   useEffect(
@@ -299,7 +299,7 @@ export default function ReceiptByImagePage() {
         <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-5 py-5 text-white">
           <div className="flex items-center gap-4">
             <img
-              src="/logo-msinfor.jpg"
+              src={withFinanceBasePath('/logo-msinfor.jpg')}
               alt="Logo MSINFOR"
               className="h-14 w-14 rounded-2xl border border-white/20 bg-white object-contain shadow-lg"
             />

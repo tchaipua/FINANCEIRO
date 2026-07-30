@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import RootShell from "@/app/components/root-shell";
 import GlobalProcessingOverlay from "@/app/components/global-processing-overlay";
 import SystemMessageProvider from "@/app/components/system-message-provider";
+import PerformanceMeasureGuard from "@/app/components/performance-measure-guard";
 
 export const metadata: Metadata = {
   title: "Financeiro Core",
@@ -18,27 +18,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <Script id="performance-measure-guard" strategy="beforeInteractive">
-          {`
-            (function () {
-              if (typeof performance === 'undefined' || !performance.measure || performance.__msinforMeasureGuard) return;
-              var originalMeasure = performance.measure.bind(performance);
-              performance.measure = function () {
-                try {
-                  return originalMeasure.apply(performance, arguments);
-                } catch (error) {
-                  var message = String(error && error.message || '');
-                  var measureName = String(arguments && arguments[0] || '');
-                  if (message.indexOf('negative time stamp') >= 0 && measureName.indexOf('Page') >= 0) {
-                    return undefined;
-                  }
-                  throw error;
-                }
-              };
-              performance.__msinforMeasureGuard = true;
-            })();
-          `}
-        </Script>
+        <PerformanceMeasureGuard />
         <SystemMessageProvider><GlobalProcessingOverlay /><RootShell>{children}</RootShell></SystemMessageProvider>
       </body>
     </html>

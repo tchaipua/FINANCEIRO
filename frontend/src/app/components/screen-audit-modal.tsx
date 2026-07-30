@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { copyTextToClipboard } from '@/app/lib/clipboard';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type ScreenAuditModalProps = {
   screenId: string;
@@ -139,7 +140,7 @@ export default function ScreenAuditModal({
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-gradient-to-r from-slate-950 via-slate-800 to-blue-900 px-6 py-4 text-white">
           <div className="flex min-w-0 flex-1 items-center gap-4">
             <img
-              src="/logo-msinfor.jpg"
+              src={withFinanceBasePath('/logo-msinfor.jpg')}
               alt="MSINFOR Sistemas"
               className="h-14 w-14 flex-none rounded-full border-2 border-white bg-white object-contain shadow-lg shadow-slate-950/20"
             />
@@ -177,14 +178,15 @@ export default function ScreenAuditModal({
               </button>
             </div>
           </div>
-          <div className="flex w-32 flex-none flex-col gap-2">
+          <div className="flex w-32 flex-none flex-col items-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="h-9 w-full rounded-xl border border-white/20 bg-white/10 text-[11px] font-black uppercase tracking-[0.14em] text-white transition hover:bg-white/20"
+              className="h-9 w-9 rounded-full border border-red-300/60 bg-red-600 text-xl font-black leading-none text-white shadow-lg shadow-red-950/30 transition hover:bg-red-700"
               aria-label="Fechar auditoria SQL"
+              title="Fechar"
             >
-              Fechar
+              ×
             </button>
             {activeTab === 'sql' ? (
               <button

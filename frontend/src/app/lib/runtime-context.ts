@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { financeApiFetch } from '@/app/lib/api';
 import {
   isFinanceColorThemeId,
   normalizeFinanceColorIntensity,
@@ -49,7 +50,7 @@ export function normalizeFinanceDisplayText(value: string | null | undefined) {
   }
 }
 
-function normalizeQueryValue(value: string | null, uppercase = true) {
+function normalizeTextValue(value: unknown, uppercase = true) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return null;
 
@@ -79,53 +80,31 @@ const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
   colorIntensity: 3,
 };
 
-function normalizePermissions(value: string | null) {
-  return String(value || '')
-    .split(',')
-    .map((permission) => normalizeQueryValue(permission))
+function normalizePermissions(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((permission) => normalizeTextValue(permission))
     .filter((permission): permission is string => Boolean(permission));
 }
 
-function normalizeBranchCode(value: string | null) {
+function normalizeBranchCode(value: unknown) {
   const normalized = Number.parseInt(String(value || '').trim(), 10);
-  return Number.isInteger(normalized) && normalized >= 0 ? normalized : 1;
+  return Number.isInteger(normalized) && normalized >= 1 ? normalized : 1;
 }
 
-function normalizeStockParameterMode(value: string | null): BranchStockParameterMode {
-  const normalized = normalizeQueryValue(value);
+function normalizeStockParameterMode(value: unknown): BranchStockParameterMode {
+  const normalized = normalizeTextValue(value);
   return normalized === 'NO' || normalized === 'YES' || normalized === 'BY_PRODUCT'
     ? normalized
     : 'BY_PRODUCT';
 }
 
-function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
+function readPresentationContextFromSearch(search: string) {
   const searchParams = new URLSearchParams(search);
 
   return {
     embedded: searchParams.get('embedded') === '1',
-    sourceSystem: normalizeQueryValue(searchParams.get('sourceSystem')),
-    sourceTenantId: normalizeQueryValue(searchParams.get('sourceTenantId')),
-    sourceBranchCode: normalizeBranchCode(searchParams.get('sourceBranchCode')),
-    stockControlMode: normalizeStockParameterMode(searchParams.get('stockControlMode')),
-    stockIntegerQuantityMode: normalizeStockParameterMode(
-      searchParams.get('stockIntegerQuantityMode'),
-    ),
-    stockLotControlMode: normalizeStockParameterMode(searchParams.get('stockLotControlMode')),
-    stockExpirationControlMode: normalizeStockParameterMode(
-      searchParams.get('stockExpirationControlMode'),
-    ),
-    stockGridControlMode: normalizeStockParameterMode(searchParams.get('stockGridControlMode')),
-    stockNegativeControlMode: normalizeStockParameterMode(
-      searchParams.get('stockNegativeControlMode'),
-    ),
-    companyName: normalizeQueryValue(searchParams.get('companyName')),
-    logoUrl: normalizeQueryValue(searchParams.get('logoUrl'), false),
-    cashierUserId: normalizeQueryValue(searchParams.get('cashierUserId')),
-    cashierDisplayName: normalizeQueryValue(
-      searchParams.get('cashierDisplayName'),
-    ),
-    userRole: normalizeQueryValue(searchParams.get('userRole')),
-    permissions: normalizePermissions(searchParams.get('permissions')),
     colorTheme: isFinanceColorThemeId(searchParams.get('colorTheme'))
       ? searchParams.get('colorTheme') as FinanceColorThemeId
       : null,
@@ -133,12 +112,62 @@ function readRuntimeContextFromSearch(search: string): FinanceRuntimeContext {
   };
 }
 
-function readCurrentRuntimeContext(): FinanceRuntimeContext {
+function normalizeServerRuntimeContext(value: unknown): FinanceRuntimeContext {
+  const payload =
+    value && typeof value === 'object'
+      ? value as Record<string, unknown>
+      : {};
+  const normalizedSourceSystem = normalizeTextValue(payload.sourceSystem);
+  const sourceSystem =
+    normalizedSourceSystem === 'ESCOLA' ||
+    normalizedSourceSystem === 'PROJETO_INICIAL'
+      ? normalizedSourceSystem
+      : null;
+  const presentation =
+    typeof window === 'undefined'
+      ? {
+          embedded: false,
+          colorTheme: null,
+          colorIntensity: 3 as FinanceColorIntensity,
+        }
+      : readPresentationContextFromSearch(window.location.search);
+
+  return {
+    ...EMPTY_RUNTIME_CONTEXT,
+    ...presentation,
+    sourceSystem,
+    sourceTenantId: normalizeTextValue(payload.sourceTenantId),
+    sourceBranchCode: normalizeBranchCode(payload.sourceBranchCode),
+    stockControlMode: normalizeStockParameterMode(payload.stockControlMode),
+    stockIntegerQuantityMode: normalizeStockParameterMode(
+      payload.stockIntegerQuantityMode,
+    ),
+    stockLotControlMode: normalizeStockParameterMode(payload.stockLotControlMode),
+    stockExpirationControlMode: normalizeStockParameterMode(
+      payload.stockExpirationControlMode,
+    ),
+    stockGridControlMode: normalizeStockParameterMode(payload.stockGridControlMode),
+    stockNegativeControlMode: normalizeStockParameterMode(
+      payload.stockNegativeControlMode,
+    ),
+    companyName: normalizeTextValue(payload.companyName, false),
+    logoUrl: normalizeTextValue(payload.logoUrl, false),
+    cashierUserId: normalizeTextValue(payload.cashierUserId, false),
+    cashierDisplayName: normalizeTextValue(payload.cashierDisplayName, false),
+    userRole: normalizeTextValue(payload.userRole),
+    permissions: normalizePermissions(payload.permissions),
+  };
+}
+
+function readPresentationOnlyRuntimeContext(): FinanceRuntimeContext {
   if (typeof window === 'undefined') {
     return EMPTY_RUNTIME_CONTEXT;
   }
 
-  return readRuntimeContextFromSearch(window.location.search);
+  return {
+    ...EMPTY_RUNTIME_CONTEXT,
+    ...readPresentationContextFromSearch(window.location.search),
+  };
 }
 
 export function useFinanceRuntimeContext(): FinanceRuntimeContext {
@@ -147,21 +176,34 @@ export function useFinanceRuntimeContext(): FinanceRuntimeContext {
     useState<FinanceRuntimeContext>(EMPTY_RUNTIME_CONTEXT);
 
   useEffect(() => {
-    setRuntimeContext(readCurrentRuntimeContext());
+    const abortController = new AbortController();
+    setRuntimeContext(readPresentationOnlyRuntimeContext());
+
+    void financeApiFetch('/context', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: abortController.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Contexto financeiro não autenticado.');
+        }
+        return response.json();
+      })
+      .then((payload) => {
+        if (!abortController.signal.aborted) {
+          setRuntimeContext(normalizeServerRuntimeContext(payload));
+        }
+      })
+      .catch(() => {
+        if (!abortController.signal.aborted) {
+          // Falha fechada: sem contexto do BFF, nenhuma empresa ou permissão é assumida.
+          setRuntimeContext(readPresentationOnlyRuntimeContext());
+        }
+      });
+
+    return () => abortController.abort();
   }, [pathname]);
-
-  useEffect(() => {
-    const syncRuntimeContext = () =>
-      setRuntimeContext(readCurrentRuntimeContext());
-
-    window.addEventListener('popstate', syncRuntimeContext);
-    window.addEventListener('hashchange', syncRuntimeContext);
-
-    return () => {
-      window.removeEventListener('popstate', syncRuntimeContext);
-      window.removeEventListener('hashchange', syncRuntimeContext);
-    };
-  }, []);
 
   return runtimeContext;
 }
@@ -175,49 +217,6 @@ export function buildFinanceNavigationQueryString(
     params.set('embedded', '1');
   }
 
-  if (runtimeContext.sourceSystem) {
-    params.set('sourceSystem', runtimeContext.sourceSystem);
-  }
-
-  if (runtimeContext.sourceTenantId) {
-    params.set('sourceTenantId', runtimeContext.sourceTenantId);
-  }
-
-  if (Number.isInteger(runtimeContext.sourceBranchCode) && runtimeContext.sourceBranchCode >= 0) {
-    params.set('sourceBranchCode', String(runtimeContext.sourceBranchCode));
-  }
-
-  params.set('stockControlMode', runtimeContext.stockControlMode);
-  params.set('stockIntegerQuantityMode', runtimeContext.stockIntegerQuantityMode);
-  params.set('stockLotControlMode', runtimeContext.stockLotControlMode);
-  params.set('stockExpirationControlMode', runtimeContext.stockExpirationControlMode);
-  params.set('stockGridControlMode', runtimeContext.stockGridControlMode);
-  params.set('stockNegativeControlMode', runtimeContext.stockNegativeControlMode);
-
-  if (runtimeContext.companyName) {
-    params.set('companyName', runtimeContext.companyName);
-  }
-
-  if (runtimeContext.logoUrl) {
-    params.set('logoUrl', runtimeContext.logoUrl);
-  }
-
-  if (runtimeContext.cashierUserId) {
-    params.set('cashierUserId', runtimeContext.cashierUserId);
-  }
-
-  if (runtimeContext.cashierDisplayName) {
-    params.set('cashierDisplayName', runtimeContext.cashierDisplayName);
-  }
-
-  if (runtimeContext.userRole) {
-    params.set('userRole', runtimeContext.userRole);
-  }
-
-  if (runtimeContext.permissions.length) {
-    params.set('permissions', runtimeContext.permissions.join(','));
-  }
-
   if (runtimeContext.colorTheme) {
     params.set('colorTheme', runtimeContext.colorTheme);
     params.set('colorIntensity', String(runtimeContext.colorIntensity));
@@ -228,20 +227,26 @@ export function buildFinanceNavigationQueryString(
 }
 
 export function buildFinanceApiQueryString(
-  runtimeContext: FinanceRuntimeContext,
+  _runtimeContext: FinanceRuntimeContext,
   extraParams?: Record<string, string | number | null | undefined>,
 ) {
   const params = new URLSearchParams();
-
-  if (runtimeContext.sourceSystem) {
-    params.set('sourceSystem', runtimeContext.sourceSystem);
-  }
-
-  if (runtimeContext.sourceTenantId) {
-    params.set('sourceTenantId', runtimeContext.sourceTenantId);
-  }
+  const protectedContextKeys = new Set([
+    'sourceSystem',
+    'sourceTenantId',
+    'sourceBranchCode',
+    'branchCode',
+    'sourceUserId',
+    'requestedBy',
+    'cashierUserId',
+    'companyId',
+    'branchId',
+    'userRole',
+    'permissions',
+  ]);
 
   Object.entries(extraParams || {}).forEach(([key, value]) => {
+    if (protectedContextKeys.has(key)) return;
     if (value === undefined || value === null) return;
     const normalizedValue = String(value).trim();
     if (!normalizedValue) return;

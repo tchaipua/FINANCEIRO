@@ -37,6 +37,10 @@ export class ListS3ObjectsDto extends S3ControlContextDto {
   @IsOptional() @IsString() @MaxLength(3000) continuationToken?: string;
 }
 
+export class ListS3ObjectNamesDto extends S3ControlContextDto {
+  @IsOptional() @IsString() @MaxLength(600) prefix?: string;
+}
+
 export class S3UsageDto extends S3ControlContextDto {
   @IsOptional() @IsString() @MaxLength(600) prefix?: string;
   @Transform(({ value }) => booleanInput(value)) @IsOptional() @IsBoolean() all?: boolean;
@@ -57,8 +61,21 @@ export class CreateS3FolderDto extends S3ControlMutationContextDto {
   @IsString() @MaxLength(255) name!: string;
 }
 
-export class UploadS3ObjectDto extends S3ControlMutationContextDto {
+export class UploadS3ObjectDto {
   @IsOptional() @IsString() @MaxLength(600) prefix?: string;
+}
+
+export class SyncProductImageDto {
+  @IsString() @MaxLength(120) productId!: string;
+  @IsOptional() @IsString() @MaxLength(120) originScreenId?: string;
+}
+
+export class ProductImageReadinessDto {
+  @IsOptional() @IsString() @MaxLength(120) originScreenId?: string;
+}
+
+export class DownloadProductImageDto {
+  @IsString() @MaxLength(1000) key!: string;
 }
 
 export class DeleteS3FolderDto extends S3ControlMutationContextDto {

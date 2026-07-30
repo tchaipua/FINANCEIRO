@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -7,6 +8,7 @@ import { PrismaService } from "../../../prisma/prisma.service";
 import { decryptSecret, encryptSecret } from "../../../common/secret-crypto.utils";
 import { normalizeDigits, normalizeText } from "../../../common/finance-core.utils";
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
+import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 import {
   ChangeFiscalCertificateStatusDto,
   GetFiscalCertificateDto,
@@ -28,6 +30,14 @@ export class FiscalCertificatesService {
     private readonly prisma: PrismaService,
     private readonly payablesService: PayablesService,
   ) {}
+
+  private assertFinanceAdmin() {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      throw new ForbiddenException(
+        "A CONFIGURAÇÃO DE CERTIFICADOS EXIGE O ESCOPO FINANCE_ADMIN.",
+      );
+    }
+  }
 
   private normalizeEnvironment(value?: string | null) {
     return normalizeText(value) === "HOMOLOGATION" ? "HOMOLOGATION" : "PRODUCTION";
@@ -71,34 +81,12 @@ export class FiscalCertificatesService {
       },
     });
 
-    const normalizedCompanyName = normalizeText(filters.companyName);
-    const normalizedCompanyDocument = normalizeTaxId(filters.companyDocument);
-
-    if (existing) {
-      return this.prisma.company.update({
-        where: { id: existing.id },
-        data: {
-          ...(normalizedCompanyName ? { name: normalizedCompanyName } : {}),
-          ...(normalizedCompanyDocument
-            ? { document: normalizedCompanyDocument }
-            : {}),
-          updatedBy: filters.requestedBy || null,
-        },
-      });
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar certificados.",
+      );
     }
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem: normalizedSourceSystem,
-        sourceTenantId: normalizedSourceTenantId,
-        name:
-          normalizedCompanyName ||
-          `${normalizedSourceSystem} ${normalizedSourceTenantId}`,
-        document: normalizedCompanyDocument,
-        createdBy: filters.requestedBy || null,
-        updatedBy: filters.requestedBy || null,
-      },
-    });
+    return existing;
   }
 
   private async findCompany(
@@ -122,7 +110,7 @@ export class FiscalCertificatesService {
     });
   }
 
-  private mapCertificate(certificate: any, includeSecrets = false) {
+  private mapCertificate(certificate: any) {
     const validTo = certificate.validTo ? new Date(certificate.validTo) : null;
     const now = new Date();
 
@@ -161,12 +149,6 @@ export class FiscalCertificatesService {
       updatedBy: certificate.updatedBy || null,
       canceledAt: certificate.canceledAt ? certificate.canceledAt.toISOString() : null,
       canceledBy: certificate.canceledBy || null,
-      ...(includeSecrets
-        ? {
-            pfxEncryptedBase64: certificate.pfxEncryptedBase64,
-            passwordEncrypted: certificate.passwordEncrypted,
-          }
-        : {}),
     };
   }
 
@@ -271,15 +253,11 @@ export class FiscalCertificatesService {
       query.sourceTenantId,
     );
 
-    return {
-      ...this.mapCertificate(certificate),
-      certificatePassword: certificate.passwordEncrypted
-        ? decryptSecret(certificate.passwordEncrypted)
-        : "",
-    };
+    return this.mapCertificate(certificate);
   }
 
   async create(payload: SaveFiscalCertificateDto) {
+    this.assertFinanceAdmin();
     const company = await this.resolveCompany({
       sourceSystem: payload.sourceSystem,
       sourceTenantId: payload.sourceTenantId,
@@ -355,6 +333,7 @@ export class FiscalCertificatesService {
   }
 
   async update(certificateId: string, payload: SaveFiscalCertificateDto) {
+    this.assertFinanceAdmin();
     const { certificate } = await this.loadScopedCertificate(
       certificateId,
       payload.sourceSystem,
@@ -435,6 +414,7 @@ export class FiscalCertificatesService {
   }
 
   async activate(certificateId: string, payload: ChangeFiscalCertificateStatusDto) {
+    this.assertFinanceAdmin();
     const { certificate } = await this.loadScopedCertificate(
       certificateId,
       payload.sourceSystem,
@@ -458,6 +438,7 @@ export class FiscalCertificatesService {
   }
 
   async inactivate(certificateId: string, payload: ChangeFiscalCertificateStatusDto) {
+    this.assertFinanceAdmin();
     const { certificate } = await this.loadScopedCertificate(
       certificateId,
       payload.sourceSystem,
@@ -482,6 +463,7 @@ export class FiscalCertificatesService {
   }
 
   async setDefault(certificateId: string, payload: ChangeFiscalCertificateStatusDto) {
+    this.assertFinanceAdmin();
     const { certificate } = await this.loadScopedCertificate(
       certificateId,
       payload.sourceSystem,

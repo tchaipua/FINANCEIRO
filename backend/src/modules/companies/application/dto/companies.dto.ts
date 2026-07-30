@@ -332,6 +332,14 @@ export class SyncSourceIntegrationSettingsDto {
   @IsOptional()
   @IsBoolean()
   groupSameProduct?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowProductImageEdit?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  requirePasswordToRemoveSaleItems?: boolean;
 }
 
 export class SaveCompanyBranchDto {
@@ -396,6 +404,14 @@ export class SaveCompanyBranchDto {
   @IsOptional()
   @IsBoolean()
   allowSaleItemDiscount?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowProductImageEdit?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  requirePasswordToRemoveSaleItems?: boolean;
 }
 
 export class SaveSalesScreenParametersDto {
@@ -414,5 +430,13 @@ export class SaveSalesScreenParametersDto {
   @IsOptional()
   @IsBoolean()
   groupSameProduct?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowProductImageEdit?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  requirePasswordToRemoveSaleItems?: boolean;
 
 }

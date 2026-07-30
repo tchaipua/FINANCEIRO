@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -18,6 +20,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
@@ -1145,17 +1148,15 @@ export default function FinanceiroProdutosPage() {
   useEffect(() => {
     if (!runtimeContext.embedded) return;
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_PRODUCT_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
     const handleEmbeddedBackNavigation = (event: MessageEvent) => {
+      if (!isTrustedMessageEvent(event)) return;
       const data = event.data as { type?: string; screenId?: string } | null;
       if (event.source !== window.parent) return;
       if (!data || data.type !== 'MSINFOR_FINANCEIRO_NAVIGATE_BACK') return;
@@ -1166,7 +1167,9 @@ export default function FinanceiroProdutosPage() {
       params.delete('productId');
       params.delete('productName');
       const query = params.toString();
-      window.location.replace(`/estoque${query ? `?${query}` : ''}`);
+      window.location.replace(
+        withFinanceBasePath(`/estoque${query ? `?${query}` : ''}`),
+      );
     };
 
     window.addEventListener('message', handleEmbeddedBackNavigation);
@@ -1568,7 +1571,9 @@ export default function FinanceiroProdutosPage() {
     const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
     setIsFormOpen(false);
     setReturnSuccessMessage(null);
-    window.location.assign(`/estoque/imagens-produtos${navigationQuery}`);
+    window.location.assign(
+      withFinanceBasePath(`/estoque/imagens-produtos${navigationQuery}`),
+    );
   }
 
   function closeProductForm() {
@@ -1775,7 +1780,11 @@ export default function FinanceiroProdutosPage() {
     params.set('historyOrigin', 'PRODUCTS');
     params.set('productId', product.id);
     params.set('productName', product.name);
-    window.location.assign(`/estoque/historico-movimentacao?${params.toString()}`);
+    window.location.assign(
+      withFinanceBasePath(
+        `/estoque/historico-movimentacao?${params.toString()}`,
+      ),
+    );
   }
 
   async function handleStatusChange(product: ProductItem, action: 'activate' | 'inactivate') {

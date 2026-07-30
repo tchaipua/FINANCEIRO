@@ -32,7 +32,6 @@ function mutationContext(runtimeContext: FinanceRuntimeContext) {
     sourceSystem: runtimeContext.sourceSystem,
     sourceTenantId: runtimeContext.sourceTenantId,
     sourceBranchCode: runtimeContext.sourceBranchCode,
-    userRole: runtimeContext.userRole || undefined,
     requestedBy:
       runtimeContext.cashierDisplayName ||
       runtimeContext.cashierUserId ||

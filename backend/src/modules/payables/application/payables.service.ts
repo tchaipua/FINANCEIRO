@@ -200,34 +200,12 @@ export class PayablesService {
       },
     });
 
-    const normalizedCompanyName = normalizeText(filters.companyName);
-    const normalizedCompanyDocument = normalizeDigits(filters.companyDocument);
-
-    if (existing) {
-      return this.prisma.company.update({
-        where: { id: existing.id },
-        data: {
-          ...(normalizedCompanyName ? { name: normalizedCompanyName } : {}),
-          ...(normalizedCompanyDocument
-            ? { document: normalizedCompanyDocument }
-            : {}),
-          updatedBy: filters.requestedBy || null,
-        },
-      });
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar contas a pagar.",
+      );
     }
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem: normalizedSourceSystem,
-        sourceTenantId: normalizedSourceTenantId,
-        name:
-          normalizedCompanyName ||
-          `${normalizedSourceSystem} ${normalizedSourceTenantId}`,
-        document: normalizedCompanyDocument,
-        createdBy: filters.requestedBy || null,
-        updatedBy: filters.requestedBy || null,
-      },
-    });
+    return existing;
   }
 
   private async findCompany(
@@ -267,88 +245,39 @@ export class PayablesService {
         canceledAt: null,
       },
     });
+    if (!existingBranch) {
+      throw new NotFoundException(
+        "A filial deve ser provisionada antes de operar contas a pagar.",
+      );
+    }
 
     const config: BranchStockParameterConfig = {
       branchCode,
       stockControlMode: this.normalizeBranchStockParameterMode(
-        payload.stockControlMode || existingBranch?.stockControlMode,
+        existingBranch.stockControlMode,
         "BY_PRODUCT",
       ),
       stockIntegerQuantityMode: this.normalizeBranchStockParameterMode(
-        payload.stockIntegerQuantityMode ||
-          existingBranch?.stockIntegerQuantityMode,
-        this.getLegacyIntegerMode(existingBranch?.quantityPrecision),
+        existingBranch.stockIntegerQuantityMode,
+        this.getLegacyIntegerMode(existingBranch.quantityPrecision),
       ),
       stockLotControlMode: this.normalizeBranchStockParameterMode(
-        payload.stockLotControlMode || existingBranch?.stockLotControlMode,
-        this.getLegacyLotMode(existingBranch?.inventoryControlType),
+        existingBranch.stockLotControlMode,
+        this.getLegacyLotMode(existingBranch.inventoryControlType),
       ),
       stockExpirationControlMode: this.normalizeBranchStockParameterMode(
-        payload.stockExpirationControlMode ||
-          existingBranch?.stockExpirationControlMode,
-        this.getLegacyLotMode(existingBranch?.inventoryControlType),
+        existingBranch.stockExpirationControlMode,
+        this.getLegacyLotMode(existingBranch.inventoryControlType),
       ),
       stockGridControlMode: this.normalizeBranchStockParameterMode(
-        payload.stockGridControlMode || existingBranch?.stockGridControlMode,
-        this.getLegacyGridMode(existingBranch?.inventoryControlType),
+        existingBranch.stockGridControlMode,
+        this.getLegacyGridMode(existingBranch.inventoryControlType),
       ),
       stockNegativeControlMode: this.normalizeBranchStockParameterMode(
-        payload.stockNegativeControlMode ||
-          existingBranch?.stockNegativeControlMode,
+        existingBranch.stockNegativeControlMode,
         "NO",
       ),
     };
-    const stockConfigFields = {
-      stockControlMode: config.stockControlMode,
-      stockIntegerQuantityMode: config.stockIntegerQuantityMode,
-      stockLotControlMode: config.stockLotControlMode,
-      stockExpirationControlMode: config.stockExpirationControlMode,
-      stockGridControlMode: config.stockGridControlMode,
-      stockNegativeControlMode: config.stockNegativeControlMode,
-    };
-
-    await tx.companyBranch.upsert({
-      where: {
-        companyId_branchCode: {
-          companyId,
-          branchCode,
-        },
-      },
-      create: {
-        companyId,
-        branchCode,
-        name:
-          branchCode === DEFAULT_BRANCH_CODE
-            ? "FILIAL 1"
-            : `FILIAL ${branchCode}`,
-        isActive: true,
-        isDefault: branchCode === DEFAULT_BRANCH_CODE,
-        inventoryControlType: this.getInventoryControlTypeFromStockModes(
-          config.stockLotControlMode,
-          config.stockGridControlMode,
-        ),
-        quantityPrecision: this.getQuantityPrecisionFromStockMode(
-          config.stockIntegerQuantityMode,
-        ),
-        ...stockConfigFields,
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
-      update: {
-        isActive: true,
-        canceledAt: null,
-        canceledBy: null,
-        inventoryControlType: this.getInventoryControlTypeFromStockModes(
-          config.stockLotControlMode,
-          config.stockGridControlMode,
-        ),
-        quantityPrecision: this.getQuantityPrecisionFromStockMode(
-          config.stockIntegerQuantityMode,
-        ),
-        ...stockConfigFields,
-        updatedBy: payload.requestedBy || null,
-      },
-    });
 
     return config;
   }

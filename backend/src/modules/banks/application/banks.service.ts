@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -41,6 +42,11 @@ import {
   SicrediApiError,
   SicrediBillingService,
 } from "../../receivables/application/sicredi-billing.service";
+import {
+  decryptStoredBankSecret,
+  encryptSecret,
+} from "../../../common/secret-crypto.utils";
+import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 
 type NormalizedBankPayload = {
   bankCode: string;
@@ -208,6 +214,14 @@ export class BanksService {
       sicrediBillingService || new SicrediBillingService();
   }
 
+  private assertFinanceAdmin() {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      throw new ForbiddenException(
+        "A CONFIGURAÇÃO BANCÁRIA EXIGE O ESCOPO FINANCE_ADMIN.",
+      );
+    }
+  }
+
   private normalizeOptionalRawText(value: string | null | undefined) {
     const normalized = String(value || "").trim();
     return normalized || null;
@@ -232,6 +246,19 @@ export class BanksService {
     }
 
     return normalized;
+  }
+
+  private protectBankSecret(value: string | null) {
+    return value ? encryptSecret(value) : null;
+  }
+
+  private revealBankSecret(value: string | null | undefined) {
+    const normalizedValue = String(value || "");
+    if (!normalizedValue) {
+      return "";
+    }
+
+    return decryptStoredBankSecret(normalizedValue);
   }
 
   private parseDateOnly(value?: string | null, label = "a data") {
@@ -1451,28 +1478,15 @@ export class BanksService {
       normalizedSourceTenantId,
     );
 
-    if (existingCompany) {
-      return existingCompany;
+    if (!existingCompany) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar bancos.",
+      );
     }
-
-    const normalizedCompanyName =
-      normalizeText(payload.companyName) ||
-      `EMPRESA ${normalizedSourceTenantId}`;
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem: normalizedSourceSystem,
-        sourceTenantId: normalizedSourceTenantId,
-        name: normalizedCompanyName,
-        document: normalizeDigits(payload.companyDocument),
-        status: "ACTIVE",
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
-    });
+    return existingCompany;
   }
 
-  private mapBank(bank: any, includeSecrets = false) {
+  private mapBank(bank: any) {
     const normalizedProvider = normalizeText(bank.billingProvider);
     const hasBillingApiCredentials =
       normalizedProvider === "SICOOB"
@@ -1566,15 +1580,6 @@ export class BanksService {
         latestStatementImport?.pulledAt instanceof Date
           ? latestStatementImport.pulledAt.toISOString()
           : null,
-      ...(includeSecrets
-        ? {
-            billingApiClientId: bank.billingApiClientId || null,
-            billingApiClientSecret: bank.billingApiClientSecret || null,
-            billingCertificateBase64: bank.billingCertificateBase64 || null,
-            billingCertificatePassword:
-              bank.billingCertificatePassword || null,
-          }
-        : {}),
       notes: bank.notes || null,
       createdAt: bank.createdAt.toISOString(),
       createdBy: bank.createdBy || null,
@@ -1764,7 +1769,7 @@ export class BanksService {
       query.sourceTenantId,
     );
 
-    return this.mapBank(bank, true);
+    return this.mapBank(bank);
   }
 
   async getSavedStatement(bankId: string, query: GetBankStatementDto) {
@@ -2104,8 +2109,12 @@ export class BanksService {
       const dda = await this.sicoobDdaService.downloadOpenDda(
         {
           clientId: bank.billingApiClientId,
-          certificateBase64: bank.billingCertificateBase64,
-          certificatePassword: bank.billingCertificatePassword,
+          certificateBase64: this.revealBankSecret(
+            bank.billingCertificateBase64,
+          ),
+          certificatePassword: this.revealBankSecret(
+            bank.billingCertificatePassword,
+          ),
         },
         {
           accountNumber,
@@ -2288,7 +2297,7 @@ export class BanksService {
           {
             environment: bank.billingEnvironment,
             apiKey: bank.billingApiClientId,
-            accessCode: bank.billingApiClientSecret,
+            accessCode: this.revealBankSecret(bank.billingApiClientSecret),
             cooperative,
             posto,
             beneficiaryCode: bank.billingBeneficiaryCode,
@@ -2348,8 +2357,12 @@ export class BanksService {
       const statement = await this.sicoobBankStatementService.downloadStatement(
         {
           clientId: bank.billingApiClientId,
-          certificateBase64: bank.billingCertificateBase64,
-          certificatePassword: bank.billingCertificatePassword,
+          certificateBase64: this.revealBankSecret(
+            bank.billingCertificateBase64,
+          ),
+          certificatePassword: this.revealBankSecret(
+            bank.billingCertificatePassword,
+          ),
         },
         {
           accountNumber,
@@ -2398,8 +2411,21 @@ export class BanksService {
   }
 
   async create(payload: SaveBankDto) {
+    this.assertFinanceAdmin();
     const company = await this.resolveOrCreateCompany(payload);
     const normalizedPayload = this.buildNormalizedPayload(payload);
+    const protectedPayload = {
+      ...normalizedPayload,
+      billingApiClientSecret: this.protectBankSecret(
+        normalizedPayload.billingApiClientSecret,
+      ),
+      billingCertificateBase64: this.protectBankSecret(
+        normalizedPayload.billingCertificateBase64,
+      ),
+      billingCertificatePassword: this.protectBankSecret(
+        normalizedPayload.billingCertificatePassword,
+      ),
+    };
 
     await this.ensureNoDuplicateBank(company.id, normalizedPayload);
 
@@ -2407,7 +2433,7 @@ export class BanksService {
       data: {
         companyId: company.id,
         status: "ACTIVE",
-        ...normalizedPayload,
+        ...protectedPayload,
         createdBy: payload.requestedBy || null,
         updatedBy: payload.requestedBy || null,
       },
@@ -2416,23 +2442,57 @@ export class BanksService {
       },
     });
 
-    return this.mapBank(bank, true);
+    return this.mapBank(bank);
   }
 
   async update(bankId: string, payload: SaveBankDto) {
+    this.assertFinanceAdmin();
     const { bank } = await this.loadScopedBank(
       bankId,
       payload.sourceSystem,
       payload.sourceTenantId,
     );
     const normalizedPayload = this.buildNormalizedPayload(payload);
+    const {
+      billingApiClientId,
+      billingApiClientSecret,
+      billingCertificateBase64,
+      billingCertificatePassword,
+      ...nonSecretPayload
+    } = normalizedPayload;
+    const protectedSecretUpdates = {
+      ...(billingApiClientId
+        ? {
+            billingApiClientId,
+          }
+        : {}),
+      ...(billingApiClientSecret
+        ? {
+            billingApiClientSecret:
+              this.protectBankSecret(billingApiClientSecret),
+          }
+        : {}),
+      ...(billingCertificateBase64
+        ? {
+            billingCertificateBase64:
+              this.protectBankSecret(billingCertificateBase64),
+          }
+        : {}),
+      ...(billingCertificatePassword
+        ? {
+            billingCertificatePassword:
+              this.protectBankSecret(billingCertificatePassword),
+          }
+        : {}),
+    };
 
     await this.ensureNoDuplicateBank(bank.companyId, normalizedPayload, bank.id);
 
     const updatedBank = await this.prisma.bankAccount.update({
       where: { id: bank.id },
       data: {
-        ...normalizedPayload,
+        ...nonSecretPayload,
+        ...protectedSecretUpdates,
         updatedBy: payload.requestedBy || null,
       },
       include: {
@@ -2440,10 +2500,11 @@ export class BanksService {
       },
     });
 
-    return this.mapBank(updatedBank, true);
+    return this.mapBank(updatedBank);
   }
 
   async activate(bankId: string, payload: ChangeBankStatusDto) {
+    this.assertFinanceAdmin();
     const { bank } = await this.loadScopedBank(
       bankId,
       payload.sourceSystem,
@@ -2467,6 +2528,7 @@ export class BanksService {
   }
 
   async inactivate(bankId: string, payload: ChangeBankStatusDto) {
+    this.assertFinanceAdmin();
     const { bank } = await this.loadScopedBank(
       bankId,
       payload.sourceSystem,

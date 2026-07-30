@@ -8,6 +8,10 @@
 /frontend/.next/
 /frontend/*.log
 /node_modules/
+/packages/*/node_modules/
+/packages/*/dist/
+/dev.db
+*.log
 /backend/storage/
 /backend/tmp/danfe-render/
 /backend/tmp/dev.db.before_nfe_*

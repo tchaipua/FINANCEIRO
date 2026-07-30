@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
@@ -15,6 +17,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
@@ -301,7 +304,7 @@ export default function FinanceiroOpenDdasPage() {
   const visibleColumns = useMemo(() => DDA_COLUMNS.filter((column) => !hiddenColumns.includes(column.key)), [hiddenColumns]);
 
   const clearDdas = useCallback(() => { setDdaItems([]); setPulledAt(null); setStatusMessage(null); }, []);
-  const handleReturnToBanks = useCallback((event: MouseEvent<HTMLAnchorElement>) => { event.preventDefault(); window.location.href = `/bancos${buildReturnQueryStringFromUrl() || banksReturnQueryString}`; }, [banksReturnQueryString]);
+  const handleReturnToBanks = useCallback((event: MouseEvent<HTMLAnchorElement>) => { event.preventDefault(); window.location.href = withFinanceBasePath(`/bancos${buildReturnQueryStringFromUrl() || banksReturnQueryString}`); }, [banksReturnQueryString]);
 
   const loadOpenDdas = useCallback(async () => {
     if (!scopeReady || !selectedBankId) { clearDdas(); return; }
@@ -354,7 +357,7 @@ export default function FinanceiroOpenDdasPage() {
     }
   }, [actionModal, runtimeContext, selectedBankId]);
 
-  useEffect(() => { if (typeof window !== 'undefined') window.parent?.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }, '*'); }, []);
+  useEffect(() => { if (typeof window !== 'undefined') postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }); }, []);
   useEffect(() => { if (typeof window === 'undefined') return; const sync = () => { const bankId = readBankIdFromUrl(); setSelectedBankId(bankId); setLockedBankId(bankId); setReturnQueryString(buildReturnQueryStringFromUrl()); }; sync(); window.addEventListener('popstate', sync); window.addEventListener('hashchange', sync); return () => { window.removeEventListener('popstate', sync); window.removeEventListener('hashchange', sync); }; }, []);
   useEffect(() => { void loadPageData(); }, [loadPageData]);
   useEffect(() => { void loadOpenDdas(); }, [loadOpenDdas]);

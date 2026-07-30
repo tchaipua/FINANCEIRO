@@ -8,6 +8,7 @@ import {
   normalizeText,
   roundMoney,
 } from "../../../common/finance-core.utils";
+import { requireSicoobPowerShellExecutable } from "../../../common/sicoob-powershell";
 
 const execFileAsync = promisify(execFile);
 
@@ -233,10 +234,11 @@ export class SicoobBillingService {
       "scripts",
       "sicoob-issue-boleto.ps1",
     );
+    const powerShellExecutable = requireSicoobPowerShellExecutable();
 
     try {
       const { stdout } = await execFileAsync(
-        "powershell",
+        powerShellExecutable,
         [
           "-NoProfile",
           "-ExecutionPolicy",
@@ -300,10 +302,11 @@ export class SicoobBillingService {
       "scripts",
       "sicoob-download-movimentacoes.ps1",
     );
+    const powerShellExecutable = requireSicoobPowerShellExecutable();
 
     try {
       const { stdout } = await execFileAsync(
-        "powershell",
+        powerShellExecutable,
         [
           "-NoProfile",
           "-ExecutionPolicy",

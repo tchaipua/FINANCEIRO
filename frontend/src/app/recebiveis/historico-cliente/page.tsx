@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -408,7 +410,7 @@ export default function FinanceiroHistoricoClientePage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') return;
-    window.parent?.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {

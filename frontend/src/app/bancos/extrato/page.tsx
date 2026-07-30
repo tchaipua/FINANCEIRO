@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -734,13 +736,10 @@ export default function FinanceiroBankStatementPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, []);
 
   useEffect(() => {

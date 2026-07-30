@@ -1,9 +1,12 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_BANCOS_E_BOLETOS';
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
@@ -80,7 +83,7 @@ export default function BancosEBoletosPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') return;
-    window.parent?.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtimeContext.embedded]);
 
   return (
@@ -112,7 +115,7 @@ export default function BancosEBoletosPage() {
               <>
                 <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
                   <img
-                    src={item.image}
+                    src={withFinanceBasePath(item.image)}
                     alt={item.label}
                     className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
                   />

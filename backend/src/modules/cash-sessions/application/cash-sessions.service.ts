@@ -35,6 +35,7 @@ import {
   SettleManualInstallmentDto,
 } from "./dto/cash-sessions.dto";
 import { SicoobPixService } from "../../sales/application/sicoob-pix.service";
+import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
 
 const CASH_SESSION_PAYMENT_METHOD_METADATA = {
   CASH: {
@@ -451,8 +452,12 @@ export class CashSessionsService {
       ...bank,
       label: this.buildBankAccountLabel(bank),
       billingApiClientId: bank.billingApiClientId!,
-      billingCertificateBase64: bank.billingCertificateBase64!,
-      billingCertificatePassword: bank.billingCertificatePassword!,
+      billingCertificateBase64: decryptStoredBankSecret(
+        bank.billingCertificateBase64,
+      ),
+      billingCertificatePassword: decryptStoredBankSecret(
+        bank.billingCertificatePassword,
+      ),
       pixKey: bank.pixKey!,
     };
   }

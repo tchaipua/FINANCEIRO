@@ -1,13 +1,16 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { getJson } from '@/app/lib/api';
+import { financeApiFetch, getJson } from '@/app/lib/api';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_ESTOQUE_IMAGENS_PRODUTOS';
 const ORIGIN_TEXT =
@@ -24,6 +27,10 @@ type ProductItem = {
   sku?: string | null;
   barcode?: string | null;
   status?: 'ACTIVE' | 'INACTIVE' | string;
+  imageS3SyncStatus?: 'NOT_TRACKED' | 'SYNCED' | 'PENDING' | string;
+  imageS3ObjectKey?: string | null;
+  imageS3LastError?: string | null;
+  imageS3SyncedAt?: string | null;
 };
 
 type LocalImageState = {
@@ -33,10 +40,30 @@ type LocalImageState = {
 
 type S3Configuration = {
   imagesFolder?: string;
+  sourceScope?: 'BRANCH' | 'COMPANY' | 'SOFTHOUSE' | string;
 };
 
 type LocalImageAgentConfiguration = {
   imagesDirectory?: string;
+};
+
+type LocalImageMetadata = {
+  productCode: string;
+  fileName: string;
+  lastModifiedUtc: string;
+  size: number;
+};
+
+type ProductImageManifest = {
+  files?: Array<{
+    productId: string;
+    productCode: string;
+    key: string;
+    fileName: string;
+    size: number;
+    lastModified: string;
+  }>;
+  complete?: boolean;
 };
 
 type ImageSearchItem = {
@@ -44,6 +71,8 @@ type ImageSearchItem = {
   thumbnailUrl: string;
   sourceUrl: string;
 };
+
+type S3SyncFilter = 'ALL' | 'PENDING';
 
 function normalizeBarcode(value: string | null | undefined) {
   return String(value || '').replace(/\D/g, '');
@@ -62,6 +91,13 @@ function getEanType(barcode: string | null | undefined) {
 
 function buildImageUrl(barcode: string, extension: (typeof IMAGE_EXTENSIONS)[number]) {
   return `${LOCAL_IMAGE_BASE_URL}/${encodeURIComponent(`${barcode}.${extension}`)}`;
+}
+
+function getS3AccessOrigin(sourceScope?: string) {
+  if (sourceScope === 'BRANCH') return 'FILIAL';
+  if (sourceScope === 'SOFTHOUSE') return 'SOFTHOUSE';
+  if (sourceScope === 'COMPANY') return 'EMPRESA';
+  return '';
 }
 
 function ProductImagePreview({
@@ -165,7 +201,7 @@ function ImageReplacementModal({
         <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-1">
-              {logoUrl ? <img src={logoUrl} alt="Logotipo institucional" className="h-full w-full object-contain" /> : <img src="/logo-msinfor.jpg" alt="Logotipo MSINFOR" className="h-full w-full object-cover" />}
+              {logoUrl ? <img src={withFinanceBasePath(logoUrl)} alt="Logotipo institucional" className="h-full w-full object-contain" /> : <img src={withFinanceBasePath('/logo-msinfor.jpg')} alt="Logotipo MSINFOR" className="h-full w-full object-cover" />}
             </div>
             <div>
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-700">Manutenção da imagem</p>
@@ -244,7 +280,10 @@ function ImageSelectionModal({
           offset: String(searchOffset),
         });
         items.forEach((item) => params.append('exclude', item.imageUrl));
-        const response = await fetch(`/api/image-search?${params.toString()}`, { cache: 'no-store' });
+        const response = await fetch(
+          withFinanceBasePath(`/api/image-search?${params.toString()}`),
+          { cache: 'no-store' },
+        );
         const result = (await response.json().catch(() => null)) as { items?: ImageSearchItem[]; message?: string } | null;
         if (!response.ok) throw new Error(result?.message || 'Não foi possível buscar imagens agora.');
         if (active) setItems(result?.items || []);
@@ -265,7 +304,7 @@ function ImageSelectionModal({
         <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-1">
-              {logoUrl ? <img src={logoUrl} alt="Logotipo institucional" className="h-full w-full object-contain" /> : <img src="/logo-msinfor.jpg" alt="Logotipo MSINFOR" className="h-full w-full object-cover" />}
+              {logoUrl ? <img src={withFinanceBasePath(logoUrl)} alt="Logotipo institucional" className="h-full w-full object-contain" /> : <img src={withFinanceBasePath('/logo-msinfor.jpg')} alt="Logotipo MSINFOR" className="h-full w-full object-cover" />}
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-700">Selecionar imagem encontrada</p>
@@ -336,10 +375,14 @@ ENDPOINTS / BASE LOGICA:
 - GET /products.
 - GET http://127.0.0.1:47821/imagens/{CODIGO}.{EXTENSAO}.
 - POST http://127.0.0.1:47821/imagens/{CODIGO}/from-url.
+- POST http://127.0.0.1:47821/imagens/metadados.
+- POST http://127.0.0.1:47821/imagens/{CODIGO}/from-bytes.
+- GET /s3-control/product-images/manifest.
+- GET /s3-control/product-images/{ID}/download?key={CHAVE_S3}.
 - GET /api/image-search?q={EAN_OU_CODIGO}.
 
 OBSERVACAO:
-- a tela consulta e atualiza somente o agente local, aceitando WEBP, PNG, JPG, JPEG e BMP com o nome igual ao código do produto.`;
+- a atualização local compara em lote a data e hora efetiva do arquivo do computador com a data e hora de gravação no S3. Somente arquivos mais novos no S3 são baixados e substituídos localmente, em até quatro transferências simultâneas.`;
 
 export default function FinanceiroEstoqueImagensProdutosPage() {
   const runtimeContext = useFinanceRuntimeContext();
@@ -354,8 +397,13 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
   const [replacementError, setReplacementError] = useState<string | null>(null);
   const [isReplacing, setIsReplacing] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [s3SyncFilter, setS3SyncFilter] = useState<S3SyncFilter>('ALL');
+  const [s3SyncWarning, setS3SyncWarning] = useState<string | null>(null);
   const [s3ImagesFolder, setS3ImagesFolder] = useState('');
+  const [s3AccessOrigin, setS3AccessOrigin] = useState('');
   const [localImagesDirectory, setLocalImagesDirectory] = useState('');
+  const [isUpdatingLocalImages, setIsUpdatingLocalImages] = useState(false);
+  const [localImageUpdateMessage, setLocalImageUpdateMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -371,13 +419,17 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
 
       if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
         setS3ImagesFolder('');
+        setS3AccessOrigin('');
         return;
       }
 
       const s3Result = await getJson<S3Configuration>(
-        `/s3-control/configuration${buildFinanceApiQueryString(runtimeContext)}`,
+        `/s3-control/effective-configuration${buildFinanceApiQueryString(runtimeContext)}`,
       ).catch(() => null);
-      if (active) setS3ImagesFolder(String(s3Result?.imagesFolder || '').trim());
+      if (active) {
+        setS3ImagesFolder(String(s3Result?.imagesFolder || '').trim());
+        setS3AccessOrigin(getS3AccessOrigin(s3Result?.sourceScope));
+      }
     };
 
     void loadImageLocations();
@@ -416,18 +468,20 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded) return;
-    window.parent?.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtimeContext.embedded]);
 
   const filteredProducts = useMemo(() => {
     const normalizedSearch = search.trim().toUpperCase();
-    if (!normalizedSearch) return products;
-    return products.filter((product) =>
+    const searchedProducts = !normalizedSearch ? products : products.filter((product) =>
       [product.name, product.internalCode, product.sku, product.barcode]
         .filter(Boolean)
         .some((value) => String(value).toUpperCase().includes(normalizedSearch)),
     );
-  }, [products, search]);
+    return s3SyncFilter === 'PENDING'
+      ? searchedProducts.filter((product) => product.imageS3SyncStatus === 'PENDING')
+      : searchedProducts;
+  }, [products, s3SyncFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -439,6 +493,7 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
   const availableImageCount = validEanProducts.filter(
     (product) => imageStates[product.id]?.available,
   ).length;
+  const pendingS3ImageCount = products.filter((product) => product.imageS3SyncStatus === 'PENDING').length;
 
   function handleImageResolved(productId: string, state: LocalImageState) {
     setImageStates((current) => {
@@ -449,6 +504,9 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
   }
 
   function getProductImageCode(product: ProductItem) {
+    const ean = normalizeBarcode(product.barcode);
+    if (getEanType(ean)) return ean;
+
     return normalizeProductCode(product.internalCode || product.sku || product.barcode);
   }
 
@@ -475,7 +533,104 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
     );
     params.set('editProductId', product.id);
     params.set('returnTo', 'IMAGES_PRODUCTS');
-    window.location.assign(`/produtos?${params.toString()}`);
+    window.location.assign(withFinanceBasePath(`/produtos?${params.toString()}`));
+  }
+
+  async function updateLocalImagesFromS3() {
+    const productCodes = products
+      .map((product) => getProductImageCode(product))
+      .filter(Boolean);
+    if (!productCodes.length) {
+      setLocalImageUpdateMessage('NENHUM PRODUTO COM CÓDIGO VÁLIDO FOI ENCONTRADO PARA ATUALIZAÇÃO.');
+      return;
+    }
+
+    setIsUpdatingLocalImages(true);
+    setLocalImageUpdateMessage('CONSULTANDO AS VERSÕES DAS IMAGENS NO S3...');
+    setErrorMessage(null);
+    try {
+      const [manifest, localResponse] = await Promise.all([
+        getJson<ProductImageManifest>(
+          `/s3-control/product-images/manifest${buildFinanceApiQueryString(runtimeContext)}`,
+        ),
+        fetch(`${LOCAL_IMAGE_AGENT_URL}/imagens/metadados`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productCodes }),
+        }),
+      ]);
+      const localPayload = (await localResponse.json().catch(() => null)) as { files?: LocalImageMetadata[]; message?: string } | null;
+      if (!localResponse.ok) throw new Error(localPayload?.message || 'O agente local não respondeu com as datas das imagens.');
+
+      const localByCode = new Map(
+        (localPayload?.files || []).map((file) => [
+          normalizeProductCode(file.productCode),
+          file,
+        ]),
+      );
+      const updates = (manifest.files || []).filter((file) => {
+        const localFile = localByCode.get(normalizeProductCode(file.productCode));
+        return !localFile || new Date(file.lastModified).getTime() > new Date(localFile.lastModifiedUtc).getTime();
+      });
+
+      if (!updates.length) {
+        setLocalImageUpdateMessage('AS IMAGENS LOCAIS JÁ ESTÃO NA MESMA DATA OU MAIS NOVAS QUE AS DO S3.');
+        return;
+      }
+
+      let nextIndex = 0;
+      let completed = 0;
+      let failed = 0;
+      const updatedImages: Record<string, LocalImageState> = {};
+      const worker = async () => {
+        while (nextIndex < updates.length) {
+          const current = updates[nextIndex++];
+          try {
+            const query = new URLSearchParams({ key: current.key });
+            const remoteResponse = await financeApiFetch(
+              `/s3-control/product-images/${encodeURIComponent(current.productId)}/download?${query.toString()}`,
+            );
+            if (!remoteResponse.ok) {
+              const error = (await remoteResponse.json().catch(() => null)) as { message?: string } | null;
+              throw new Error(error?.message || 'Não foi possível baixar a imagem do S3.');
+            }
+            const image = await remoteResponse.blob();
+            const localWriteResponse = await fetch(
+              `${LOCAL_IMAGE_AGENT_URL}/imagens/${encodeURIComponent(current.productCode)}/from-bytes`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': image.type || 'application/octet-stream' },
+                body: image,
+              },
+            );
+            const localWrite = (await localWriteResponse.json().catch(() => null)) as { message?: string; fileName?: string } | null;
+            if (!localWriteResponse.ok) throw new Error(localWrite?.message || 'Não foi possível gravar a imagem no diretório local.');
+            updatedImages[current.productId] = {
+              available: true,
+              url: `${LOCAL_IMAGE_AGENT_URL}/imagens/${encodeURIComponent(localWrite?.fileName || current.fileName)}?t=${Date.now()}`,
+            };
+          } catch {
+            failed += 1;
+          } finally {
+            completed += 1;
+            setLocalImageUpdateMessage(`ATUALIZANDO IMAGENS LOCAIS: ${completed}/${updates.length}.`);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, updates.length) }, worker));
+      setImageStates((current) => ({ ...current, ...updatedImages }));
+      setLocalImageUpdateMessage(
+        failed
+          ? `${updates.length - failed} IMAGEM(NS) ATUALIZADA(S) E ${failed} NÃO PUDERAM SER GRAVADAS LOCALMENTE.`
+          : `${updates.length} IMAGEM(NS) ATUALIZADA(S) A PARTIR DA DATA E HORA DO S3.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível atualizar as imagens locais.';
+      setLocalImageUpdateMessage(null);
+      setErrorMessage(message);
+    } finally {
+      setIsUpdatingLocalImages(false);
+    }
   }
 
   async function replaceProductImage(url: string, product = replacementProduct) {
@@ -499,15 +654,46 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
         throw new Error(result?.message || 'Não foi possível substituir a imagem.');
       }
 
+      const fileName = result?.fileName || `${productCode}.webp`;
+      const localImageUrl = `${LOCAL_IMAGE_AGENT_URL}/imagens/${encodeURIComponent(fileName)}?t=${Date.now()}`;
       setImageStates((current) => ({
         ...current,
         [product.id]: {
           available: true,
-          url: `${LOCAL_IMAGE_AGENT_URL}/imagens/${encodeURIComponent(result?.fileName || `${productCode}.webp`)}?t=${Date.now()}`,
+          url: localImageUrl,
         },
       }));
       setReplacementProduct(null);
       setImageSelectionProduct(null);
+      setS3SyncWarning(null);
+
+      try {
+        const localFileResponse = await fetch(localImageUrl, { cache: 'no-store' });
+        if (!localFileResponse.ok) throw new Error('A imagem foi gravada localmente, mas não pôde ser lida para envio ao S3.');
+        const localImageBlob = await localFileResponse.blob();
+        const formData = new FormData();
+        formData.append('productId', product.id);
+        formData.append('file', localImageBlob, fileName);
+        const syncResponse = await financeApiFetch('/s3-control/product-image', { method: 'POST', body: formData });
+        const syncResult = (await syncResponse.json().catch(() => null)) as { message?: string; status?: string; key?: string } | null;
+        if (!syncResponse.ok) throw new Error(syncResult?.message || 'Não foi possível sincronizar a imagem no S3.');
+        setProducts((current) => current.map((item) => item.id === product.id ? {
+          ...item,
+          imageS3SyncStatus: 'SYNCED',
+          imageS3ObjectKey: syncResult?.key || null,
+          imageS3LastError: null,
+          imageS3SyncedAt: new Date().toISOString(),
+        } : item));
+      } catch (syncError) {
+        const syncMessage = syncError instanceof Error ? syncError.message : 'Não foi possível sincronizar a imagem no S3.';
+        setProducts((current) => current.map((item) => item.id === product.id ? {
+          ...item,
+          imageS3SyncStatus: 'PENDING',
+          imageS3LastError: syncMessage,
+          imageS3SyncedAt: null,
+        } : item));
+        setS3SyncWarning(`A imagem de ${product.name} foi atualizada no micro local, mas ficou pendente de sincronização no S3.`);
+      }
     } catch (error) {
       setReplacementError(error instanceof Error ? error.message : 'Não foi possível substituir a imagem.');
     } finally {
@@ -529,11 +715,23 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
               Imagens localizadas: {availableImageCount}
             </div>
+            <button type="button" onClick={() => { setS3SyncFilter((current) => current === 'PENDING' ? 'ALL' : 'PENDING'); setCurrentPage(1); }} className={`rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] transition ${s3SyncFilter === 'PENDING' ? 'border-amber-500 bg-amber-500 text-white' : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'}`}>
+              Pendentes S3: {pendingS3ImageCount}
+            </button>
+            <button
+              type="button"
+              onClick={() => void updateLocalImagesFromS3()}
+              disabled={isUpdatingLocalImages || !products.length}
+              className="rounded-xl border border-blue-700 bg-blue-700 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isUpdatingLocalImages ? 'Atualizando imagens...' : 'Atualizar imagens locais'}
+            </button>
             <div className="max-w-full rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-bold text-blue-800" title={localImagesDirectory || 'Diretório não informado pelo agente local'}>
               <span className="font-black uppercase tracking-[0.12em]">Diretório local:</span> {localImagesDirectory || 'NÃO INFORMADO'}
             </div>
             <div className="max-w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800" title={s3ImagesFolder || 'Pasta não configurada no S3'}>
-              <span className="font-black uppercase tracking-[0.12em]">Pasta S3:</span> {s3ImagesFolder || 'NÃO INFORMADA'}
+              <div><span className="font-black uppercase tracking-[0.12em]">Pasta S3:</span> {s3ImagesFolder || 'NÃO INFORMADA'}</div>
+              <div className="mt-1"><span className="font-black uppercase tracking-[0.12em]">Origem do acesso:</span> {s3AccessOrigin || 'NÃO INFORMADA'}</div>
             </div>
           </div>
           <label className="relative block w-full lg:max-w-md">
@@ -558,6 +756,18 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
       {errorMessage ? (
         <div className="shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
           {errorMessage}
+        </div>
+      ) : null}
+
+      {s3SyncWarning ? (
+        <div className="shrink-0 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+          {s3SyncWarning}
+        </div>
+      ) : null}
+
+      {localImageUpdateMessage ? (
+        <div className="shrink-0 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
+          {localImageUpdateMessage}
         </div>
       ) : null}
 
@@ -607,6 +817,7 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
                         </div>
                       </td>
                       <td className="px-4 py-1">
+                        <div>
                         {!eanType ? (
                           <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">SEM EAN VÁLIDO</span>
                         ) : imageState?.available ? (
@@ -616,6 +827,10 @@ export default function FinanceiroEstoqueImagensProdutosPage() {
                         ) : (
                           <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">CONFERINDO...</span>
                         )}
+                        </div>
+                        {product.imageS3SyncStatus === 'PENDING' ? (
+                          <span title={product.imageS3LastError || 'Imagem local pendente de envio ao S3'} className="mt-1 inline-flex rounded-full bg-amber-100 px-3 py-1 text-[9px] font-black uppercase tracking-[0.1em] text-amber-800">S3 pendente</span>
+                        ) : null}
                       </td>
                       <td className="flex items-center justify-center gap-2 px-1 py-1 text-center">
                         <button

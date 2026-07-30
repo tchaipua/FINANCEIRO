@@ -6,11 +6,8 @@ import {
   Patch,
   Post,
   Query,
-  Req,
-  UnauthorizedException,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
-import type { Request } from "express";
 import { CompaniesService } from "../application/companies.service";
 import {
   ListCompaniesDto,
@@ -24,28 +21,6 @@ import {
 @Controller("companies")
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
-
-  private assertIntegrationApiKey(request: Request, sourceSystem?: string) {
-    const normalizedSourceSystem = String(sourceSystem || "")
-      .trim()
-      .toUpperCase();
-    const sourcePrefix = normalizedSourceSystem
-      .replace(/[^A-Z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    const expected = String(
-      (sourcePrefix
-        ? process.env[`SOURCE_SYSTEM_${sourcePrefix}_API_KEY`]
-        : "") ||
-        (normalizedSourceSystem === "ESCOLA"
-          ? process.env.FINANCEIRO_INTEGRATION_API_KEY
-          : "") ||
-        "",
-    ).trim();
-    const incoming = String(request.headers["x-api-key"] || "").trim();
-    if (!expected || !incoming || incoming !== expected) {
-      throw new UnauthorizedException("INTEGRAÇÃO FINANCEIRA NÃO AUTORIZADA.");
-    }
-  }
 
   @Get()
   @ApiOperation({
@@ -61,10 +36,8 @@ export class CompaniesController {
       "Sincroniza configurações seguras da empresa e filial do sistema de origem",
   })
   syncSourceIntegrationSettings(
-    @Req() request: Request,
     @Body() payload: SyncSourceIntegrationSettingsDto,
   ) {
-    this.assertIntegrationApiKey(request, payload.sourceSystem);
     return this.companiesService.syncSourceIntegrationSettings(payload);
   }
 

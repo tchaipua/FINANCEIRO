@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
@@ -220,13 +222,10 @@ export default function FinanceiroFornecedoresPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   const getColumnValue = useCallback((item: PayableSupplierSummary, key: SupplierColumnFilterKey) => {

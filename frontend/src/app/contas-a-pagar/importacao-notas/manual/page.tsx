@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -65,13 +67,10 @@ export default function FinanceiroImportacaoNotasManualPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   const handleXmlFileSelected = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {

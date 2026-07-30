@@ -1,5 +1,9 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+import { getTrustedMessageOrigins } from '@/app/lib/trusted-messaging';
+import { stripFinanceBasePath } from '@/app/lib/public-path';
+
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useFinanceRuntimeContext } from '@/app/lib/runtime-context';
@@ -16,15 +20,7 @@ function hasIntegratedNavigationContext() {
   if (typeof window === 'undefined') return false;
 
   const params = new URLSearchParams(window.location.search);
-  return [
-    'embedded',
-    'sourceSystem',
-    'sourceTenantId',
-    'sourceBranchCode',
-    'cashierUserId',
-    'cashierDisplayName',
-    'companyName',
-  ].some((key) => params.has(key));
+  return params.has('embedded');
 }
 
 function isTopLevelWindow() {
@@ -43,7 +39,10 @@ function resolveSchoolShellOrigin() {
   if (typeof document !== 'undefined' && document.referrer) {
     try {
       const referrerUrl = new URL(document.referrer);
-      if (referrerUrl.origin !== window.location.origin) {
+      if (
+        referrerUrl.origin !== window.location.origin &&
+        getTrustedMessageOrigins().has(referrerUrl.origin)
+      ) {
         return referrerUrl.origin;
       }
     } catch {
@@ -108,7 +107,9 @@ export default function RootShell({
   useEffect(() => {
     if (!isTopLevelWindow() || !hasIntegratedNavigationContext()) return;
 
-    const schoolPath = resolveSchoolFinancePath(pathname || window.location.pathname);
+    const schoolPath = resolveSchoolFinancePath(
+      stripFinanceBasePath(pathname || window.location.pathname),
+    );
     const schoolOrigin = resolveSchoolShellOrigin();
 
     if (!schoolPath || !schoolOrigin || schoolOrigin === window.location.origin) {
@@ -157,6 +158,7 @@ export default function RootShell({
     applyAndStore(initialPreference);
 
     const handleMessage = (event: MessageEvent) => {
+      if (!isTrustedMessageEvent(event)) return;
       const data = event.data as { type?: string; colorTheme?: unknown; colorIntensity?: unknown } | null;
       if (!data || data.type !== 'MSINFOR_COLOR_THEME_CHANGED' || !isFinanceColorThemeId(data.colorTheme)) return;
       applyAndStore({
@@ -174,14 +176,14 @@ export default function RootShell({
       };
       applyAndStore(preference);
       if (runtimeContext.embedded && window.parent !== window) {
-        window.parent.postMessage({ type: 'MSINFOR_COLOR_THEME_CHANGED', ...preference }, '*');
+        postMessageToTrustedParent({ type: 'MSINFOR_COLOR_THEME_CHANGED', ...preference });
       }
     };
 
     window.addEventListener('message', handleMessage);
     window.addEventListener('msinfor-finance-color-theme-changed', handleLocalThemeChange);
     if (runtimeContext.embedded && window.parent !== window) {
-      window.parent.postMessage({ type: 'MSINFOR_COLOR_THEME_REQUEST' }, '*');
+      postMessageToTrustedParent({ type: 'MSINFOR_COLOR_THEME_REQUEST' });
     }
 
     return () => {
@@ -196,49 +198,6 @@ export default function RootShell({
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
   ]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const originalFetch = window.fetch.bind(window);
-    const branchHeaderValue = String(runtimeContext.sourceBranchCode || 1);
-
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const requestUrl =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input.url;
-
-      if (!requestUrl.includes('/api/v1/')) {
-        return originalFetch(input, init);
-      }
-
-      const headers = new Headers(
-        input instanceof Request ? input.headers : init?.headers,
-      );
-      headers.set('x-source-branch-code', branchHeaderValue);
-
-      if (input instanceof Request) {
-        return originalFetch(
-          new Request(input, {
-            headers,
-          }),
-          init,
-        );
-      }
-
-      return originalFetch(input, {
-        ...init,
-        headers,
-      });
-    };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, [runtimeContext.sourceBranchCode]);
 
   return (
     <div className="finance-shell min-h-screen mx-auto w-full max-w-[1700px] px-4 py-4 lg:px-6">

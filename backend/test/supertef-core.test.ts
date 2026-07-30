@@ -10,6 +10,7 @@ import {
   encryptSecret,
 } from "../src/common/secret-crypto.utils";
 import { getSuperTefCardApplicationError } from "../src/common/supertef-payment.utils";
+import { financeContext } from "../src/common/finance-context";
 
 process.env.FINANCEIRO_CERTIFICATE_SECRET =
   "SEGREDO-EXCLUSIVO-DO-TESTE-SUPERTEF";
@@ -198,18 +199,39 @@ async function run() {
     status: "PENDING",
     final: false,
   });
-  const configurationA = await service.getConfiguration({
-    sourceSystem: "ESCOLA",
-    sourceTenantId: "TENANT_A",
-    sourceBranchCode: 7,
-    userRole: "ADMIN",
-  });
-  const configurationB = await service.getConfiguration({
-    sourceSystem: "ESCOLA",
-    sourceTenantId: "TENANT_B",
-    sourceBranchCode: 8,
-    userRole: "ADMIN",
-  });
+  const withAdminContext = <T>(
+    tenantId: string,
+    branchCode: number,
+    operation: () => Promise<T>,
+  ) =>
+    financeContext.run(
+      {
+        authenticated: true,
+        branchCode,
+        sourceSystem: "ESCOLA",
+        sourceTenantId: tenantId,
+        sourceBranchCode: branchCode,
+        sourceUserId: "TEST-USER",
+        companyId: tenantId === "TENANT_A" ? "COMPANY_A" : "COMPANY_B",
+        branchId: `BRANCH_${branchCode}`,
+        scopes: ["FINANCE_ADMIN"],
+      },
+      operation,
+    );
+  const configurationA = await withAdminContext("TENANT_A", 7, () =>
+    service.getConfiguration({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_A",
+      sourceBranchCode: 7,
+    }),
+  );
+  const configurationB = await withAdminContext("TENANT_B", 8, () =>
+    service.getConfiguration({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_B",
+      sourceBranchCode: 8,
+    }),
+  );
 
   assert.equal(configurationA?.companyId, "COMPANY_A");
   assert.equal(configurationB?.companyId, "COMPANY_B");
@@ -229,13 +251,27 @@ async function run() {
 
   await assert.rejects(
     () =>
-      service.getConfiguration({
-        sourceSystem: "ESCOLA",
-        sourceTenantId: "TENANT_A",
-        sourceBranchCode: 7,
-        userRole: "USER",
-      }),
-    /PERFIL ADMIN/,
+      financeContext.run(
+        {
+          authenticated: true,
+          branchCode: 7,
+          sourceSystem: "ESCOLA",
+          sourceTenantId: "TENANT_A",
+          sourceBranchCode: 7,
+          sourceUserId: "TEST-USER",
+          companyId: "COMPANY_A",
+          branchId: "BRANCH_7",
+          scopes: [],
+        },
+        () =>
+          service.getConfiguration({
+            sourceSystem: "ESCOLA",
+            sourceTenantId: "TENANT_A",
+            sourceBranchCode: 7,
+            userRole: "ADMIN",
+          }),
+      ),
+    /FINANCE_ADMIN/,
   );
 
   const terminalIds = await (service as any).validateCheckoutTerminals(

@@ -72,6 +72,8 @@ export class NfseController {
       "Content-Disposition",
       `attachment; filename="${artifact.fileName}"`,
     );
+    response.setHeader("Content-Length", String(artifact.body.length));
+    response.setHeader("Cache-Control", "private, no-store, max-age=0");
     return new StreamableFile(artifact.body);
   }
 
@@ -92,6 +94,8 @@ export class NfseController {
       "Content-Disposition",
       `attachment; filename="${artifact.fileName}"`,
     );
+    response.setHeader("Content-Length", String(artifact.body.length));
+    response.setHeader("Cache-Control", "private, no-store, max-age=0");
     return new StreamableFile(artifact.body);
   }
 }

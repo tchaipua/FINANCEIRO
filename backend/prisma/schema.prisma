@@ -224,6 +224,8 @@ model CompanyBranch {
   stockNegativeControlMode   String    @default("BY_PRODUCT")
   allowSaleUnitPriceEdit     Boolean   @default(true)
   allowSaleItemDiscount      Boolean   @default(true)
+  allowProductImageEdit      Boolean   @default(true)
+  requirePasswordToRemoveSaleItems Boolean @default(false)
   fiscalLegalName            String?
   fiscalTradeName            String?
   fiscalDocument             String?
@@ -702,6 +704,10 @@ model Product {
   ibsCbsClassCode         String?
   fiscalNotes             String?
   notes                   String?
+  imageS3SyncStatus       String    @default("NOT_TRACKED")
+  imageS3ObjectKey        String?
+  imageS3LastError        String?
+  imageS3SyncedAt         DateTime?
   createdAt               DateTime  @default(now())
   createdBy               String?
   updatedAt               DateTime  @updatedAt
@@ -723,6 +729,7 @@ model Product {
   @@unique([companyId, branchCode, barcode])
   @@index([companyId, status, name])
   @@index([companyId, productType, tracksInventory])
+  @@index([companyId, branchCode, imageS3SyncStatus])
   @@map("products")
 }
 

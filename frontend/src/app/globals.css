@@ -196,16 +196,59 @@ body[data-finance-embedded='1'] .finance-shell-main {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 1px solid #bfd0e8;
+  border: 1px solid #b91c1c;
   border-radius: 8px;
-  background: #f8fbff;
-  color: #12377d;
+  background: #dc2626;
+  color: #fff;
   font: 500 25px/1 Arial, sans-serif;
   box-shadow: 0 6px 14px rgba(15, 23, 42, .16);
   cursor: pointer;
 }
 
-.system-message-close:hover { background: #eef5ff; transform: translateY(-1px); }
+.system-message-close:hover { background: #b91c1c; transform: translateY(-1px); }
+.system-message-success .system-message-close { border-color:#15803d; background:#16a34a; color:#fff; }
+.system-message-success .system-message-close:hover { background:#15803d; }
+
+/* Padrão único para mensagens globais de erro. */
+.system-message-card.system-message-error {
+  width: min(500px, calc(100vw - 24px));
+  min-height: 228px;
+}
+
+.system-message-error .system-message-header {
+  position: relative;
+  display: flex;
+  min-height: 102px;
+  justify-content: center;
+  padding: 14px 48px 10px 45px;
+}
+
+.system-message-error .system-message-logo {
+  position: absolute;
+  top: 16px;
+  left: 45px;
+}
+
+.system-message-error .system-message-header strong {
+  width: 100%;
+  align-self: center;
+  text-align: center;
+}
+
+.system-message-error .system-message-divider { margin: 0 20px; }
+
+.system-message-error .system-message-body {
+  min-height: 100px;
+  padding: 20px 58px 48px;
+}
+
+.system-message-error .system-message-close {
+  border-color: #b91c1c;
+  background: #dc2626;
+  color: #fff;
+}
+
+.system-message-error .system-message-close:hover { background: #b91c1c; }
 
 @media (max-width: 700px) {
   .system-message-card { min-height: 190px; border-radius: 14px; }

@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useEffect, useMemo, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -548,6 +550,7 @@ export default function FinanceiroParcelasPage() {
 
   useEffect(() => {
     function handleFinancePopupMessage(event: MessageEvent) {
+      if (!isTrustedMessageEvent(event)) return;
       const messageType = event.data?.type;
 
       if (messageType === 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CLOSE') {
@@ -617,15 +620,12 @@ export default function FinanceiroParcelasPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') return;
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
         auditText: parcelasAuditContext.auditText,
         sqlText: parcelasAuditContext.sqlText,
-      },
-      '*',
-    );
+      });
   }, [parcelasAuditContext.auditText, parcelasAuditContext.sqlText, runtimeContext.embedded]);
 
   async function handleOpenCashSession() {

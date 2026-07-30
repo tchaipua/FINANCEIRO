@@ -1,0 +1,2838 @@
+// GENERATED FILE. DO NOT EDIT DIRECTLY.
+// Source: ../schema.prisma (SQLite is retained only for local development/tests).
+// Run: npm run postgresql:schema:sync
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                              String                           @id @default(uuid())
+  sourceSystem                    String
+  sourceTenantId                  String
+  name                            String
+  document                        String?
+  status                          String                           @default("ACTIVE")
+  interestRate                    Float?
+  interestGracePeriod             Int?
+  penaltyRate                     Float?
+  penaltyValue                    Float?
+  penaltyGracePeriod              Int?
+  createdAt                       DateTime                         @default(now()) @db.Timestamptz(3)
+  createdBy                       String?
+  updatedAt                       DateTime                         @updatedAt @db.Timestamptz(3)
+  updatedBy                       String?
+  canceledAt                      DateTime? @db.Timestamptz(3)
+  canceledBy                      String?
+  bankAccounts                    BankAccount[]
+  fiscalCertificates              FiscalCertificate[]
+  nfceProfiles                    NfceProfile[]
+  nfeProfiles                     NfeProfile[]
+  nfseProfiles                    NfseProfile[]
+  nfseServiceItems                NfseServiceItem[]
+  nfseServiceDescriptions         NfseServiceDescription[]
+  nfseDocuments                   NfseDocument[]
+  nfseDocumentAttempts            NfseDocumentAttempt[]
+  nfseDocumentEmails              NfseEmailDelivery[]
+  nfseMunicipalParameters         NfseMunicipalParameter[]
+  fiscalOperationNatures          FiscalOperationNature[]
+  fiscalTaxRules                  FiscalTaxRule[]
+  fiscalBenefitCodes              FiscalBenefitCode[]
+  fiscalDocuments                 FiscalDocument[]
+  fiscalDocumentAttempts          FiscalDocumentAttempt[]
+  fiscalDocumentItems             FiscalDocumentItem[]
+  fiscalDocumentInstallments      FiscalDocumentInstallment[]
+  fiscalDocumentEvents            FiscalDocumentEvent[]
+  fiscalDocumentEmails            FiscalDocumentEmailDelivery[]
+  fiscalNumberInutilizations      FiscalNumberInutilization[]
+  fiscalAuditEvents               FiscalAuditEvent[]
+  products                        Product[]
+  suppliers                       Supplier[]
+  parties                         Party[]
+  partyRoles                      PartyRole[]
+  partyExternalReferences         PartyExternalReference[]
+  partyAuditEvents                PartyAuditEvent[]
+  payableInvoiceImports           PayableInvoiceImport[]
+  payableTitles                   PayableTitle[]
+  payableInstallments             PayableInstallment[]
+  stockMovements                  StockMovement[]
+  productStockBalances            ProductStockBalance[]
+  receivableBatches               ReceivableBatch[]
+  receivableTitles                ReceivableTitle[]
+  receivableInstallments          ReceivableInstallment[]
+  bankReturnImports               BankReturnImport[]
+  bankReturnImportItems           BankReturnImportItem[]
+  bankStatementImports            BankStatementImport[]
+  bankStatementMovements          BankStatementMovement[]
+  bankDdaRecords                  BankDdaRecord[]
+  bankDdaAuditEvents              BankDdaAuditEvent[]
+  cashSessions                    CashSession[]
+  cashMovements                   CashMovement[]
+  settlements                     InstallmentSettlement[]
+  customerCredits                 CustomerCredit[]
+  customerCreditMovements         CustomerCreditMovement[]
+  branches                        CompanyBranch[]
+  sales                           Sale[]
+  saleReturns                     SaleReturn[]
+  saleItems                       SaleItem[]
+  saleReturnItems                 SaleReturnItem[]
+  salePayments                    SalePayment[]
+  salePixIntents                  SalePixIntent[]
+  receivablePixIntents            ReceivablePixIntent[]
+  screenParameters                ScreenParameter[]
+  printTemplates                  PrintTemplate[]
+  printTemplateVersions           PrintTemplateVersion[]
+  printTemplateBindings           PrintTemplateBinding[]
+  printerProfiles                 PrinterProfile[]
+  printJobs                       PrintJob[]
+  printAuditEvents                PrintAuditEvent[]
+  superTefConfigurations          SuperTefConfiguration[]
+  superTefTerminals               SuperTefTerminal[]
+  superTefCheckouts               SuperTefCheckout[]
+  superTefCheckoutRoutes          SuperTefCheckoutRoute[]
+  superTefPayments                SuperTefPayment[]
+  superTefAuditEvents             SuperTefAuditEvent[]
+  s3Configurations                S3Configuration[]
+  s3AuditEvents                   S3AuditEvent[]
+  sourceIntegrationConfigurations SourceIntegrationConfiguration[]
+  sourceIntegrationAuditEvents    SourceIntegrationAuditEvent[]
+
+  @@unique([sourceSystem, sourceTenantId])
+  @@index([name])
+  @@map("companies")
+}
+
+model S3Configuration {
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  status             String    @default("ACTIVE")
+  endpoint           String?
+  region             String    @default("us-east-1")
+  bucket             String
+  basePrefix         String
+  capacityGb         Float?
+  imagesFolder       String?
+  sourceScope        String?
+  accessKeyEncrypted String
+  secretKeyEncrypted String
+  forcePathStyle     Boolean   @default(true)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy          String?
+  canceledAt         DateTime? @db.Timestamptz(3)
+  canceledBy         String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("s3_configurations")
+}
+
+model S3AuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  entityType   String
+  entityId     String?
+  action       String
+  summary      String
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, branchCode, entityType, entityId])
+  @@map("s3_audit_events")
+}
+
+model SourceIntegrationConfiguration {
+  id                        String    @id @default(uuid())
+  companyId                 String
+  branchCode                Int       @default(1)
+  status                    String    @default("ACTIVE")
+  smtpHost                  String?
+  smtpPort                  Int?
+  smtpTimeout               Int?
+  smtpAuthenticate          Boolean?
+  smtpSecure                Boolean?
+  smtpAuthType              String?
+  smtpEmail                 String?
+  smtpPasswordEncrypted     String?
+  smtpSourceScope           String?
+  telegramEnabled           Boolean?
+  telegramBotTokenEncrypted String?
+  telegramBotUsername       String?
+  telegramSourceScope       String?
+  storageDefaultAcl         String?
+  storageDefaultExpiration  Int?
+  storageSourceScope        String?
+  lastSyncedAt              DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt                 DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                 String?
+  updatedAt                 DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                 String?
+  canceledAt                DateTime? @db.Timestamptz(3)
+  canceledBy                String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("source_integration_configurations")
+}
+
+model SourceIntegrationAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  action       String
+  summary      String
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@map("source_integration_audit_events")
+}
+
+model CompanyBranch {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  name                       String
+  isActive                   Boolean   @default(true)
+  isDefault                  Boolean   @default(false)
+  inventoryControlType       String    @default("TRADITIONAL")
+  quantityPrecision          String    @default("INTEGER_ONLY")
+  stockControlMode           String    @default("BY_PRODUCT")
+  stockIntegerQuantityMode   String    @default("BY_PRODUCT")
+  stockLotControlMode        String    @default("BY_PRODUCT")
+  stockExpirationControlMode String    @default("BY_PRODUCT")
+  stockGridControlMode       String    @default("BY_PRODUCT")
+  stockNegativeControlMode   String    @default("BY_PRODUCT")
+  allowSaleUnitPriceEdit     Boolean   @default(true)
+  allowSaleItemDiscount      Boolean   @default(true)
+  allowProductImageEdit      Boolean   @default(true)
+  requirePasswordToRemoveSaleItems Boolean @default(false)
+  fiscalLegalName            String?
+  fiscalTradeName            String?
+  fiscalDocument             String?
+  stateRegistration          String?
+  municipalRegistration      String?
+  taxRegimeCode              String?
+  fiscalStreet               String?
+  fiscalNumber               String?
+  fiscalComplement           String?
+  fiscalNeighborhood         String?
+  fiscalCity                 String?
+  fiscalCityCode             String?
+  fiscalState                String?
+  fiscalStateCode            String?
+  fiscalPostalCode           String?
+  fiscalCountryCode          String?   @default("1058")
+  fiscalCountryName          String?   @default("BRASIL")
+  fiscalPhone                String?
+  fiscalEmail                String?
+  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                  String?
+  canceledAt                 DateTime? @db.Timestamptz(3)
+  canceledBy                 String?
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  screenParameters ScreenParameter[]
+
+  @@unique([companyId, branchCode])
+  @@index([companyId, isActive, name])
+  @@map("company_branches")
+}
+
+model ScreenParameter {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchId       String
+  screenId       String
+  parametersJson String
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy      String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+  canceledBy     String?
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branch  CompanyBranch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchId, screenId])
+  @@index([companyId, branchId, screenId, canceledAt])
+  @@map("screen_parameters")
+}
+
+model PrintTemplate {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int       @default(1)
+  code           String
+  name           String
+  description    String?
+  documentType   String
+  mediaType      String
+  status         String    @default("DRAFT")
+  currentVersion Int       @default(0)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy      String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+  canceledBy     String?
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  versions PrintTemplateVersion[]
+  bindings PrintTemplateBinding[]
+  jobs     PrintJob[]
+
+  @@unique([companyId, branchCode, code])
+  @@index([companyId, branchCode, documentType, status, canceledAt])
+  @@map("print_templates")
+}
+
+model PrintTemplateVersion {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int       @default(1)
+  templateId     String
+  version        Int
+  status         String    @default("DRAFT")
+  layoutJson     String
+  sampleDataJson String?
+  publishedAt    DateTime? @db.Timestamptz(3)
+  publishedBy    String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy      String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+  canceledBy     String?
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  template PrintTemplate          @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  bindings PrintTemplateBinding[]
+  jobs     PrintJob[]
+
+  @@unique([templateId, version])
+  @@index([companyId, branchCode, status, publishedAt])
+  @@map("print_template_versions")
+}
+
+model PrinterProfile {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int       @default(1)
+  name           String
+  printerName    String
+  printerType    String
+  connectionType String    @default("WINDOWS")
+  language       String    @default("WINDOWS_DRIVER")
+  paperWidthMm   Float     @default(80)
+  paperHeightMm  Float?
+  columns        Int       @default(40)
+  dpi            Int       @default(203)
+  copies         Int       @default(1)
+  cutterEnabled  Boolean   @default(false)
+  settingsJson   String?
+  status         String    @default("ACTIVE")
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy      String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+  canceledBy     String?
+
+  company  Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bindings PrintTemplateBinding[]
+  jobs     PrintJob[]
+
+  @@unique([companyId, branchCode, name])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("printer_profiles")
+}
+
+model PrintTemplateBinding {
+  id                String    @id @default(uuid())
+  companyId         String
+  branchCode        Int       @default(1)
+  sourceSystem      String
+  eventType         String
+  templateId        String
+  templateVersionId String?
+  printerProfileId  String?
+  autoPrint         Boolean   @default(false)
+  copies            Int       @default(1)
+  status            String    @default("ACTIVE")
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  template        PrintTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion PrintTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  printerProfile  PrinterProfile?       @relation(fields: [printerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, sourceSystem, eventType])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("print_template_bindings")
+}
+
+model PrintJob {
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  sourceSystem       String
+  sourceTenantId     String
+  eventType          String
+  businessEntityType String
+  businessEntityId   String
+  idempotencyKey     String
+  templateId         String
+  templateVersionId  String
+  printerProfileId   String?
+  payloadJson        String
+  renderedFormat     String
+  renderedContent    String
+  contentHash        String
+  copies             Int       @default(1)
+  status             String    @default("PENDING")
+  requestedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  requestedBy        String?
+  dispatchedAt       DateTime? @db.Timestamptz(3)
+  completedAt        DateTime? @db.Timestamptz(3)
+  errorMessage       String?
+  localPrinterName   String?
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy          String?
+  canceledAt         DateTime? @db.Timestamptz(3)
+  canceledBy         String?
+
+  company         Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  template        PrintTemplate        @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion PrintTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  printerProfile  PrinterProfile?      @relation(fields: [printerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, idempotencyKey])
+  @@index([companyId, branchCode, eventType, status, requestedAt])
+  @@index([companyId, businessEntityType, businessEntityId])
+  @@map("print_jobs")
+}
+
+model PrintAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  entityType   String
+  entityId     String?
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, entityType, entityId, occurredAt])
+  @@map("print_audit_events")
+}
+
+model SuperTefConfiguration {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  provider                String    @default("SUPERTEF")
+  status                  String    @default("INACTIVE")
+  environment             String    @default("HOMOLOGATION")
+  clientKey               String
+  accessTokenEncrypted    String
+  tokenFingerprint        String
+  tokenHint               String
+  printReceipt            Boolean   @default(true)
+  operationTimeoutSeconds Int       @default(120)
+  pollIntervalSeconds     Int       @default(4)
+  lastConnectionTestAt    DateTime? @db.Timestamptz(3)
+  lastConnectionStatus    String?
+  lastConnectionMessage   String?
+  lastPosSyncAt           DateTime? @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  terminals SuperTefTerminal[]
+  payments  SuperTefPayment[]
+
+  @@unique([companyId, branchCode, provider])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("supertef_configurations")
+}
+
+model SuperTefTerminal {
+  id                String    @id @default(uuid())
+  configurationId   String
+  companyId         String
+  branchCode        Int       @default(1)
+  providerPosId     Int
+  operationalStatus String    @default("ACTIVE")
+  providerStatus    Int?
+  name              String
+  brand             String?
+  model             String?
+  bank              String?
+  providerClientId  Int?
+  providerCreatedAt DateTime? @db.Timestamptz(3)
+  providerUpdatedAt DateTime? @db.Timestamptz(3)
+  activatedAt       DateTime? @db.Timestamptz(3)
+  lastSeenAt        DateTime? @db.Timestamptz(3)
+  lastSyncedAt      DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  configuration  SuperTefConfiguration   @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  checkoutRoutes SuperTefCheckoutRoute[]
+  payments       SuperTefPayment[]
+
+  @@unique([configurationId, providerPosId])
+  @@index([companyId, branchCode, operationalStatus, canceledAt])
+  @@map("supertef_terminals")
+}
+
+model SuperTefCheckout {
+  id         String    @id @default(uuid())
+  companyId  String
+  branchCode Int       @default(1)
+  code       String
+  name       String
+  status     String    @default("ACTIVE")
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy  String?
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy  String?
+  canceledAt DateTime? @db.Timestamptz(3)
+  canceledBy String?
+
+  company  Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  routes   SuperTefCheckoutRoute[]
+  payments SuperTefPayment[]
+
+  @@unique([companyId, branchCode, code])
+  @@index([companyId, branchCode, status, canceledAt])
+  @@map("supertef_checkouts")
+}
+
+model SuperTefCheckoutRoute {
+  id         String    @id @default(uuid())
+  companyId  String
+  branchCode Int       @default(1)
+  checkoutId String
+  terminalId String
+  priority   Int
+  status     String    @default("ACTIVE")
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy  String?
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy  String?
+  canceledAt DateTime? @db.Timestamptz(3)
+  canceledBy String?
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  checkout SuperTefCheckout @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  terminal SuperTefTerminal @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+
+  @@unique([checkoutId, terminalId])
+  @@index([companyId, branchCode, checkoutId, status, priority])
+  @@index([companyId, branchCode, terminalId, status])
+  @@map("supertef_checkout_routes")
+}
+
+model SuperTefAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int      @default(1)
+  entityType   String
+  entityId     String?
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, branchCode, entityType, entityId])
+  @@map("supertef_audit_events")
+}
+
+model SuperTefPayment {
+  id                      String    @id @default(uuid())
+  configurationId         String
+  companyId               String
+  branchCode              Int       @default(1)
+  terminalId              String
+  checkoutId              String?
+  operationId             String
+  providerPaymentUniqueId String?
+  providerPaymentStatus   Int?
+  status                  String    @default("PENDING_SEND")
+  transactionType         String
+  installmentType         Int       @default(1)
+  installmentCount        Int       @default(1)
+  amount                  Float
+  orderId                 String
+  description             String
+  purpose                 String    @default("MANUAL")
+  businessReference       String?
+  printReceipt            Boolean   @default(true)
+  paymentMessage          String?
+  paymentOrderJson        String?
+  paymentDataJson         String?
+  terminalLockKey         String?   @unique
+  requestedAt             DateTime  @default(now()) @db.Timestamptz(3)
+  lastPolledAt            DateTime? @db.Timestamptz(3)
+  completedAt             DateTime? @db.Timestamptz(3)
+  appliedEntityType       String?
+  appliedEntityId         String?
+  appliedAt               DateTime? @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  configuration SuperTefConfiguration   @relation(fields: [configurationId], references: [id], onDelete: Restrict)
+  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  terminal      SuperTefTerminal        @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  checkout      SuperTefCheckout?       @relation(fields: [checkoutId], references: [id], onDelete: Restrict)
+  salePayments  SalePayment[]
+  settlements   InstallmentSettlement[]
+
+  @@unique([companyId, branchCode, operationId])
+  @@unique([configurationId, providerPaymentUniqueId])
+  @@index([companyId, branchCode, status, requestedAt])
+  @@index([companyId, branchCode, terminalId, status])
+  @@index([companyId, branchCode, purpose, businessReference])
+  @@index([companyId, branchCode, appliedEntityType, appliedEntityId])
+  @@map("supertef_payments")
+}
+
+model Product {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  status                  String    @default("ACTIVE")
+  name                    String
+  internalCode            String?
+  sku                     String?
+  barcode                 String?
+  unitCode                String    @default("UN")
+  productType             String    @default("GOODS")
+  tracksInventory         Boolean   @default(true)
+  allowFraction           Boolean   @default(false)
+  usesColorSize           Boolean   @default(false)
+  usesLotControl          Boolean   @default(false)
+  usesExpirationControl   Boolean   @default(false)
+  allowsNegativeStock     Boolean   @default(false)
+  currentStock            Float     @default(0)
+  minimumStock            Float     @default(0)
+  purchasePrice           Float?
+  salePrice               Float?
+  ncmCode                 String?
+  cestCode                String?
+  fiscalDescription       String?
+  gtinCode                String?
+  taxableGtinCode         String?
+  taxableUnitCode         String?
+  taxableConversionFactor Float     @default(1)
+  exTipiCode              String?
+  fiscalOriginCode        String?
+  defaultCfopCode         String?
+  icmsCsosnCode           String?
+  icmsCstCode             String?
+  icmsRate                Float?
+  pisCstCode              String?
+  pisRate                 Float?
+  cofinsCstCode           String?
+  cofinsRate              Float?
+  ipiCstCode              String?
+  ipiFrameworkCode        String?
+  ipiRate                 Float?
+  fiscalBenefitCode       String?
+  approximateTaxRate      Float?
+  ibsCbsCstCode           String?
+  ibsCbsClassCode         String?
+  fiscalNotes             String?
+  notes                   String?
+  imageS3SyncStatus       String    @default("NOT_TRACKED")
+  imageS3ObjectKey        String?
+  imageS3LastError        String?
+  imageS3SyncedAt         DateTime? @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payableInvoiceImportItems PayableInvoiceImportItem[]
+  stockMovements            StockMovement[]
+  stockBalances             ProductStockBalance[]
+  saleItems                 SaleItem[]
+  saleReturnItems           SaleReturnItem[]
+  fiscalTaxRules            FiscalTaxRule[]
+  fiscalDocumentItems       FiscalDocumentItem[]
+
+  @@unique([companyId, branchCode, internalCode])
+  @@unique([companyId, branchCode, sku])
+  @@unique([companyId, branchCode, barcode])
+  @@index([companyId, status, name])
+  @@index([companyId, productType, tracksInventory])
+  @@index([companyId, branchCode, imageS3SyncStatus])
+  @@map("products")
+}
+
+model ProductStockBalance {
+  id                String    @id @default(uuid())
+  companyId         String
+  branchCode        Int       @default(0)
+  productId         String
+  variantKey        String    @default("GERAL")
+  colorCode         String?
+  colorName         String?
+  sizeCode          String?
+  lotNumber         String?
+  lotExpirationDate DateTime? @db.Timestamptz(3)
+  quantity          Float     @default(0)
+  reservedQuantity  Float     @default(0)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, productId, branchCode, variantKey])
+  @@index([companyId, branchCode, productId])
+  @@index([companyId, productId, lotNumber])
+  @@map("product_stock_balances")
+}
+
+model FiscalCertificate {
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  status             String    @default("ACTIVE")
+  certificateType    String    @default("A1")
+  environment        String    @default("PRODUCTION")
+  purpose            String    @default("NFE_DFE")
+  isDefault          Boolean   @default(false)
+  aliasName          String
+  authorStateCode    String
+  holderName         String
+  holderDocument     String
+  serialNumber       String?
+  thumbprint         String?
+  validFrom          DateTime? @db.Timestamptz(3)
+  validTo            DateTime? @db.Timestamptz(3)
+  pfxEncryptedBase64 String
+  passwordEncrypted  String
+  lastNsu            String?
+  lastMaxNsu         String?
+  lastSyncAt         DateTime? @db.Timestamptz(3)
+  lastSyncStatus     String?
+  lastSyncMessage    String?
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy          String?
+  canceledAt         DateTime? @db.Timestamptz(3)
+  canceledBy         String?
+
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  payableInvoiceImports PayableInvoiceImport[]
+  nfceProfiles          NfceProfile[]
+  nfeProfiles           NfeProfile[]
+  nfseProfiles          NfseProfile[]
+  fiscalDocuments       FiscalDocument[]
+
+  @@index([companyId, status, environment, purpose, aliasName])
+  @@map("fiscal_certificates")
+}
+
+model Supplier {
+  id                String    @id @default(uuid())
+  companyId         String
+  branchCode        Int       @default(1)
+  partyId           String?
+  status            String    @default("ACTIVE")
+  legalName         String
+  tradeName         String?
+  document          String?
+  stateRegistration String?
+  email             String?
+  phone             String?
+  notes             String?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party                 Party?                 @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  payableInvoiceImports PayableInvoiceImport[]
+  payableTitles         PayableTitle[]
+
+  @@unique([companyId, branchCode, document])
+  @@unique([companyId, branchCode, partyId])
+  @@index([companyId, status, legalName])
+  @@index([partyId])
+  @@map("suppliers")
+}
+
+model PayableInvoiceImport {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  supplierId          String?
+  fiscalCertificateId String?
+  status              String    @default("PENDING_APPROVAL")
+  importType          String    @default("XML_UPLOAD")
+  documentModel       String
+  accessKey           String
+  invoiceNumber       String
+  series              String?
+  operationNature     String?
+  issueDate           DateTime @db.Timestamptz(3)
+  entryDate           DateTime? @db.Timestamptz(3)
+  totalProductsAmount Float     @default(0)
+  totalInvoiceAmount  Float     @default(0)
+  xmlHash             String
+  xmlContentBlob      Bytes
+  distributionNsu     String?
+  parsedSnapshotJson  String?
+  approvalNotes       String?
+  cancellationReason  String?
+  approvedAt          DateTime? @db.Timestamptz(3)
+  approvedBy          String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company           Company                           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier          Supplier?                         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  fiscalCertificate FiscalCertificate?                @relation(fields: [fiscalCertificateId], references: [id], onDelete: SetNull)
+  items             PayableInvoiceImportItem[]
+  installments      PayableInvoiceImportInstallment[]
+  payableTitle      PayableTitle?
+  stockMovements    StockMovement[]
+
+  @@unique([companyId, branchCode, accessKey])
+  @@unique([companyId, branchCode, xmlHash])
+  @@index([companyId, status, issueDate])
+  @@index([companyId, invoiceNumber, series])
+  @@index([fiscalCertificateId, distributionNsu])
+  @@map("payable_invoice_imports")
+}
+
+model PayableInvoiceImportItem {
+  id                         String    @id @default(uuid())
+  invoiceImportId            String
+  productId                  String?
+  lineNumber                 Int
+  approvalAction             String?
+  supplierItemCode           String?
+  barcode                    String?
+  description                String
+  ncmCode                    String?
+  cfopCode                   String?
+  unitCode                   String?
+  quantity                   Float     @default(0)
+  unitPrice                  Float     @default(0)
+  totalPrice                 Float     @default(0)
+  tracksInventory            Boolean   @default(true)
+  draftProductName           String?
+  draftInternalCode          String?
+  draftSku                   String?
+  draftBarcode               String?
+  draftUnitCode              String?
+  draftProductType           String?
+  draftTracksInventory       Boolean?
+  draftAllowFraction         Boolean?
+  draftUsesLotControl        Boolean?
+  draftUsesExpirationControl Boolean?
+  draftUsesColorSize         Boolean?
+  draftAllowsNegativeStock   Boolean?
+  draftMinimumStock          Float?
+  draftNotes                 String?
+  productCheckedAt           DateTime? @db.Timestamptz(3)
+  productCheckedBy           String?
+  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                  String?
+  canceledAt                 DateTime? @db.Timestamptz(3)
+  canceledBy                 String?
+
+  invoiceImport  PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
+  product        Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  stockMovements StockMovement[]
+
+  @@unique([invoiceImportId, lineNumber])
+  @@index([productId])
+  @@map("payable_invoice_import_items")
+}
+
+model PayableInvoiceImportInstallment {
+  id                String    @id @default(uuid())
+  invoiceImportId   String
+  installmentLabel  String?
+  installmentNumber Int
+  dueDate           DateTime @db.Timestamptz(3)
+  originalAmount    Float     @default(0)
+  additionAmount    Float     @default(0)
+  discountAmount    Float     @default(0)
+  finalAmount       Float     @default(0)
+  amount            Float     @default(0)
+  status            String    @default("OPEN")
+  paymentMethod     String?
+  settledAt         DateTime? @db.Timestamptz(3)
+  notes             String?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  invoiceImport PayableInvoiceImport @relation(fields: [invoiceImportId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceImportId, installmentNumber])
+  @@index([dueDate])
+  @@map("payable_invoice_import_installments")
+}
+
+model PayableTitle {
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  supplierId               String?
+  sourceDocumentType       String
+  sourceDocumentId         String    @unique
+  status                   String    @default("OPEN")
+  documentNumber           String
+  description              String
+  issueDate                DateTime @db.Timestamptz(3)
+  totalAmount              Float     @default(0)
+  supplierNameSnapshot     String
+  supplierDocumentSnapshot String?
+  createdAt                DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                String?
+  canceledAt               DateTime? @db.Timestamptz(3)
+  canceledBy               String?
+
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  sourceImport PayableInvoiceImport @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
+  installments PayableInstallment[]
+
+  @@unique([companyId, branchCode, sourceDocumentType, sourceDocumentId])
+  @@index([companyId, status, issueDate])
+  @@map("payable_titles")
+}
+
+model PayableInstallment {
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  titleId                  String
+  installmentNumber        Int
+  installmentCount         Int
+  dueDate                  DateTime @db.Timestamptz(3)
+  originalAmount           Float     @default(0)
+  additionAmount           Float     @default(0)
+  discountAmount           Float     @default(0)
+  finalAmount              Float     @default(0)
+  amount                   Float     @default(0)
+  openAmount               Float     @default(0)
+  paidAmount               Float     @default(0)
+  status                   String    @default("OPEN")
+  paymentMethod            String?
+  settledAt                DateTime? @db.Timestamptz(3)
+  notes                    String?
+  descriptionSnapshot      String
+  supplierNameSnapshot     String
+  supplierDocumentSnapshot String?
+  createdAt                DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                String?
+  canceledAt               DateTime? @db.Timestamptz(3)
+  canceledBy               String?
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  title   PayableTitle @relation(fields: [titleId], references: [id], onDelete: Restrict)
+
+  @@unique([titleId, installmentNumber])
+  @@index([companyId, status, dueDate])
+  @@map("payable_installments")
+}
+
+model StockMovement {
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  productId          String
+  sourceImportId     String?
+  sourceImportItemId String?
+  sourceType         String    @default("PAYABLE_IMPORT")
+  sourceId           String?
+  sourceItemId       String?
+  movementType       String
+  quantity           Float     @default(0)
+  previousStock      Float     @default(0)
+  resultingStock     Float     @default(0)
+  unitCost           Float?
+  notes              String?
+  occurredAt         DateTime @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy          String?
+  canceledAt         DateTime? @db.Timestamptz(3)
+  canceledBy         String?
+
+  company          Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product          Product                   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceImport     PayableInvoiceImport?     @relation(fields: [sourceImportId], references: [id], onDelete: Restrict)
+  sourceImportItem PayableInvoiceImportItem? @relation(fields: [sourceImportItemId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, occurredAt])
+  @@index([productId, occurredAt])
+  @@index([sourceImportId])
+  @@index([companyId, sourceType, sourceId])
+  @@map("stock_movements")
+}
+
+model Sale {
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  sourceSystem             String
+  sourceTenantId           String
+  saleNumber               String
+  saleChannel              String    @default("GENERAL")
+  status                   String    @default("CONFIRMED")
+  customerPartyId          String?
+  customerNameSnapshot     String
+  customerDocumentSnapshot String?
+  sourceEntityType         String?
+  sourceEntityId           String?
+  sourceEntityName         String?
+  subtotalAmount           Float     @default(0)
+  discountAmount           Float     @default(0)
+  totalAmount              Float     @default(0)
+  paidAmount               Float     @default(0)
+  receivableAmount         Float     @default(0)
+  paymentSummary           String?
+  receivableBatchId        String?
+  receivableTitleId        String?
+  notes                    String?
+  confirmedAt              DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                String?
+  canceledAt               DateTime? @db.Timestamptz(3)
+  canceledBy               String?
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerParty   Party?           @relation(fields: [customerPartyId], references: [id], onDelete: SetNull)
+  receivableTitle ReceivableTitle? @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  items           SaleItem[]
+  payments        SalePayment[]
+  returns         SaleReturn[]
+  fiscalDocument  FiscalDocument?
+  nfseDocuments   NfseDocument[]
+
+  @@unique([companyId, branchCode, saleNumber])
+  @@index([companyId, branchCode, status, confirmedAt])
+  @@index([companyId, saleChannel, confirmedAt])
+  @@index([companyId, customerPartyId])
+  @@index([receivableTitleId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  saleId                String
+  productId             String
+  lineNumber            Int
+  productNameSnapshot   String
+  productCodeSnapshot   String?
+  unitCodeSnapshot      String
+  quantity              Float
+  unitCost              Float?
+  unitPrice             Float
+  discountAmount        Float     @default(0)
+  totalAmount           Float
+  tracksInventory       Boolean   @default(false)
+  allowFraction         Boolean   @default(false)
+  usesColorSize         Boolean   @default(false)
+  usesLotControl        Boolean   @default(false)
+  usesExpirationControl Boolean   @default(false)
+  allowsNegativeStock   Boolean   @default(false)
+  variantKey            String    @default("GERAL")
+  colorCode             String?
+  colorName             String?
+  sizeCode              String?
+  lotNumber             String?
+  lotExpirationDate     DateTime? @db.Timestamptz(3)
+  previousStock         Float?
+  resultingStock        Float?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy             String?
+  canceledAt            DateTime? @db.Timestamptz(3)
+  canceledBy            String?
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  returnItems SaleReturnItem[]
+
+  @@unique([saleId, lineNumber])
+  @@index([companyId, productId, createdAt])
+  @@index([saleId])
+  @@map("sale_items")
+}
+
+model SalePayment {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  saleId                  String
+  paymentMethod           String
+  amount                  Float
+  dueDate                 DateTime? @db.Timestamptz(3)
+  installmentCount        Int?
+  cardInstallmentCount    Int?
+  cashSessionId           String?
+  bankAccountId           String?
+  bankAccountLabel        String?
+  receivableInstallmentId String?
+  superTefPaymentId       String?   @unique
+  status                  String    @default("REGISTERED")
+  notes                   String?
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale            Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  cashSession     CashSession?     @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  superTefPayment SuperTefPayment? @relation(fields: [superTefPaymentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, paymentMethod, createdAt])
+  @@index([saleId])
+  @@index([cashSessionId])
+  @@map("sale_payments")
+}
+
+model SalePixIntent {
+  id                   String    @id @default(uuid())
+  companyId            String
+  branchCode           Int       @default(1)
+  sourceSystem         String
+  sourceTenantId       String
+  operationId          String
+  amount               Float
+  status               String    @default("CREATED")
+  bankAccountId        String?
+  bankAccountLabel     String?
+  txid                 String
+  pixCopyPaste         String?
+  providerPayloadJson  String?
+  providerResponseJson String?
+  paidAt               DateTime? @db.Timestamptz(3)
+  appliedSaleId        String?   @unique
+  appliedAt            DateTime? @db.Timestamptz(3)
+  expiresAt            DateTime? @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy            String?
+  canceledAt           DateTime? @db.Timestamptz(3)
+  canceledBy           String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, operationId])
+  @@unique([companyId, txid])
+  @@index([companyId, branchCode, status, createdAt])
+  @@map("sale_pix_intents")
+}
+
+model ReceivablePixIntent {
+  id                   String    @id @default(uuid())
+  companyId            String
+  branchCode           Int
+  sourceSystem         String
+  sourceTenantId       String
+  operationId          String
+  settlementGroupId    String
+  installmentIdsJson   String
+  amount               Float
+  status               String    @default("CREATED")
+  bankAccountId        String
+  bankAccountLabel     String
+  txid                 String
+  pixCopyPaste         String?
+  providerPayloadJson  String?
+  providerResponseJson String?
+  paidAt               DateTime? @db.Timestamptz(3)
+  appliedAt            DateTime? @db.Timestamptz(3)
+  expiresAt            DateTime? @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy            String?
+  canceledAt           DateTime? @db.Timestamptz(3)
+  canceledBy           String?
+
+  company     Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  settlements InstallmentSettlement[]
+
+  @@unique([companyId, branchCode, operationId])
+  @@unique([companyId, txid])
+  @@unique([companyId, settlementGroupId])
+  @@index([companyId, branchCode, status, createdAt])
+  @@map("receivable_pix_intents")
+}
+
+model NfceProfile {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  certificateId         String
+  status                String    @default("ACTIVE")
+  environment           String    @default("HOMOLOGATION")
+  autoIssueOnSale       Boolean   @default(false)
+  series                Int       @default(1)
+  nextNumber            Int       @default(1)
+  stateCode             String
+  cityCode              String
+  stateRegistration     String
+  legalName             String
+  tradeName             String?
+  taxRegimeCode         String
+  street                String
+  number                String
+  complement            String?
+  neighborhood          String
+  city                  String
+  state                 String
+  postalCode            String
+  phone                 String?
+  defaultCfopCode       String    @default("5102")
+  defaultOriginCode     String    @default("0")
+  defaultIcmsCst        String    @default("00")
+  defaultIcmsRate       Float     @default(0)
+  defaultPisCst         String    @default("08")
+  defaultCofinsCst      String    @default("08")
+  ibsCbsCst             String    @default("000")
+  ibsCbsClassCode       String    @default("000001")
+  ibsStateRate          Float     @default(0.1)
+  ibsMunicipalRate      Float     @default(0)
+  cbsRate               Float     @default(0.9)
+  additionalInformation String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy             String?
+  canceledAt            DateTime? @db.Timestamptz(3)
+  canceledBy            String?
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  certificate FiscalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  documents   FiscalDocument[]
+
+  @@unique([companyId, branchCode, environment])
+  @@index([companyId, branchCode, status, autoIssueOnSale])
+  @@map("nfce_profiles")
+}
+
+model NfeProfile {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  certificateId              String
+  defaultOperationNatureId   String?
+  status                     String    @default("ACTIVE")
+  environment                String    @default("HOMOLOGATION")
+  autoIssueOnSale            Boolean   @default(false)
+  series                     Int       @default(1)
+  nextNumber                 Int       @default(1)
+  emissionType               String    @default("NORMAL")
+  danfeLayout                String    @default("PORTRAIT")
+  softwareVersion            String    @default("MSINFOR FIN 1.0")
+  schemaVersion              String    @default("PL_010E_V1.02+PL_010D_V1.03")
+  cbenefCatalogVersion       String    @default("20260626")
+  sendEmailToRecipient       Boolean   @default(false)
+  smtpHost                   String?
+  smtpPort                   Int?
+  smtpSecure                 Boolean   @default(true)
+  smtpAuthenticate           Boolean   @default(true)
+  smtpUsername               String?
+  smtpPasswordEncrypted      String?
+  smtpFromEmail              String?
+  smtpFromName               String?
+  smtpTimeoutSeconds         Int       @default(60)
+  homologationEmailRecipient String?
+  additionalInformation      String?
+  technicalResponsibleCnpj   String?
+  technicalResponsibleName   String?
+  technicalResponsibleEmail  String?
+  technicalResponsiblePhone  String?
+  csrtId                     String?
+  csrtHash                   String?
+  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                  String?
+  canceledAt                 DateTime? @db.Timestamptz(3)
+  canceledBy                 String?
+
+  company                Company                     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  certificate            FiscalCertificate           @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  defaultOperationNature FiscalOperationNature?      @relation("NfeProfileDefaultOperation", fields: [defaultOperationNatureId], references: [id], onDelete: SetNull)
+  documents              FiscalDocument[]
+  inutilizations         FiscalNumberInutilization[]
+
+  @@unique([companyId, branchCode, environment, series])
+  @@index([companyId, branchCode, status, autoIssueOnSale])
+  @@map("nfe_profiles")
+}
+
+model NfseProfile {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  certificateId              String
+  defaultServiceItemId       String?
+  status                     String    @default("ACTIVE")
+  environment                String    @default("HOMOLOGATION")
+  autoIssueOnSale            Boolean   @default(false)
+  series                     Int       @default(1)
+  nextNumber                 Int       @default(1)
+  softwareVersion            String    @default("MSINFOR FIN 1.0")
+  schemaVersion              String    @default("1.01")
+  simpleNationalOption       Int       @default(3)
+  simpleNationalTaxRegime    Int?      @default(1)
+  specialTaxRegime           Int       @default(0)
+  sendEmailToRecipient       Boolean   @default(false)
+  smtpHost                   String?
+  smtpPort                   Int?
+  smtpSecure                 Boolean   @default(true)
+  smtpAuthenticate           Boolean   @default(true)
+  smtpUsername               String?
+  smtpPasswordEncrypted      String?
+  smtpFromEmail              String?
+  smtpFromName               String?
+  smtpTimeoutSeconds         Int       @default(60)
+  homologationEmailRecipient String?
+  lastMunicipalCheckAt       DateTime? @db.Timestamptz(3)
+  lastMunicipalCheckStatus   String?
+  lastMunicipalCheckMessage  String?
+  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                  String?
+  canceledAt                 DateTime? @db.Timestamptz(3)
+  canceledBy                 String?
+
+  company            Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  certificate        FiscalCertificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  defaultServiceItem NfseServiceItem?  @relation("NfseProfileDefaultService", fields: [defaultServiceItemId], references: [id], onDelete: SetNull)
+  documents          NfseDocument[]
+
+  @@unique([companyId, branchCode, environment, series])
+  @@index([companyId, branchCode, status, autoIssueOnSale])
+  @@map("nfse_profiles")
+}
+
+model NfseServiceItem {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int
+  status                     String    @default("ACTIVE")
+  internalCode               String
+  name                       String
+  description                String
+  cnaeCode                   String?
+  nationalTaxCode            String
+  municipalTaxCode           String?
+  nbsCode                    String?
+  serviceCityCode            String
+  issTaxationCode            String    @default("1")
+  issWithholdingCode         String    @default("1")
+  issRate                    Float?
+  pisCofinsCst               String    @default("00")
+  pisRate                    Float?
+  cofinsRate                 Float?
+  simpleNationalTotalTaxRate Float?
+  ibsCbsEnabled              Boolean   @default(false)
+  ibsCbsCst                  String?
+  ibsCbsClassCode            String?
+  isDefault                  Boolean   @default(false)
+  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                  String?
+  canceledAt                 DateTime? @db.Timestamptz(3)
+  canceledBy                 String?
+
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  defaultInProfiles NfseProfile[]            @relation("NfseProfileDefaultService")
+  descriptions      NfseServiceDescription[]
+  documents         NfseDocument[]
+
+  @@unique([companyId, branchCode, internalCode])
+  @@index([companyId, branchCode, status, nationalTaxCode])
+  @@map("nfse_service_items")
+}
+
+model NfseServiceDescription {
+  id            String    @id @default(uuid())
+  companyId     String
+  branchCode    Int
+  serviceItemId String
+  status        String    @default("ACTIVE")
+  text          String
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy     String?
+  canceledAt    DateTime? @db.Timestamptz(3)
+  canceledBy    String?
+
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  serviceItem NfseServiceItem @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceItemId, text])
+  @@index([companyId, branchCode, serviceItemId, status, sortOrder])
+  @@map("nfse_service_descriptions")
+}
+
+model NfseDocument {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int
+  profileId           String
+  serviceItemId       String?
+  takerPartyId        String
+  receivableTitleId   String?
+  saleId              String?
+  sourceSystem        String
+  sourceTenantId      String
+  sourceEntityType    String
+  sourceEntityId      String
+  idempotencyKey      String
+  receivablePlanJson  String?
+  environment         String
+  series              Int
+  number              Int
+  dpsId               String
+  accessKey           String?   @unique
+  nationalNfseNumber  String?
+  status              String    @default("PENDING")
+  statusCode          String?
+  statusMessage       String?
+  competenceDate      DateTime @db.Timestamptz(3)
+  issuedAt            DateTime @db.Timestamptz(3)
+  serviceCityCode     String
+  grossAmount         Float
+  discountAmount      Float     @default(0)
+  deductionAmount     Float     @default(0)
+  netAmount           Float
+  issuerSnapshotJson  String
+  takerSnapshotJson   String
+  serviceSnapshotJson String
+  taxSnapshotJson     String
+  signedDpsXml        String?
+  requestJson         String?
+  responseJson        String?
+  authorizedXml       String?
+  danfseFileName      String?
+  danfsePdfBlob       Bytes?
+  danfseDownloadedAt  DateTime? @db.Timestamptz(3)
+  attemptCount        Int       @default(0)
+  lastAttemptAt       DateTime? @db.Timestamptz(3)
+  lastError           String?
+  emailSentAt         DateTime? @db.Timestamptz(3)
+  emailError          String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  profile         NfseProfile           @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  serviceItem     NfseServiceItem?      @relation(fields: [serviceItemId], references: [id], onDelete: SetNull)
+  takerParty      Party                 @relation(fields: [takerPartyId], references: [id], onDelete: Restrict)
+  receivableTitle ReceivableTitle?      @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  sale            Sale?                 @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  attempts        NfseDocumentAttempt[]
+  emailDeliveries NfseEmailDelivery[]
+
+  @@unique([companyId, branchCode, environment, series, number])
+  @@unique([companyId, branchCode, environment, dpsId])
+  @@unique([companyId, branchCode, idempotencyKey])
+  @@index([companyId, branchCode, status, issuedAt])
+  @@index([companyId, takerPartyId, issuedAt])
+  @@index([receivableTitleId])
+  @@index([saleId])
+  @@map("nfse_documents")
+}
+
+model NfseDocumentAttempt {
+  id             String    @id @default(uuid())
+  companyId      String
+  nfseDocumentId String
+  attemptNumber  Int
+  operation      String    @default("ISSUE")
+  status         String
+  httpStatus     Int?
+  statusCode     String?
+  statusMessage  String?
+  requestJson    String?
+  responseJson   String?
+  errorMessage   String?
+  attemptedAt    DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy      String?
+  canceledAt     DateTime? @db.Timestamptz(3)
+  canceledBy     String?
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  nfseDocument NfseDocument @relation(fields: [nfseDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([nfseDocumentId, attemptNumber])
+  @@index([companyId, attemptedAt])
+  @@map("nfse_document_attempts")
+}
+
+model NfseEmailDelivery {
+  id              String    @id @default(uuid())
+  companyId       String
+  branchCode      Int
+  nfseDocumentId  String
+  recipientEmail  String
+  subject         String
+  status          String    @default("PENDING")
+  messageId       String?
+  attemptedAt     DateTime  @default(now()) @db.Timestamptz(3)
+  sentAt          DateTime? @db.Timestamptz(3)
+  errorMessage    String?
+  attachmentsJson String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy       String?
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy       String?
+  canceledAt      DateTime? @db.Timestamptz(3)
+  canceledBy      String?
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  nfseDocument NfseDocument @relation(fields: [nfseDocumentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, recipientEmail, attemptedAt])
+  @@index([nfseDocumentId, status, attemptedAt])
+  @@map("nfse_email_deliveries")
+}
+
+model NfseMunicipalParameter {
+  id               String    @id @default(uuid())
+  cacheKey         String    @unique
+  companyId        String
+  branchCode       Int
+  environment      String
+  municipalityCode String
+  nationalTaxCode  String?
+  competence       String?
+  parameterType    String
+  requestPath      String
+  status           String
+  httpStatus       Int?
+  responseJson     String?
+  errorMessage     String?
+  fetchedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy        String?
+  canceledAt       DateTime? @db.Timestamptz(3)
+  canceledBy       String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, environment, municipalityCode, nationalTaxCode, competence, parameterType])
+  @@index([companyId, branchCode, environment, municipalityCode, fetchedAt])
+  @@map("nfse_municipal_parameters")
+}
+
+model FiscalOperationNature {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int
+  status                String    @default("ACTIVE")
+  code                  String
+  name                  String
+  documentModel         String    @default("55")
+  operationType         String    @default("OUTBOUND")
+  destinationType       String    @default("INTERNAL")
+  purposeCode           String    @default("1")
+  cfopCode              String
+  finalConsumer         Boolean   @default(true)
+  presenceIndicator     String    @default("1")
+  intermediaryIndicator String?
+  freightMode           String    @default("9")
+  isDefault             Boolean   @default(false)
+  additionalInformation String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy             String?
+  canceledAt            DateTime? @db.Timestamptz(3)
+  canceledBy            String?
+
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  taxRules          FiscalTaxRule[]
+  defaultInProfiles NfeProfile[]     @relation("NfeProfileDefaultOperation")
+  documents         FiscalDocument[]
+
+  @@unique([companyId, branchCode, code])
+  @@index([companyId, branchCode, status, documentModel])
+  @@map("fiscal_operation_natures")
+}
+
+model FiscalTaxRule {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int
+  operationNatureId       String
+  productId               String?
+  status                  String    @default("ACTIVE")
+  name                    String
+  priority                Int       @default(100)
+  originCode              String    @default("0")
+  icmsCsosnCode           String?
+  icmsCstCode             String?
+  icmsBaseMode            String?
+  icmsRate                Float     @default(0)
+  icmsBaseReductionRate   Float     @default(0)
+  icmsStRate              Float     @default(0)
+  fcpRate                 Float     @default(0)
+  difalDestinationRate    Float     @default(0)
+  difalInterstateRate     Float     @default(0)
+  fiscalBenefitCode       String?
+  fiscalBenefitRequired   Boolean   @default(false)
+  fiscalBenefitLegalBasis String?
+  pisCstCode              String    @default("49")
+  pisRate                 Float     @default(0)
+  cofinsCstCode           String    @default("49")
+  cofinsRate              Float     @default(0)
+  ipiCstCode              String?
+  ipiFrameworkCode        String?
+  ipiRate                 Float     @default(0)
+  ibsCbsEnabled           Boolean   @default(false)
+  ibsCbsCstCode           String?
+  ibsCbsClassCode         String?
+  ibsStateRate            Float     @default(0)
+  ibsMunicipalRate        Float     @default(0)
+  cbsRate                 Float     @default(0)
+  selectiveTaxCode        String?
+  selectiveTaxRate        Float     @default(0)
+  validFrom               DateTime? @db.Timestamptz(3)
+  validTo                 DateTime? @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  operationNature FiscalOperationNature @relation(fields: [operationNatureId], references: [id], onDelete: Restrict)
+  product         Product?              @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, operationNatureId, status, priority])
+  @@index([companyId, branchCode, productId])
+  @@map("fiscal_tax_rules")
+}
+
+model FiscalBenefitCode {
+  id                     String    @id @default(uuid())
+  companyId              String
+  branchCode             Int
+  stateCode              String
+  code                   String
+  catalogVersion         String
+  status                 String    @default("ACTIVE")
+  description            String
+  legalBasis             String?
+  observations           String?
+  simpleNationalEligible Boolean   @default(false)
+  cstCodesJson           String?
+  validFrom              DateTime? @db.Timestamptz(3)
+  validTo                DateTime? @db.Timestamptz(3)
+  sourceUrl              String?
+  createdAt              DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy              String?
+  updatedAt              DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy              String?
+  canceledAt             DateTime? @db.Timestamptz(3)
+  canceledBy             String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, stateCode, code, catalogVersion])
+  @@index([companyId, branchCode, stateCode, status, code])
+  @@map("fiscal_benefit_codes")
+}
+
+model FiscalDocument {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  saleId                  String?   @unique
+  receivableTitleId       String?
+  sourceSystem            String?
+  sourceTenantId          String?
+  sourceEntityType        String?
+  sourceEntityId          String?
+  idempotencyKey          String?
+  receivablePlanJson      String?
+  profileId               String?
+  nfeProfileId            String?
+  operationNatureId       String?
+  recipientPartyId        String?
+  certificateId           String
+  model                   String    @default("65")
+  environment             String
+  series                  Int
+  number                  Int
+  randomCode              String?
+  accessKey               String?   @unique
+  status                  String    @default("PENDING")
+  statusCode              String?
+  statusMessage           String?
+  protocol                String?
+  receivedAt              DateTime? @db.Timestamptz(3)
+  issuedAt                DateTime @db.Timestamptz(3)
+  qrCodeUrl               String?
+  operationNatureSnapshot String?
+  issuerSnapshotJson      String?
+  recipientSnapshotJson   String?
+  totalsSnapshotJson      String?
+  paymentSnapshotJson     String?
+  schemaVersion           String?
+  danfeFileName           String?
+  danfePdfBlob            Bytes?
+  danfeGeneratedAt        DateTime? @db.Timestamptz(3)
+  signedXml               String?
+  responseXml             String?
+  processedXml            String?
+  attemptCount            Int       @default(0)
+  lastAttemptAt           DateTime? @db.Timestamptz(3)
+  lastError               String?
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  company         Company                       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale            Sale?                         @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  receivableTitle ReceivableTitle?              @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  profile         NfceProfile?                  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  nfeProfile      NfeProfile?                   @relation(fields: [nfeProfileId], references: [id], onDelete: Restrict)
+  operationNature FiscalOperationNature?        @relation(fields: [operationNatureId], references: [id], onDelete: Restrict)
+  recipientParty  Party?                        @relation(fields: [recipientPartyId], references: [id], onDelete: SetNull)
+  certificate     FiscalCertificate             @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  attempts        FiscalDocumentAttempt[]
+  items           FiscalDocumentItem[]
+  installments    FiscalDocumentInstallment[]
+  events          FiscalDocumentEvent[]
+  emailDeliveries FiscalDocumentEmailDelivery[]
+
+  @@unique([companyId, branchCode, model, series, number])
+  @@unique([companyId, branchCode, idempotencyKey])
+  @@index([companyId, branchCode, status, issuedAt])
+  @@index([companyId, branchCode, sourceEntityType, sourceEntityId])
+  @@index([receivableTitleId])
+  @@map("fiscal_documents")
+}
+
+model FiscalDocumentAttempt {
+  id               String    @id @default(uuid())
+  companyId        String
+  fiscalDocumentId String
+  attemptNumber    Int
+  status           String
+  statusCode       String?
+  statusMessage    String?
+  signedXml        String?
+  responseXml      String?
+  processedXml     String?
+  errorMessage     String?
+  attemptedAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy        String?
+  canceledAt       DateTime? @db.Timestamptz(3)
+  canceledBy       String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([fiscalDocumentId, attemptNumber])
+  @@index([companyId, attemptedAt])
+  @@map("fiscal_document_attempts")
+}
+
+model FiscalDocumentItem {
+  id                String    @id @default(uuid())
+  companyId         String
+  fiscalDocumentId  String
+  productId         String?
+  lineNumber        Int
+  productCode       String
+  description       String
+  ncmCode           String
+  cestCode          String?
+  cfopCode          String
+  unitCode          String
+  quantity          Float
+  unitPrice         Float
+  grossAmount       Float
+  discountAmount    Float     @default(0)
+  totalAmount       Float
+  originCode        String
+  icmsCode          String
+  pisCstCode        String
+  cofinsCstCode     String
+  fiscalBenefitCode String?
+  taxDetailsJson    String
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+  product        Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([fiscalDocumentId, lineNumber])
+  @@index([companyId, fiscalDocumentId])
+  @@map("fiscal_document_items")
+}
+
+model FiscalDocumentInstallment {
+  id                String    @id @default(uuid())
+  companyId         String
+  fiscalDocumentId  String
+  installmentNumber Int
+  reference         String
+  dueDate           DateTime @db.Timestamptz(3)
+  amount            Float
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy         String?
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy         String?
+  canceledAt        DateTime? @db.Timestamptz(3)
+  canceledBy        String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([fiscalDocumentId, installmentNumber])
+  @@index([companyId, dueDate])
+  @@map("fiscal_document_installments")
+}
+
+model FiscalDocumentEvent {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int
+  fiscalDocumentId String
+  eventType        String
+  sequence         Int       @default(1)
+  status           String    @default("PENDING")
+  statusCode       String?
+  statusMessage    String?
+  protocol         String?
+  eventAt          DateTime @db.Timestamptz(3)
+  justification    String?
+  correctionText   String?
+  signedXml        String?
+  responseXml      String?
+  processedXml     String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy        String?
+  canceledAt       DateTime? @db.Timestamptz(3)
+  canceledBy       String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([fiscalDocumentId, eventType, sequence])
+  @@index([companyId, branchCode, eventType, eventAt])
+  @@map("fiscal_document_events")
+}
+
+model FiscalDocumentEmailDelivery {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int
+  fiscalDocumentId String
+  recipientEmail   String
+  subject          String
+  status           String    @default("PENDING")
+  messageId        String?
+  attemptedAt      DateTime  @default(now()) @db.Timestamptz(3)
+  sentAt           DateTime? @db.Timestamptz(3)
+  errorMessage     String?
+  attachmentsJson  String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy        String?
+  canceledAt       DateTime? @db.Timestamptz(3)
+  canceledBy       String?
+
+  company        Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  fiscalDocument FiscalDocument @relation(fields: [fiscalDocumentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, recipientEmail, attemptedAt])
+  @@index([fiscalDocumentId, status, attemptedAt])
+  @@map("fiscal_document_email_deliveries")
+}
+
+model FiscalNumberInutilization {
+  id            String    @id @default(uuid())
+  companyId     String
+  branchCode    Int
+  nfeProfileId  String
+  environment   String
+  model         String    @default("55")
+  series        Int
+  startNumber   Int
+  endNumber     Int
+  year          Int
+  status        String    @default("PENDING")
+  statusCode    String?
+  statusMessage String?
+  protocol      String?
+  justification String
+  signedXml     String?
+  responseXml   String?
+  processedXml  String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy     String?
+  canceledAt    DateTime? @db.Timestamptz(3)
+  canceledBy    String?
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  nfeProfile NfeProfile @relation(fields: [nfeProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, environment, model, series, year, startNumber, endNumber])
+  @@index([companyId, branchCode, status, createdAt])
+  @@map("fiscal_number_inutilizations")
+}
+
+model FiscalAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int
+  entityType   String
+  entityId     String
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, entityType, entityId, occurredAt])
+  @@map("fiscal_audit_events")
+}
+
+model SaleReturn {
+  id                       String    @id @default(uuid())
+  companyId                String
+  branchCode               Int       @default(1)
+  saleId                   String
+  returnNumber             String
+  status                   String    @default("CONFIRMED")
+  customerPartyId          String?
+  customerNameSnapshot     String
+  customerDocumentSnapshot String?
+  totalAmount              Float     @default(0)
+  creditId                 String?
+  reason                   String
+  confirmedAt              DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                String?
+  canceledAt               DateTime? @db.Timestamptz(3)
+  canceledBy               String?
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale    Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  credit  CustomerCredit?  @relation(fields: [creditId], references: [id], onDelete: SetNull)
+  items   SaleReturnItem[]
+
+  @@unique([companyId, branchCode, returnNumber])
+  @@index([companyId, saleId, confirmedAt])
+  @@index([companyId, customerPartyId])
+  @@index([creditId])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  returnId            String
+  saleId              String
+  saleItemId          String
+  productId           String
+  lineNumber          Int
+  productNameSnapshot String
+  productCodeSnapshot String?
+  unitCodeSnapshot    String
+  quantity            Float
+  unitPrice           Float
+  totalAmount         Float
+  tracksInventory     Boolean   @default(false)
+  variantKey          String    @default("GERAL")
+  colorCode           String?
+  colorName           String?
+  sizeCode            String?
+  lotNumber           String?
+  lotExpirationDate   DateTime? @db.Timestamptz(3)
+  previousStock       Float?
+  resultingStock      Float?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Restrict)
+  saleItem   SaleItem   @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, productId, createdAt])
+  @@index([returnId])
+  @@index([saleItemId])
+  @@map("sale_return_items")
+}
+
+model BankAccount {
+  id                            String    @id @default(uuid())
+  companyId                     String
+  branchCode                    Int       @default(1)
+  status                        String    @default("ACTIVE")
+  bankCode                      String
+  bankName                      String
+  branchNumber                  String
+  branchDigit                   String    @default("")
+  accountNumber                 String
+  accountDigit                  String    @default("")
+  walletCode                    String?
+  agreementCode                 String?
+  pixKey                        String?
+  beneficiaryName               String?
+  beneficiaryDocument           String?
+  billingProvider               String?
+  billingEnvironment            String?
+  billingApiClientId            String?
+  billingApiClientSecret        String?
+  billingCertificateBase64      String?
+  billingCertificatePassword    String?
+  billingBeneficiaryCode        String?
+  billingWalletVariation        String?
+  billingContractNumber         String?
+  billingModalityCode           String?
+  billingDocumentSpeciesCode    String?
+  billingAcceptanceCode         String?
+  billingIssueTypeCode          String?
+  billingDistributionTypeCode   String?
+  billingNextBoletoNumber       Int?
+  billingRegisterPixCode        Int?
+  billingInstructionLine1       String?
+  billingInstructionLine2       String?
+  billingDefaultFinePercent     Float?
+  billingDefaultInterestPercent Float?
+  billingDefaultDiscountPercent Float?
+  billingProtestDays            Int?
+  billingNegativeDays           Int?
+  notes                         String?
+  createdAt                     DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                     String?
+  updatedAt                     DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                     String?
+  canceledAt                    DateTime? @db.Timestamptz(3)
+  canceledBy                    String?
+
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankReturnImports      BankReturnImport[]
+  bankReturnImportItems  BankReturnImportItem[]
+  bankStatementImports   BankStatementImport[]
+  bankStatementMovements BankStatementMovement[]
+  bankDdaRecords         BankDdaRecord[]
+
+  @@unique([companyId, branchCode, bankCode, branchNumber, branchDigit, accountNumber, accountDigit])
+  @@index([companyId, status, bankName])
+  @@map("bank_accounts")
+}
+
+model BankDdaRecord {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  bankAccountId       String
+  externalId          String
+  dueDate             String?
+  issueDate           String?
+  beneficiaryName     String
+  beneficiaryDocument String?
+  payerName           String?
+  payerDocument       String?
+  documentNumber      String?
+  digitableLine       String?
+  barcode             String?
+  amount              Float
+  status              String    @default("OPEN")
+  bankStatus          String?
+  rawPayloadJson      String?
+  firstSeenAt         DateTime  @default(now()) @db.Timestamptz(3)
+  lastSeenAt          DateTime  @default(now()) @db.Timestamptz(3)
+  statusChangedAt     DateTime? @db.Timestamptz(3)
+  statusChangedBy     String?
+  paidAt              DateTime? @db.Timestamptz(3)
+  localNotes          String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  auditEvents BankDdaAuditEvent[]
+
+  @@unique([bankAccountId, externalId])
+  @@index([companyId, branchCode, status, dueDate])
+  @@index([companyId, bankAccountId, lastSeenAt])
+  @@map("bank_dda_records")
+}
+
+model BankDdaAuditEvent {
+  id              String   @id @default(uuid())
+  companyId       String
+  branchCode      Int      @default(1)
+  bankDdaRecordId String
+  action          String
+  summary         String
+  beforeJson      String?
+  afterJson       String?
+  metadataJson    String?
+  occurredAt      DateTime @default(now()) @db.Timestamptz(3)
+  performedBy     String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  createdBy       String?
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankDdaRecord BankDdaRecord @relation(fields: [bankDdaRecordId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, bankDdaRecordId, occurredAt])
+  @@map("bank_dda_audit_events")
+}
+
+model Party {
+  id                         String    @id @default(uuid())
+  companyId                  String
+  branchCode                 Int       @default(1)
+  externalEntityType         String
+  externalEntityId           String
+  name                       String
+  document                   String?
+  documentNormalized         String?
+  stateRegistration          String?
+  municipalRegistration      String?
+  stateRegistrationIndicator String?   @default("9")
+  email                      String?
+  phone                      String?
+  addressLine1               String?
+  street                     String?
+  addressNumber              String?
+  addressComplement          String?
+  neighborhood               String?
+  city                       String?
+  cityCode                   String?
+  state                      String?
+  postalCode                 String?
+  countryCode                String?   @default("1058")
+  countryName                String?   @default("BRASIL")
+  mergedIntoPartyId          String?
+  mergedAt                   DateTime? @db.Timestamptz(3)
+  mergedBy                   String?
+  mergeReason                String?
+  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                  String?
+  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                  String?
+  canceledAt                 DateTime? @db.Timestamptz(3)
+  canceledBy                 String?
+
+  company            Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  roles              PartyRole[]
+  externalReferences PartyExternalReference[]
+  auditEvents        PartyAuditEvent[]
+  suppliers          Supplier[]
+  receivableTitles   ReceivableTitle[]
+  sales              Sale[]
+  fiscalDocuments    FiscalDocument[]
+  nfseDocuments      NfseDocument[]
+
+  @@unique([companyId, branchCode, externalEntityType, externalEntityId])
+  @@unique([companyId, documentNormalized])
+  @@index([companyId, name])
+  @@index([companyId, documentNormalized, canceledAt])
+  @@map("parties")
+}
+
+model PartyRole {
+  id         String    @id @default(uuid())
+  companyId  String
+  partyId    String
+  branchCode Int       @default(1)
+  roleType   String
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy  String?
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy  String?
+  canceledAt DateTime? @db.Timestamptz(3)
+  canceledBy String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, partyId, branchCode, roleType])
+  @@index([companyId, branchCode, roleType, canceledAt])
+  @@index([partyId, canceledAt])
+  @@map("party_roles")
+}
+
+model PartyExternalReference {
+  id                 String    @id @default(uuid())
+  companyId          String
+  partyId            String
+  branchCode         Int       @default(1)
+  sourceSystem       String
+  sourceTenantId     String
+  externalEntityType String
+  externalEntityId   String
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy          String?
+  canceledAt         DateTime? @db.Timestamptz(3)
+  canceledBy         String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, sourceSystem, sourceTenantId, externalEntityType, externalEntityId])
+  @@index([companyId, branchCode, externalEntityType, canceledAt])
+  @@index([partyId, canceledAt])
+  @@map("party_external_references")
+}
+
+model PartyAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  partyId      String
+  branchCode   Int      @default(1)
+  action       String
+  summary      String
+  beforeJson   String?
+  afterJson    String?
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([partyId, occurredAt])
+  @@map("party_audit_events")
+}
+
+model ReceivableBatch {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int       @default(1)
+  sourceSystem     String
+  sourceTenantId   String
+  sourceBatchType  String
+  sourceBatchId    String
+  referenceDate    DateTime? @db.Timestamptz(3)
+  status           String    @default("PROCESSED")
+  itemCount        Int       @default(0)
+  processedCount   Int       @default(0)
+  duplicateCount   Int       @default(0)
+  errorCount       Int       @default(0)
+  payloadSnapshot  String?
+  metadataJson     String?
+  skippedItemsJson String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy        String?
+  canceledAt       DateTime? @db.Timestamptz(3)
+  canceledBy       String?
+
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  receivableTitles       ReceivableTitle[]
+  receivableInstallments ReceivableInstallment[]
+
+  @@unique([companyId, branchCode, sourceBatchId])
+  @@index([companyId, createdAt])
+  @@index([sourceSystem, sourceTenantId])
+  @@map("receivable_batches")
+}
+
+model ReceivableTitle {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  batchId               String
+  payerPartyId          String?
+  sourceEntityType      String
+  sourceEntityId        String
+  sourceEntityName      String?
+  classLabel            String?
+  businessKey           String
+  description           String
+  categoryCode          String?
+  totalAmount           Float     @default(0)
+  payerNameSnapshot     String
+  payerDocumentSnapshot String?
+  payerEmailSnapshot    String?
+  payerPhoneSnapshot    String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy             String?
+  canceledAt            DateTime? @db.Timestamptz(3)
+  canceledBy            String?
+
+  company         Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch           ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  payerParty      Party?                  @relation(fields: [payerPartyId], references: [id], onDelete: SetNull)
+  installments    ReceivableInstallment[]
+  sales           Sale[]
+  fiscalDocuments FiscalDocument[]
+  nfseDocuments   NfseDocument[]
+
+  @@unique([companyId, branchCode, businessKey])
+  @@index([companyId, sourceEntityType, sourceEntityId])
+  @@index([batchId])
+  @@map("receivable_titles")
+}
+
+model ReceivableInstallment {
+  id                      String    @id @default(uuid())
+  companyId               String
+  branchCode              Int       @default(1)
+  batchId                 String
+  titleId                 String
+  bankAccountId           String?
+  bankAccountLabel        String?
+  bankAssignedAt          DateTime? @db.Timestamptz(3)
+  bankAssignedBy          String?
+  bankSlipStatus          String?
+  bankSlipMessage         String?
+  bankSlipProvider        String?
+  bankSlipOurNumber       String?
+  bankSlipYourNumber      String?
+  bankSlipDigitableLine   String?
+  bankSlipBarcode         String?
+  bankSlipQrCode          String?
+  bankSlipPdfBase64       String?
+  bankSlipPayloadJson     String?
+  bankSlipResponseJson    String?
+  bankSlipIssuedAt        DateTime? @db.Timestamptz(3)
+  bankSlipIssuedBy        String?
+  batchRemovedAt          DateTime? @db.Timestamptz(3)
+  batchRemovedBy          String?
+  batchRemovedReason      String?
+  sourceInstallmentKey    String
+  installmentNumber       Int
+  installmentCount        Int
+  dueDate                 DateTime @db.Timestamptz(3)
+  amount                  Float
+  openAmount              Float
+  paidAmount              Float     @default(0)
+  interestRate            Float?
+  interestGracePeriod     Int?
+  penaltyRate             Float?
+  penaltyValue            Float?
+  penaltyGracePeriod      Int?
+  bankMovementGroupId     String?
+  bankMovementStatus      String?
+  bankMovementCreatedAt   DateTime? @db.Timestamptz(3)
+  bankMovementConvertedAt DateTime? @db.Timestamptz(3)
+  bankMovementConvertedBy String?
+  status                  String    @default("OPEN")
+  settlementMethod        String?
+  settledAt               DateTime? @db.Timestamptz(3)
+  descriptionSnapshot     String
+  payerNameSnapshot       String
+  payerDocumentSnapshot   String?
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy               String?
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy               String?
+  canceledAt              DateTime? @db.Timestamptz(3)
+  canceledBy              String?
+
+  company               Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  batch                 ReceivableBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  title                 ReceivableTitle         @relation(fields: [titleId], references: [id], onDelete: Restrict)
+  settlements           InstallmentSettlement[]
+  bankReturnImportItems BankReturnImportItem[]  @relation("BankReturnImportItemInstallment")
+
+  @@unique([companyId, branchCode, sourceInstallmentKey])
+  @@index([companyId, status, dueDate])
+  @@index([companyId, bankAccountId, status])
+  @@index([companyId, bankAccountId, bankMovementStatus])
+  @@index([companyId, bankMovementGroupId])
+  @@index([titleId])
+  @@map("receivable_installments")
+}
+
+model CashSession {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  sourceSystem          String
+  sourceTenantId        String
+  cashierUserId         String
+  cashierDisplayName    String
+  status                String    @default("OPEN")
+  openingAmount         Float     @default(0)
+  totalReceivedAmount   Float     @default(0)
+  expectedClosingAmount Float     @default(0)
+  declaredClosingAmount Float?
+  openedAt              DateTime  @default(now()) @db.Timestamptz(3)
+  closedAt              DateTime? @db.Timestamptz(3)
+  notes                 String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy             String?
+  canceledAt            DateTime? @db.Timestamptz(3)
+  canceledBy            String?
+
+  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  movements    CashMovement[]
+  settlements  InstallmentSettlement[]
+  salePayments SalePayment[]
+
+  @@index([companyId, cashierUserId, status])
+  @@index([companyId, openedAt])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  cashSessionId       String
+  movementType        String
+  direction           String
+  paymentMethod       String?
+  bankAccountId       String?
+  bankAccountLabel    String?
+  bankMovementGroupId String?
+  amount              Float
+  description         String
+  occurredAt          DateTime @db.Timestamptz(3)
+  referenceType       String?
+  referenceId         String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, occurredAt])
+  @@index([companyId, bankAccountId, bankMovementGroupId])
+  @@index([cashSessionId])
+  @@map("cash_movements")
+}
+
+model InstallmentSettlement {
+  id                    String    @id @default(uuid())
+  companyId             String
+  branchCode            Int       @default(1)
+  installmentId         String
+  cashSessionId         String
+  settlementGroupId     String?
+  receivedAmount        Float
+  discountAmount        Float     @default(0)
+  interestAmount        Float     @default(0)
+  penaltyAmount         Float     @default(0)
+  paymentMethod         String
+  bankAccountId         String?
+  bankAccountLabel      String?
+  bankMovementGroupId   String?
+  superTefPaymentId     String?
+  receivablePixIntentId String?
+  settledAt             DateTime  @default(now()) @db.Timestamptz(3)
+  requestedBy           String?
+  notes                 String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy             String?
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy             String?
+  canceledAt            DateTime? @db.Timestamptz(3)
+  canceledBy            String?
+
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  installment           ReceivableInstallment  @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+  cashSession           CashSession            @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  superTefPayment       SuperTefPayment?       @relation(fields: [superTefPaymentId], references: [id], onDelete: Restrict)
+  receivablePixIntent   ReceivablePixIntent?   @relation(fields: [receivablePixIntentId], references: [id], onDelete: Restrict)
+  bankReturnImportItems BankReturnImportItem[] @relation("BankReturnImportItemSettlement")
+
+  @@index([companyId, settledAt])
+  @@index([companyId, settlementGroupId])
+  @@index([companyId, bankAccountId, bankMovementGroupId])
+  @@index([installmentId])
+  @@index([cashSessionId])
+  @@index([superTefPaymentId])
+  @@index([receivablePixIntentId])
+  @@map("installment_settlements")
+}
+
+model CustomerCredit {
+  id               String    @id @default(uuid())
+  companyId        String
+  branchCode       Int       @default(1)
+  partyId          String?
+  customerName     String
+  customerDocument String?
+  status           String    @default("OPEN")
+  originalAmount   Float
+  availableAmount  Float
+  sourceType       String    @default("MANUAL")
+  sourceReference  String?
+  notes            String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy        String?
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy        String?
+  canceledAt       DateTime? @db.Timestamptz(3)
+  canceledBy       String?
+
+  company     Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  movements   CustomerCreditMovement[]
+  saleReturns SaleReturn[]
+
+  @@index([companyId, status, customerName])
+  @@index([companyId, customerDocument])
+  @@map("customer_credits")
+}
+
+model CustomerCreditMovement {
+  id            String    @id @default(uuid())
+  companyId     String
+  branchCode    Int       @default(1)
+  creditId      String
+  cashSessionId String?
+  movementType  String
+  direction     String
+  amount        Float
+  referenceType String?
+  referenceId   String?
+  notes         String?
+  occurredAt    DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy     String?
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy     String?
+  canceledAt    DateTime? @db.Timestamptz(3)
+  canceledBy    String?
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  credit  CustomerCredit @relation(fields: [creditId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, movementType, occurredAt])
+  @@index([creditId, occurredAt])
+  @@index([cashSessionId])
+  @@map("customer_credit_movements")
+}
+
+model BankReturnImport {
+  id                  String    @id @default(uuid())
+  companyId           String
+  branchCode          Int       @default(1)
+  bankAccountId       String
+  provider            String
+  periodStart         DateTime @db.Timestamptz(3)
+  periodEnd           DateTime @db.Timestamptz(3)
+  importedItemCount   Int       @default(0)
+  matchedItemCount    Int       @default(0)
+  liquidatedItemCount Int       @default(0)
+  bankClosedItemCount Int       @default(0)
+  readyToApplyCount   Int       @default(0)
+  appliedItemCount    Int       @default(0)
+  unmatchedItemCount  Int       @default(0)
+  status              String    @default("IMPORTED")
+  requestSnapshotJson String?
+  summaryJson         String?
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company     Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  items       BankReturnImportItem[]
+
+  @@index([companyId, createdAt])
+  @@index([bankAccountId, createdAt])
+  @@map("bank_return_imports")
+}
+
+model BankReturnImportItem {
+  id                   String    @id @default(uuid())
+  importId             String
+  companyId            String
+  branchCode           Int       @default(1)
+  bankAccountId        String
+  matchedInstallmentId String?
+  appliedSettlementId  String?
+  movementTypeCode     String
+  movementStatus       String
+  externalRequestCode  String?
+  externalFileId       String?
+  dueDate              DateTime? @db.Timestamptz(3)
+  movementDate         DateTime? @db.Timestamptz(3)
+  paymentDate          DateTime? @db.Timestamptz(3)
+  expectedCreditDate   DateTime? @db.Timestamptz(3)
+  ourNumber            String?
+  yourNumber           String?
+  barcode              String?
+  contractNumber       String?
+  amount               Float     @default(0)
+  settledAmount        Float?
+  discountAmount       Float?
+  interestAmount       Float?
+  feeAmount            Float?
+  rawPayloadJson       String
+  appliedAt            DateTime? @db.Timestamptz(3)
+  appliedBy            String?
+  appliedStatus        String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy            String?
+  canceledAt           DateTime? @db.Timestamptz(3)
+  canceledBy           String?
+
+  importSession      BankReturnImport       @relation(fields: [importId], references: [id], onDelete: Restrict)
+  company            Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount        BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  matchedInstallment ReceivableInstallment? @relation("BankReturnImportItemInstallment", fields: [matchedInstallmentId], references: [id], onDelete: SetNull)
+  appliedSettlement  InstallmentSettlement? @relation("BankReturnImportItemSettlement", fields: [appliedSettlementId], references: [id], onDelete: SetNull)
+
+  @@index([importId, movementStatus])
+  @@index([companyId, bankAccountId, movementStatus])
+  @@index([matchedInstallmentId])
+  @@map("bank_return_import_items")
+}
+
+model BankStatementImport {
+  id                     String    @id @default(uuid())
+  companyId              String
+  branchCode             Int       @default(1)
+  bankAccountId          String
+  provider               String
+  periodStart            DateTime @db.Timestamptz(3)
+  periodEnd              DateTime @db.Timestamptz(3)
+  pulledAt               DateTime  @default(now()) @db.Timestamptz(3)
+  importedMovementCount  Int       @default(0)
+  createdMovementCount   Int       @default(0)
+  duplicateMovementCount Int       @default(0)
+  creditAmount           Float     @default(0)
+  debitAmount            Float     @default(0)
+  currentBalance         Float?
+  status                 String    @default("IMPORTED")
+  requestSnapshotJson    String?
+  summaryJson            String?
+  createdAt              DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy              String?
+  updatedAt              DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy              String?
+  canceledAt             DateTime? @db.Timestamptz(3)
+  canceledBy             String?
+
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount    BankAccount             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  firstMovements BankStatementMovement[] @relation("BankStatementFirstImport")
+  lastMovements  BankStatementMovement[] @relation("BankStatementLastImport")
+
+  @@index([companyId, createdAt])
+  @@index([bankAccountId, pulledAt])
+  @@index([companyId, bankAccountId, periodStart, periodEnd])
+  @@map("bank_statement_imports")
+}
+
+model BankStatementMovement {
+  id                   String    @id @default(uuid())
+  companyId            String
+  branchCode           Int       @default(1)
+  bankAccountId        String
+  firstImportId        String
+  lastImportId         String
+  provider             String
+  externalId           String
+  occurredAt           DateTime @db.Timestamptz(3)
+  description          String
+  documentNumber       String?
+  movementType         String
+  amount               Float     @default(0)
+  balanceAfter         Float?
+  reconciliationStatus String    @default("PENDING")
+  reviewStatus         String    @default("NOT_REVIEWED")
+  reviewedAt           DateTime? @db.Timestamptz(3)
+  reviewedBy           String?
+  rawPayloadJson       String
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy            String?
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy            String?
+  canceledAt           DateTime? @db.Timestamptz(3)
+  canceledBy           String?
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount         @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  firstImport BankStatementImport @relation("BankStatementFirstImport", fields: [firstImportId], references: [id], onDelete: Restrict)
+  lastImport  BankStatementImport @relation("BankStatementLastImport", fields: [lastImportId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, bankAccountId, externalId])
+  @@index([companyId, bankAccountId, occurredAt])
+  @@index([companyId, bankAccountId, reconciliationStatus])
+  @@index([companyId, bankAccountId, reviewStatus])
+  @@index([firstImportId])
+  @@index([lastImportId])
+  @@map("bank_statement_movements")
+}

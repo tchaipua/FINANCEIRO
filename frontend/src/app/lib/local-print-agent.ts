@@ -39,7 +39,6 @@ function printingScope(runtime: FinanceRuntimeContext) {
     sourceSystem: runtime.sourceSystem,
     sourceTenantId: runtime.sourceTenantId,
     sourceBranchCode: runtime.sourceBranchCode,
-    userRole: runtime.userRole,
     requestedBy: runtime.cashierDisplayName || runtime.cashierUserId || 'USUÁRIO',
   };
 }

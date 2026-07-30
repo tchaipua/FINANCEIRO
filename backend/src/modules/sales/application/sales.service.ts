@@ -42,6 +42,7 @@ import {
   PARTY_ROLE,
   upsertPartyIdentity,
 } from "../../../common/party-registry";
+import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
 
 type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
 
@@ -475,30 +476,12 @@ export class SalesService {
       },
     });
 
-    const normalizedCompanyName = normalizeText(payload.companyName);
-    const normalizedCompanyDocument = normalizeTaxId(payload.companyDocument);
-
-    if (existing) {
-      return this.prisma.company.update({
-        where: { id: existing.id },
-        data: {
-          ...(normalizedCompanyName ? { name: normalizedCompanyName } : {}),
-          ...(normalizedCompanyDocument ? { document: normalizedCompanyDocument } : {}),
-          updatedBy: payload.requestedBy || null,
-        },
-      });
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar vendas.",
+      );
     }
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem: normalizedSourceSystem,
-        sourceTenantId: normalizedSourceTenantId,
-        name: normalizedCompanyName || normalizedSourceTenantId,
-        document: normalizedCompanyDocument,
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
-    });
+    return existing;
   }
 
   private async loadSicoobPixBank(companyId: string) {
@@ -539,8 +522,12 @@ export class SalesService {
     return {
       ...bank,
       billingApiClientId: bank.billingApiClientId!,
-      billingCertificateBase64: bank.billingCertificateBase64!,
-      billingCertificatePassword: bank.billingCertificatePassword!,
+      billingCertificateBase64: decryptStoredBankSecret(
+        bank.billingCertificateBase64,
+      ),
+      billingCertificatePassword: decryptStoredBankSecret(
+        bank.billingCertificatePassword,
+      ),
     };
   }
 
@@ -2026,8 +2013,12 @@ export class SalesService {
     }
     const sicoobConfig = {
       clientId: bank.billingApiClientId,
-      certificateBase64: bank.billingCertificateBase64,
-      certificatePassword: bank.billingCertificatePassword,
+      certificateBase64: decryptStoredBankSecret(
+        bank.billingCertificateBase64,
+      ),
+      certificatePassword: decryptStoredBankSecret(
+        bank.billingCertificatePassword,
+      ),
       pixKey: bank.pixKey || "",
     };
     let charge: { txid: string; locationId: number | null; pixCopyPaste: string | null; payloadJson: string; responseJson: string } | null = null;
@@ -2169,7 +2160,7 @@ export class SalesService {
 
     const bank = await this.prisma.bankAccount.findFirst({ where: { id: installment.bankAccountId, companyId: company.id, canceledAt: null, billingProvider: "SICOOB" }, select: { id: true, bankName: true, billingApiClientId: true, billingCertificateBase64: true, billingCertificatePassword: true, pixKey: true } });
     if (!bank?.billingApiClientId || !bank.billingCertificateBase64 || !bank.billingCertificatePassword) throw new BadRequestException("A conta Sicoob não possui certificado configurado.");
-    const charge = await this.sicoobPixService.getImmediateCharge({ clientId: bank.billingApiClientId, certificateBase64: bank.billingCertificateBase64, certificatePassword: bank.billingCertificatePassword, pixKey: bank.pixKey || "" }, installment.bankSlipOurNumber);
+    const charge = await this.sicoobPixService.getImmediateCharge({ clientId: bank.billingApiClientId, certificateBase64: decryptStoredBankSecret(bank.billingCertificateBase64), certificatePassword: decryptStoredBankSecret(bank.billingCertificatePassword), pixKey: bank.pixKey || "" }, installment.bankSlipOurNumber);
     if (charge.status !== "CONCLUIDA") return { paid: false, bankStatus: charge.status || "ATIVA" };
 
     await this.prisma.$transaction(async (tx: any) => {
@@ -2208,7 +2199,7 @@ export class SalesService {
     if (!installment?.bankSlipOurNumber || !installment.bankAccountId) throw new BadRequestException("Cobrança PIX não encontrada para cancelamento.");
     const bank = await this.prisma.bankAccount.findFirst({ where: { id: installment.bankAccountId, companyId: company.id, canceledAt: null, billingProvider: "SICOOB" }, select: { billingApiClientId: true, billingCertificateBase64: true, billingCertificatePassword: true, pixKey: true } });
     if (!bank?.billingApiClientId || !bank.billingCertificateBase64 || !bank.billingCertificatePassword) throw new BadRequestException("A conta Sicoob não possui certificado configurado.");
-    await this.sicoobPixService.cancelImmediateCharge({ clientId: bank.billingApiClientId, certificateBase64: bank.billingCertificateBase64, certificatePassword: bank.billingCertificatePassword, pixKey: bank.pixKey || "" }, installment.bankSlipOurNumber);
+    await this.sicoobPixService.cancelImmediateCharge({ clientId: bank.billingApiClientId, certificateBase64: decryptStoredBankSecret(bank.billingCertificateBase64), certificatePassword: decryptStoredBankSecret(bank.billingCertificatePassword), pixKey: bank.pixKey || "" }, installment.bankSlipOurNumber);
     return this.cancel(saleId, { ...payload, reason: payload.reason || "CANCELAMENTO DO PAGAMENTO PIX" });
   }
 

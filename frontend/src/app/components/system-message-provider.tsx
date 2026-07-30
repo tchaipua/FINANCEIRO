@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withFinanceBasePath } from "@/app/lib/public-path";
 
 export type SystemMessageType = "error" | "success";
 
@@ -19,6 +20,7 @@ const SILENT_SUCCESS_PATTERNS = [
   /\/auth\/(?:login|master-login|logout|refresh|me)(?:\/|$)/i,
   /\/(?:search|lookup|preview|validate|validation|check|exists|suggestions?|calculate)(?:\/|\?|$)/i,
   /\/notifications?\/.+\/(?:read|viewed)(?:\/|\?|$)/i,
+  /\/s3-control\/upload(?:\/|\?|$)/i,
   /\/user-preferences(?:\/|\?|$)/i,
   /\/(?:heartbeat|health)(?:\/|\?|$)/i,
 ];
@@ -272,7 +274,7 @@ export default function SystemMessageProvider({ children }: { children: React.Re
     ].join(",");
 
     const capture = (element: HTMLElement) => {
-      if (element.closest("[data-system-message-root]")) return;
+      if (element.closest("[data-system-message-root], [data-audited-popup-shell], [data-system-message-ignore]")) return;
       if (element.matches(".fixed.inset-0") && element.querySelector("form, input, select, textarea")) return;
       const rawText = String(element.textContent || "").replace(/\s+/g, " ").trim();
       if (!rawText) return;
@@ -342,7 +344,7 @@ export default function SystemMessageProvider({ children }: { children: React.Re
             </span>
             <header className="system-message-header">
               <span className="system-message-logo">
-                <img src={visible.logoUrl || "/logo-msinfor.jpg"} alt="Logotipo" />
+                <img src={withFinanceBasePath(visible.logoUrl || "/logo-msinfor.jpg")} alt="Logotipo" />
               </span>
               <strong>{visible.type === "success" ? "SUCESSO !!!" : "ERRO !!!!"}</strong>
               <span aria-hidden="true" />

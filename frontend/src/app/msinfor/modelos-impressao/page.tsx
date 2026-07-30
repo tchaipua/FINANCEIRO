@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { requestJson } from '@/app/lib/api';
@@ -11,6 +13,7 @@ import {
   type LocalPrinter,
 } from '@/app/lib/local-print-agent';
 import { useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type LayoutItem = Record<string, any> & { id: string; type: string };
 type PrintLayout = {
@@ -176,7 +179,7 @@ export default function PrintModelsPage() {
   useEffect(() => { void loadAll(); }, [loadAll]);
   useEffect(() => {
     if (!runtime.embedded || window.parent === window) return;
-    window.parent.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtime.embedded]);
 
   const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) || null;
@@ -378,7 +381,7 @@ export default function PrintModelsPage() {
       <section className={`${cardClass} overflow-hidden`}>
         <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-5 py-5 text-white">
           <div className="flex items-center gap-4">
-            <img src={runtime.logoUrl || '/logo-msinfor.jpg'} alt="Logo institucional" className="h-14 w-14 rounded-2xl border border-white/20 bg-white object-contain shadow-lg" />
+            <img src={withFinanceBasePath(runtime.logoUrl || '/logo-msinfor.jpg')} alt="Logo institucional" className="h-14 w-14 rounded-2xl border border-white/20 bg-white object-contain shadow-lg" />
             <div><div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Central MSINFOR</div><h1 className="text-2xl font-black">Modelos e impressão local</h1><p className="mt-1 text-xs font-semibold text-blue-100">Monte recibos e etiquetas, vincule eventos e use as impressoras instaladas no computador.</p></div>
           </div>
         </div>

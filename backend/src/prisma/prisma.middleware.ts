@@ -3,192 +3,306 @@ import { Prisma } from "@prisma/client";
 import { getVisibleBranchCodes } from "../common/branch.constants";
 import { getFinanceContext } from "../common/finance-context";
 
-const IGNORED_MODELS = ["Company", "CompanyBranch"];
-// Party is company-wide; branch visibility is granted by PartyRole.
-const BRANCH_MODELS = [
-  "Product",
-  "ProductStockBalance",
-  "FiscalCertificate",
-  "Supplier",
-  "PayableInvoiceImport",
-  "PayableTitle",
-  "PayableInstallment",
-  "StockMovement",
-  "BankAccount",
-  "ReceivableBatch",
-  "ReceivableTitle",
-  "ReceivableInstallment",
-  "CashSession",
-  "CashMovement",
-  "InstallmentSettlement",
-  "BankReturnImport",
-  "BankReturnImportItem",
-  "BankStatementImport",
-  "BankStatementMovement",
-  "Sale",
-  "SaleItem",
-  "SalePayment",
-  "SuperTefConfiguration",
-  "SuperTefTerminal",
-  "SuperTefCheckout",
-  "SuperTefCheckoutRoute",
-  "SuperTefAuditEvent",
-  "PrintTemplate",
-  "PrintTemplateVersion",
-  "PrinterProfile",
-  "PrintTemplateBinding",
-  "PrintJob",
-  "PrintAuditEvent",
-];
+const MODEL_FIELDS = new Map(
+  Prisma.dmmf.datamodel.models.map((model) => [
+    model.name,
+    new Set(model.fields.map((field) => field.name)),
+  ]),
+);
 
-function modelSupportsBranchScope(model?: string | null) {
-  return Boolean(model && BRANCH_MODELS.includes(model));
-}
+const READ_ACTIONS = new Set([
+  "findUnique",
+  "findUniqueOrThrow",
+  "findFirst",
+  "findFirstOrThrow",
+  "findMany",
+  "count",
+  "aggregate",
+  "groupBy",
+]);
+const MUTATION_WITH_WHERE_ACTIONS = new Set([
+  "update",
+  "updateMany",
+  "delete",
+  "deleteMany",
+]);
+const CHILD_SCOPE_MODELS = new Set([
+  "PayableInvoiceImportItem",
+  "PayableInvoiceImportInstallment",
+]);
+const ADMIN_SHARED_BRANCH_WRITE_MODELS = new Set([
+  "NfseServiceItem",
+  "NfseServiceDescription",
+]);
+
+type AuthenticatedScope = {
+  companyId: string;
+  branchId: string;
+  branchCode: number;
+  sourceSystem: string;
+  sourceTenantId: string;
+  scopes: readonly string[];
+};
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function flattenCompoundUniqueWhere(where: Record<string, unknown>) {
-  return Object.entries(where).reduce<Record<string, unknown>>(
-    (flattened, [key, value]) => {
-      if (key.includes("_") && isPlainObject(value)) {
-        return {
-          ...flattened,
-          ...value,
-        };
-      }
+function getModelFields(model: string) {
+  return MODEL_FIELDS.get(model) || new Set<string>();
+}
 
-      flattened[key] = value;
-      return flattened;
-    },
-    {},
-  );
+function buildScopeFilter(
+  model: string,
+  scope: AuthenticatedScope,
+  includeSharedBranch: boolean,
+) {
+  if (model === "Company") {
+    return {
+      id: scope.companyId,
+      sourceSystem: scope.sourceSystem,
+      sourceTenantId: scope.sourceTenantId,
+    };
+  }
+
+  if (CHILD_SCOPE_MODELS.has(model)) {
+    return {
+      invoiceImport: {
+        is: {
+          companyId: scope.companyId,
+          branchCode: includeSharedBranch
+            ? { in: getVisibleBranchCodes(scope.branchCode) }
+            : scope.branchCode,
+        },
+      },
+    };
+  }
+
+  const fields = getModelFields(model);
+  const filter: Record<string, unknown> = {};
+  if (fields.has("companyId")) {
+    filter.companyId = scope.companyId;
+  }
+  if (fields.has("branchId")) {
+    filter.branchId = scope.branchId;
+  } else if (fields.has("branchCode")) {
+    filter.branchCode =
+      model === "CompanyBranch"
+        ? scope.branchCode
+        : includeSharedBranch
+          ? { in: getVisibleBranchCodes(scope.branchCode) }
+          : scope.branchCode;
+  }
+  return filter;
+}
+
+function assertEquivalent(
+  value: unknown,
+  expected: string | number,
+  label: string,
+) {
+  if (value === undefined) {
+    return;
+  }
+  if (String(value) !== String(expected)) {
+    throw new ForbiddenException(
+      `Tentativa de alterar ${label} fora do escopo autenticado.`,
+    );
+  }
+}
+
+function enforceMutationDataScope(
+  model: string,
+  data: Record<string, unknown>,
+  scope: AuthenticatedScope,
+  injectMissing: boolean,
+) {
+  if (model === "Company") {
+    if (injectMissing) {
+      throw new ForbiddenException(
+        "O mapeamento de empresa deve ser provisionado fora da API operacional.",
+      );
+    }
+    assertEquivalent(data.id, scope.companyId, "a empresa");
+    assertEquivalent(data.sourceSystem, scope.sourceSystem, "o sistema de origem");
+    assertEquivalent(
+      data.sourceTenantId,
+      scope.sourceTenantId,
+      "o tenant de origem",
+    );
+    return;
+  }
+
+  if (model === "CompanyBranch" && injectMissing) {
+    throw new ForbiddenException(
+      "O mapeamento de filial deve ser provisionado fora da API operacional.",
+    );
+  }
+
+  const fields = getModelFields(model);
+  if (fields.has("companyId")) {
+    assertEquivalent(data.companyId, scope.companyId, "a empresa");
+    if (injectMissing && data.companyId === undefined) {
+      data.companyId = scope.companyId;
+    }
+  }
+  if (fields.has("branchId")) {
+    assertEquivalent(data.branchId, scope.branchId, "a filial");
+    if (injectMissing && data.branchId === undefined) {
+      data.branchId = scope.branchId;
+    }
+  }
+  if (fields.has("branchCode")) {
+    const canWriteSharedBranch =
+      ADMIN_SHARED_BRANCH_WRITE_MODELS.has(model) &&
+      scope.scopes.includes("FINANCE_ADMIN");
+    if (!(canWriteSharedBranch && Number(data.branchCode) === 0)) {
+      assertEquivalent(data.branchCode, scope.branchCode, "a filial");
+    }
+    if (injectMissing && data.branchCode === undefined) {
+      data.branchCode = scope.branchCode;
+    }
+  }
+}
+
+function scopeWhereForUniqueAction(
+  originalWhere: Record<string, unknown>,
+  scopeFilter: Record<string, unknown>,
+) {
+  for (const [key, scopedValue] of Object.entries(scopeFilter)) {
+    if (
+      originalWhere[key] !== undefined &&
+      JSON.stringify(originalWhere[key]) !== JSON.stringify(scopedValue)
+    ) {
+      throw new ForbiddenException(
+        "Identificador divergente do escopo autenticado.",
+      );
+    }
+  }
+  return {
+    ...scopeFilter,
+    ...originalWhere,
+  };
 }
 
 export function branchMiddleware(): Prisma.Middleware {
   return async (params, next) => {
-    const model = params.model;
     const context = getFinanceContext();
-
-    if (!model || IGNORED_MODELS.includes(model)) {
+    const model = params.model;
+    if (
+      !model ||
+      !context?.authenticated ||
+      !context.companyId ||
+      !context.branchId ||
+      !context.sourceSystem ||
+      !context.sourceTenantId
+    ) {
       return next(params);
     }
 
-    if (!context || !modelSupportsBranchScope(model)) {
+    const scope: AuthenticatedScope = {
+      companyId: context.companyId,
+      branchId: context.branchId,
+      branchCode: context.branchCode,
+      sourceSystem: context.sourceSystem,
+      sourceTenantId: context.sourceTenantId,
+      scopes: context.scopes || [],
+    };
+    const isReadAction = READ_ACTIONS.has(params.action);
+    const isControlPlaneMappingModel =
+      model === "Company" || model === "CompanyBranch";
+    const canUpdateControlPlaneMapping =
+      scope.scopes.includes("FINANCE_ADMIN") ||
+      scope.scopes.includes("SOURCE_SETTINGS_SYNC");
+    if (
+      isControlPlaneMappingModel &&
+      !isReadAction &&
+      !canUpdateControlPlaneMapping
+    ) {
+      throw new ForbiddenException(
+        "A alteração da empresa ou filial exige escopo administrativo.",
+      );
+    }
+    const mayWriteSharedBranch =
+      ADMIN_SHARED_BRANCH_WRITE_MODELS.has(model) &&
+      scope.scopes.includes("FINANCE_ADMIN");
+    const scopeFilter = buildScopeFilter(
+      model,
+      scope,
+      isReadAction || mayWriteSharedBranch,
+    );
+    if (Object.keys(scopeFilter).length === 0) {
+      throw new ForbiddenException(
+        `O modelo ${model} não possui uma regra explícita de isolamento.`,
+      );
+    }
+
+    if (isReadAction) {
+      if (!params.args) params.args = {};
+      const originalWhere = isPlainObject(params.args.where)
+        ? params.args.where
+        : {};
+      params.args.where =
+        params.action === "findUnique" ||
+        params.action === "findUniqueOrThrow"
+          ? scopeWhereForUniqueAction(originalWhere, scopeFilter)
+          : { AND: [originalWhere, scopeFilter] };
       return next(params);
     }
 
-    const visibleBranchCodes = getVisibleBranchCodes(context.branchCode);
-    const action = params.action;
-    const readOrUpdateActions = [
-      "findUnique",
-      "findUniqueOrThrow",
-      "findFirst",
-      "findFirstOrThrow",
-      "findMany",
-      "update",
-      "updateMany",
-      "delete",
-      "deleteMany",
-      "count",
-      "aggregate",
-      "groupBy",
-    ];
-
-    if (readOrUpdateActions.includes(action)) {
+    if (MUTATION_WITH_WHERE_ACTIONS.has(params.action)) {
       if (!params.args) params.args = {};
-      if (!params.args.where) params.args.where = {};
-
-      const uniqueScopedActions = [
-        "findUnique",
-        "findUniqueOrThrow",
-        "update",
-        "delete",
-      ];
-      let originalWhere = params.args.where;
-
-      if (uniqueScopedActions.includes(action)) {
-        originalWhere = flattenCompoundUniqueWhere(originalWhere);
+      const originalWhere = isPlainObject(params.args.where)
+        ? params.args.where
+        : {};
+      params.args.where =
+        params.action === "update" || params.action === "delete"
+          ? scopeWhereForUniqueAction(originalWhere, scopeFilter)
+          : { AND: [originalWhere, scopeFilter] };
+      if (params.action === "update" && isPlainObject(params.args.data)) {
+        enforceMutationDataScope(model, params.args.data, scope, false);
       }
-
-      const requestedBranchFilter = originalWhere.branchCode;
-      const explicitlyRequestedBranchCodes = isPlainObject(requestedBranchFilter)
-        ? [
-            ...(requestedBranchFilter.equals !== undefined
-              ? [Number(requestedBranchFilter.equals)]
-              : []),
-            ...(Array.isArray(requestedBranchFilter.in)
-              ? requestedBranchFilter.in.map(Number)
-              : []),
-          ]
-        : requestedBranchFilter !== undefined
-          ? [Number(requestedBranchFilter)]
-          : [];
-
-      if (
-        explicitlyRequestedBranchCodes.some(
-          (branchCode) =>
-            !Number.isInteger(branchCode) ||
-            !visibleBranchCodes.includes(branchCode),
-        )
-      ) {
-        throw new ForbiddenException(
-          "Tentativa de acesso a filial fora do escopo atual.",
-        );
-      }
-
-      if (action === "findUnique" || action === "findUniqueOrThrow") {
-        params.action = action.replace("Unique", "First") as typeof params.action;
-      }
-
-      if (uniqueScopedActions.includes(action)) {
-        params.args.where = {
-          ...originalWhere,
-          ...(originalWhere.branchCode === undefined
-            ? {
-                branchCode: {
-                  in: visibleBranchCodes,
-                },
-              }
-            : {}),
-        };
-        return next(params);
-      }
-
-      params.args.where = {
-        AND: [
-          originalWhere,
-          {
-            branchCode: {
-              in: visibleBranchCodes,
-            },
-          },
-        ],
-      };
+      return next(params);
     }
 
-    if (action === "create") {
+    if (params.action === "create") {
       if (!params.args) params.args = {};
-      if (!params.args.data) params.args.data = {};
-
-      if (params.args.data.branchCode === undefined) {
-        params.args.data.branchCode = context.branchCode;
-      }
+      if (!isPlainObject(params.args.data)) params.args.data = {};
+      enforceMutationDataScope(model, params.args.data, scope, true);
+      return next(params);
     }
 
-    if (action === "createMany" && params.args?.data) {
-      const dataArray = Array.isArray(params.args.data)
+    if (params.action === "createMany" && params.args?.data) {
+      const items = Array.isArray(params.args.data)
         ? params.args.data
         : [params.args.data];
-
-      dataArray.forEach((item: Record<string, unknown>) => {
-        if (item.branchCode === undefined) {
-          item.branchCode = context.branchCode;
+      for (const item of items) {
+        if (!isPlainObject(item)) {
+          throw new ForbiddenException("Dados de criação inválidos.");
         }
-      });
+        enforceMutationDataScope(model, item, scope, true);
+      }
+      return next(params);
     }
 
-    return next(params);
+    if (params.action === "upsert") {
+      if (!params.args) params.args = {};
+      const originalWhere = isPlainObject(params.args.where)
+        ? params.args.where
+        : {};
+      params.args.where = scopeWhereForUniqueAction(
+        originalWhere,
+        scopeFilter,
+      );
+      if (!isPlainObject(params.args.create)) params.args.create = {};
+      if (!isPlainObject(params.args.update)) params.args.update = {};
+      enforceMutationDataScope(model, params.args.create, scope, true);
+      enforceMutationDataScope(model, params.args.update, scope, false);
+      return next(params);
+    }
+
+    throw new ForbiddenException(
+      `A operação Prisma ${params.action} não possui regra de isolamento.`,
+    );
   };
 }

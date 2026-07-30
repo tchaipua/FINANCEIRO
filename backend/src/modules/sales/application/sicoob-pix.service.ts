@@ -4,6 +4,7 @@ import { execFile } from "child_process";
 import { join } from "path";
 import { promisify } from "util";
 import { normalizeText, roundMoney } from "../../../common/finance-core.utils";
+import { requireSicoobPowerShellExecutable } from "../../../common/sicoob-powershell";
 
 const execFileAsync = promisify(execFile);
 const PIX_BASE_URL = "https://api.sicoob.com.br/pix/api/v2";
@@ -37,9 +38,10 @@ export class SicoobPixService {
     if (input.body) {
       args.push("-BodyBase64", Buffer.from(JSON.stringify(input.body), "utf8").toString("base64"));
     }
+    const powerShellExecutable = requireSicoobPowerShellExecutable();
     let stdout = "";
     try {
-      ({ stdout } = await execFileAsync("powershell", args, {
+      ({ stdout } = await execFileAsync(powerShellExecutable, args, {
         maxBuffer: 20 * 1024 * 1024,
         windowsHide: true,
       }));

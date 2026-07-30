@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -10,6 +12,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type NfseProfile = {
   id: string;
@@ -332,8 +335,6 @@ export default function NfseNationalConfigurationPage() {
       environment: 'HOMOLOGATION',
       requestedBy:
         runtimeContext.cashierUserId || runtimeContext.cashierDisplayName || 'ADMIN_FINANCEIRO',
-      userRole: runtimeContext.userRole,
-      permissions: runtimeContext.permissions.join(','),
     }),
     [runtimeContext],
   );
@@ -343,8 +344,6 @@ export default function NfseNationalConfigurationPage() {
       buildFinanceApiQueryString(runtimeContext, {
         sourceBranchCode: runtimeContext.sourceBranchCode,
         environment: 'HOMOLOGATION',
-        userRole: runtimeContext.userRole,
-        permissions: runtimeContext.permissions.join(','),
       }),
     [runtimeContext],
   );
@@ -434,10 +433,7 @@ export default function NfseNationalConfigurationPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: EMBEDDED_SCREEN_ID },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: EMBEDDED_SCREEN_ID });
   }, [runtimeContext.embedded]);
 
   const runAction = useCallback(
@@ -728,7 +724,7 @@ Regras:
           <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-5 py-5 text-white">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white p-2 shadow-lg">
-                <img src="/principal-financeiro/nfse.svg" alt="NFS-e Nacional" className="h-full w-full" />
+                <img src={withFinanceBasePath('/principal-financeiro/nfse.svg')} alt="NFS-e Nacional" className="h-full w-full" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-200">

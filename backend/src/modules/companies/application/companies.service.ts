@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../../../prisma/prisma.service";
 import {
   normalizeDigits,
@@ -21,12 +26,21 @@ import { DEFAULT_BRANCH_CODE, normalizeBranchCode } from "../../../common/branch
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import { encryptSecret } from "../../../common/secret-crypto.utils";
 import { pushSourceCompanyBranchParameters } from "../../../common/source-system-parameters.client";
+import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 
 @Injectable()
 export class CompaniesService {
   constructor(private readonly prisma: PrismaService) {}
 
   private readonly salesScreenId = "PRINCIPAL_FINANCEIRO_VENDAS";
+
+  private assertFinanceAdmin() {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      throw new ForbiddenException(
+        "A ALTERAÇÃO DE PARÂMETROS EXIGE O ESCOPO FINANCE_ADMIN.",
+      );
+    }
+  }
 
   private mapCompany(company: any) {
     return {
@@ -118,12 +132,16 @@ export class CompaniesService {
         allowSaleUnitPriceEdit: parsed?.allowSaleUnitPriceEdit !== false,
         allowSaleItemDiscount: parsed?.allowSaleItemDiscount !== false,
         groupSameProduct: parsed?.groupSameProduct !== false,
+        allowProductImageEdit: parsed?.allowProductImageEdit !== false,
+        requirePasswordToRemoveSaleItems: parsed?.requirePasswordToRemoveSaleItems === true,
       };
     } catch {
       return {
         allowSaleUnitPriceEdit: true,
         allowSaleItemDiscount: true,
         groupSameProduct: true,
+        allowProductImageEdit: true,
+        requirePasswordToRemoveSaleItems: false,
       };
     }
   }
@@ -297,6 +315,7 @@ export class CompaniesService {
     scope: ListCompaniesDto,
     payload: UpdateCompanyFinancialSettingsDto,
   ) {
+    this.assertFinanceAdmin();
     const company = await this.findScopedCompany(
       id,
       scope.sourceSystem,
@@ -358,6 +377,12 @@ export class CompaniesService {
   async syncSourceIntegrationSettings(
     payload: SyncSourceIntegrationSettingsDto,
   ) {
+    if (!hasAuthenticatedFinanceScope("SOURCE_SETTINGS_SYNC")) {
+      throw new ForbiddenException(
+        "A SINCRONIZAÇÃO DE CONFIGURAÇÕES EXIGE O ESCOPO SOURCE_SETTINGS_SYNC.",
+      );
+    }
+
     const sourceSystem = normalizeText(payload.sourceSystem);
     const sourceTenantId = normalizeText(payload.sourceTenantId);
     const branchCode = normalizeBranchCode(payload.sourceBranchCode, -1);
@@ -372,24 +397,19 @@ export class CompaniesService {
     const companyName =
       normalizeText(payload.companyName) || `${sourceSystem} ${sourceTenantId}`;
     const companyDocument = normalizeTaxId(payload.companyDocument);
-    const company = await this.prisma.company.upsert({
+    const mappedCompany = await this.prisma.company.findUnique({
       where: {
         sourceSystem_sourceTenantId: { sourceSystem, sourceTenantId },
       },
-      create: {
-        sourceSystem,
-        sourceTenantId,
-        name: companyName,
-        document: companyDocument,
-        interestRate: this.normalizeOptionalMoney(payload.interestRate),
-        interestGracePeriod: this.normalizeOptionalInt(payload.interestGracePeriod),
-        penaltyRate: this.normalizeOptionalMoney(payload.penaltyRate),
-        penaltyValue: this.normalizeOptionalMoney(payload.penaltyValue),
-        penaltyGracePeriod: this.normalizeOptionalInt(payload.penaltyGracePeriod),
-        createdBy: actor,
-        updatedBy: actor,
-      },
-      update: {
+    });
+    if (!mappedCompany) {
+      throw new NotFoundException(
+        "O VÍNCULO DA EMPRESA DEVE SER PROVISIONADO ANTES DA SINCRONIZAÇÃO.",
+      );
+    }
+    const company = await this.prisma.company.update({
+      where: { id: mappedCompany.id },
+      data: {
         name: companyName,
         ...(companyDocument ? { document: companyDocument } : {}),
         interestRate: this.normalizeOptionalMoney(payload.interestRate),
@@ -423,11 +443,14 @@ export class CompaniesService {
         : stockModes.stockIntegerQuantityMode === "NO"
           ? "DECIMAL_ALLOWED"
           : "PRODUCT_DEFINED";
-    const companyBranch = await this.prisma.companyBranch.upsert({
-      where: { companyId_branchCode: { companyId: company.id, branchCode } },
-      create: {
-        companyId: company.id,
-        branchCode,
+    if (!existingCompanyBranch) {
+      throw new NotFoundException(
+        "O VÍNCULO DA FILIAL DEVE SER PROVISIONADO ANTES DA SINCRONIZAÇÃO.",
+      );
+    }
+    const companyBranch = await this.prisma.companyBranch.update({
+      where: { id: existingCompanyBranch.id },
+      data: {
         name: normalizeText(payload.branchName) || `FILIAL ${branchCode}`,
         isActive: true,
         isDefault: branchCode === DEFAULT_BRANCH_CODE,
@@ -436,31 +459,8 @@ export class CompaniesService {
         ...stockModes,
         allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
         allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
-        fiscalLegalName: normalizeText(payload.branchLegalName),
-        fiscalTradeName: normalizeText(payload.branchTradeName),
-        fiscalDocument: normalizeTaxId(payload.branchDocument),
-        fiscalStreet: normalizeText(payload.branchStreet),
-        fiscalNumber: normalizeText(payload.branchNumber),
-        fiscalComplement: normalizeText(payload.branchComplement),
-        fiscalNeighborhood: normalizeText(payload.branchNeighborhood),
-        fiscalCity: normalizeText(payload.branchCity),
-        fiscalState: normalizeText(payload.branchState),
-        fiscalPostalCode: normalizeDigits(payload.branchPostalCode) || null,
-        fiscalPhone: normalizeText(payload.branchPhone),
-        fiscalEmail:
-          String(payload.branchEmail || "").trim().toLowerCase() || null,
-        createdBy: actor,
-        updatedBy: actor,
-      },
-      update: {
-        name: normalizeText(payload.branchName) || `FILIAL ${branchCode}`,
-        isActive: true,
-        isDefault: branchCode === DEFAULT_BRANCH_CODE,
-        inventoryControlType,
-        quantityPrecision,
-        ...stockModes,
-        allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
-        allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
+        allowProductImageEdit: payload.allowProductImageEdit ?? true,
+        requirePasswordToRemoveSaleItems: payload.requirePasswordToRemoveSaleItems ?? false,
         fiscalLegalName: normalizeText(payload.branchLegalName),
         fiscalTradeName: normalizeText(payload.branchTradeName),
         fiscalDocument: normalizeTaxId(payload.branchDocument),
@@ -480,30 +480,6 @@ export class CompaniesService {
       },
     });
 
-    const activeBranchCodes = Array.from(
-      new Set(
-        (payload.activeBranchCodes || [])
-          .map((code) => normalizeBranchCode(code, -1))
-          .filter((code) => code >= DEFAULT_BRANCH_CODE),
-      ),
-    );
-    if (activeBranchCodes.length) {
-      const now = new Date();
-      await this.prisma.companyBranch.updateMany({
-        where: {
-          companyId: company.id,
-          branchCode: { gte: DEFAULT_BRANCH_CODE, notIn: activeBranchCodes },
-          canceledAt: null,
-        },
-        data: {
-          isActive: false,
-          canceledAt: now,
-          canceledBy: actor,
-          updatedBy: actor,
-        },
-      });
-    }
-
     await this.prisma.screenParameter.upsert({
       where: {
         companyId_branchId_screenId: {
@@ -520,6 +496,8 @@ export class CompaniesService {
           allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
           allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
           groupSameProduct: payload.groupSameProduct ?? true,
+          allowProductImageEdit: payload.allowProductImageEdit ?? true,
+          requirePasswordToRemoveSaleItems: payload.requirePasswordToRemoveSaleItems ?? false,
         }),
         createdBy: actor,
         updatedBy: actor,
@@ -529,6 +507,8 @@ export class CompaniesService {
           allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
           allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
           groupSameProduct: payload.groupSameProduct ?? true,
+          allowProductImageEdit: payload.allowProductImageEdit ?? true,
+          requirePasswordToRemoveSaleItems: payload.requirePasswordToRemoveSaleItems ?? false,
         }),
         updatedBy: actor,
         canceledAt: null,
@@ -758,6 +738,8 @@ export class CompaniesService {
             allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
             allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
             groupSameProduct: true,
+            allowProductImageEdit: branch.allowProductImageEdit !== false,
+            requirePasswordToRemoveSaleItems: branch.requirePasswordToRemoveSaleItems === true,
           }),
       ),
     };
@@ -769,6 +751,7 @@ export class CompaniesService {
     scope: ListCompaniesDto,
     payload: SaveSalesScreenParametersDto,
   ) {
+    this.assertFinanceAdmin();
     const { company, branch } = await this.findScopedBranch(id, branchId, scope);
     const current = await this.getSalesScreenParameters(id, branchId, scope);
     const parameters = {
@@ -777,16 +760,11 @@ export class CompaniesService {
       allowSaleItemDiscount:
         payload.allowSaleItemDiscount ?? current.allowSaleItemDiscount,
       groupSameProduct: payload.groupSameProduct ?? current.groupSameProduct,
+      allowProductImageEdit:
+        payload.allowProductImageEdit ?? current.allowProductImageEdit,
+      requirePasswordToRemoveSaleItems:
+        payload.requirePasswordToRemoveSaleItems ?? current.requirePasswordToRemoveSaleItems,
     };
-
-    await pushSourceCompanyBranchParameters({
-      sourceSystem: company.sourceSystem,
-      sourceTenantId: company.sourceTenantId,
-      sourceBranchCode: branch.branchCode,
-      entityType: "BRANCH",
-      requestedBy: payload.requestedBy,
-      parameters,
-    });
 
     await this.prisma.$transaction(async (tx) => {
       await tx.companyBranch.update({
@@ -794,6 +772,8 @@ export class CompaniesService {
         data: {
           allowSaleUnitPriceEdit: parameters.allowSaleUnitPriceEdit,
           allowSaleItemDiscount: parameters.allowSaleItemDiscount,
+          allowProductImageEdit: parameters.allowProductImageEdit,
+          requirePasswordToRemoveSaleItems: parameters.requirePasswordToRemoveSaleItems,
           updatedBy: payload.requestedBy || null,
         },
       });
@@ -852,6 +832,7 @@ export class CompaniesService {
     scope: ListCompaniesDto,
     payload: SaveCompanyBranchDto,
   ) {
+    this.assertFinanceAdmin();
     const company = await this.findScopedCompany(
       id,
       scope.sourceSystem,
@@ -894,6 +875,8 @@ export class CompaniesService {
         payload.allowSaleItemDiscount ??
         currentScreenParameters.allowSaleItemDiscount,
       groupSameProduct: currentScreenParameters.groupSameProduct,
+      allowProductImageEdit: currentScreenParameters.allowProductImageEdit,
+      requirePasswordToRemoveSaleItems: payload.requirePasswordToRemoveSaleItems ?? currentScreenParameters.requirePasswordToRemoveSaleItems,
     };
 
     await pushSourceCompanyBranchParameters({
@@ -902,7 +885,7 @@ export class CompaniesService {
       sourceBranchCode: branch.branchCode,
       entityType: "BRANCH",
       requestedBy: payload.requestedBy,
-      parameters,
+      parameters: stockModes,
     });
 
     const updatedBranch = await this.prisma.$transaction(async (tx) => {
@@ -914,6 +897,8 @@ export class CompaniesService {
           ...stockModes,
           allowSaleUnitPriceEdit: parameters.allowSaleUnitPriceEdit,
           allowSaleItemDiscount: parameters.allowSaleItemDiscount,
+          allowProductImageEdit: parameters.allowProductImageEdit,
+          requirePasswordToRemoveSaleItems: parameters.requirePasswordToRemoveSaleItems,
           updatedBy: payload.requestedBy || null,
         },
       });

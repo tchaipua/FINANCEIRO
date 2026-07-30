@@ -8,6 +8,7 @@ import { createHash, randomUUID } from "crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { normalizeBranchCode } from "../../../common/branch.constants";
 import { normalizeText } from "../../../common/finance-core.utils";
+import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 import {
   CreateBusinessPrintJobDto,
   CreatePrintTemplateDto,
@@ -128,9 +129,9 @@ const DEFAULT_LABEL_LAYOUT = {
 export class PrintingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private assertAdmin(scope: PrintingScopeDto) {
-    if (normalizeText(scope.userRole) !== "ADMIN") {
-      throw new ForbiddenException("A configuração de impressão exige perfil ADMIN.");
+  private assertAdmin(_scope: PrintingScopeDto) {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      throw new ForbiddenException("A configuração de impressão exige o escopo FINANCE_ADMIN.");
     }
   }
 

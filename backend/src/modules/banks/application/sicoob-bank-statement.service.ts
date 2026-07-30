@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { execFile } from "child_process";
 import { join } from "path";
 import { promisify } from "util";
+import { requireSicoobPowerShellExecutable } from "../../../common/sicoob-powershell";
 
 const execFileAsync = promisify(execFile);
 
@@ -55,10 +56,11 @@ export class SicoobBankStatementService {
       "scripts",
       "sicoob-download-extrato.ps1",
     );
+    const powerShellExecutable = requireSicoobPowerShellExecutable();
 
     try {
       const { stdout } = await execFileAsync(
-        "powershell",
+        powerShellExecutable,
         [
           "-NoProfile",
           "-ExecutionPolicy",

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 
@@ -167,7 +168,7 @@ function FinanceMenuCard({ item, href, target }: FinanceMenuCardProps) {
     <>
       <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
         <img
-          src={item.image}
+          src={withFinanceBasePath(item.image)}
           alt={item.label}
           className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
         />

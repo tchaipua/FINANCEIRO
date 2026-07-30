@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -482,7 +484,7 @@ export default function FinanceiroRecebimentosPorClientePage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') return;
-    window.parent?.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
@@ -501,6 +503,7 @@ export default function FinanceiroRecebimentosPorClientePage() {
 
   useEffect(() => {
     function handleFinancePopupMessage(event: MessageEvent) {
+      if (!isTrustedMessageEvent(event)) return;
       const messageType = event.data?.type;
 
       if (messageType === 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CLOSE') {

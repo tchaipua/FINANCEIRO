@@ -249,6 +249,7 @@ Campos de parametrizacao:
 - `quantityPrecision`: `INTEGER_ONLY`, `DECIMAL_ALLOWED` ou `PRODUCT_DEFINED`
 - `allowSaleUnitPriceEdit`: define se a venda pode alterar o preco unitario do produto
 - `allowSaleItemDiscount`: define se a venda pode informar desconto por produto
+- `allowProductImageEdit`: define se a Venda 2 pode abrir a seleção e atualizar a foto do produto
 
 Regras:
 
@@ -260,6 +261,7 @@ Regras:
 - `PRODUCT_DEFINED`: cada produto define se aceita quantidade fracionada
 - quando `allowSaleUnitPriceEdit = false`, a venda deve usar o preco cadastrado do produto; produto generico (`internalCode = 1`) continua aceitando preco informado
 - quando `allowSaleItemDiscount = false`, a tela de vendas nao exibe desconto unitario e o backend rejeita desconto por item
+- quando `allowProductImageEdit = true`, a Venda 2 pode abrir `FINANCEIRO_ESTOQUE_SELECIONAR_IMAGEM`; a gravação exige pasta local e pasta de imagens S3 configuradas
 
 ### `products`
 

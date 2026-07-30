@@ -1,4 +1,6 @@
 'use client';
+
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 import {
   ChangeEvent,
   FormEvent,
@@ -405,7 +407,7 @@ function buildCertificateForm(
     purpose: certificate.purpose,
     isDefault: certificate.isDefault,
     pfxBase64: '',
-    certificatePassword: certificate.certificatePassword || '',
+    certificatePassword: '',
     fileName: '',
   };
 }
@@ -1053,13 +1055,10 @@ export default function FinanceiroCertificadosDigitaisPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   const summary = useMemo(() => {

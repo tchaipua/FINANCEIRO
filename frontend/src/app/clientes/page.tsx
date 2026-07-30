@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -19,6 +21,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   useFinanceRuntimeContext,
@@ -35,7 +38,7 @@ const CUSTOMER_EXPORT_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_EXPORTACAO_MODAL
 type Customer = {
   id: string;
   status: 'ACTIVE' | 'INACTIVE';
-  origin: 'ESCOLA' | 'FINANCEIRO';
+  origin: 'ESCOLA' | 'PROJETO_INICIAL' | 'FINANCEIRO';
   canManageLocally: boolean;
   externalEntityType: string;
   externalEntityId: string;
@@ -156,6 +159,7 @@ function requestSchoolCustomersSync() {
     }, 30000);
 
     function handleResult(event: MessageEvent) {
+      if (!isTrustedMessageEvent(event)) return;
       const payload = event.data;
       if (
         !payload ||
@@ -175,10 +179,7 @@ function requestSchoolCustomersSync() {
     }
 
     window.addEventListener('message', handleResult);
-    window.parent?.postMessage(
-      { type: 'MSINFOR_SYNC_FINANCIAL_CUSTOMERS', requestId },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SYNC_FINANCIAL_CUSTOMERS', requestId });
   });
 }
 
@@ -211,7 +212,9 @@ export default function CustomersPage() {
   );
   const syncedScopeRef = useRef<string | null>(null);
 
-  const isSchool = runtimeContext.sourceSystem === 'ESCOLA';
+  const isIntegratedSource =
+    runtimeContext.sourceSystem === 'ESCOLA' ||
+    runtimeContext.sourceSystem === 'PROJETO_INICIAL';
   const scopeReady = Boolean(runtimeContext.sourceSystem && runtimeContext.sourceTenantId);
   const visibleGridColumns = useMemo(
     () => CUSTOMER_GRID_COLUMNS.filter((column) => !hiddenColumns.includes(column.key)),
@@ -254,8 +257,8 @@ export default function CustomersPage() {
     }
   }, [appliedSearch, runtimeContext, scopeReady, status]);
 
-  const synchronizeSchoolCustomers = useCallback(async (showSuccess = false) => {
-    if (!isSchool || !runtimeContext.embedded) {
+  const synchronizeOriginCustomers = useCallback(async () => {
+    if (!isIntegratedSource || !runtimeContext.embedded) {
       await loadCustomers();
       return;
     }
@@ -263,43 +266,38 @@ export default function CustomersPage() {
     setSynchronizing(true);
     setErrorMessage(null);
     try {
-      const result = await requestSchoolCustomersSync();
-      if (showSuccess) {
-        setSuccessMessage(
-          String(result.message || 'Clientes da Escola sincronizados com sucesso.'),
-        );
-      }
+      await requestSchoolCustomersSync();
     } catch (error) {
       setErrorMessage(
         getFriendlyRequestErrorMessage(
           error,
-          'Não foi possível sincronizar os clientes da Escola.',
+          'Não foi possível sincronizar os clientes do sistema de origem.',
         ),
       );
     } finally {
       setSynchronizing(false);
       await loadCustomers();
     }
-  }, [isSchool, loadCustomers, runtimeContext.embedded]);
+  }, [isIntegratedSource, loadCustomers, runtimeContext.embedded]);
 
   useEffect(() => {
     if (!scopeReady) return;
     const scopeKey = `${runtimeContext.sourceSystem}|${runtimeContext.sourceTenantId}|${runtimeContext.sourceBranchCode}`;
-    if (isSchool && runtimeContext.embedded && syncedScopeRef.current !== scopeKey) {
+    if (isIntegratedSource && runtimeContext.embedded && syncedScopeRef.current !== scopeKey) {
       syncedScopeRef.current = scopeKey;
-      void synchronizeSchoolCustomers(false);
+      void synchronizeOriginCustomers();
       return;
     }
     void loadCustomers();
   }, [
-    isSchool,
+    isIntegratedSource,
     loadCustomers,
     runtimeContext.embedded,
     runtimeContext.sourceBranchCode,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
     scopeReady,
-    synchronizeSchoolCustomers,
+    synchronizeOriginCustomers,
   ]);
 
   const auditContext = useMemo(() => {
@@ -312,7 +310,7 @@ REGRAS:
 - empresa/tenant: ${formatTenantAuditValue(runtimeContext.sourceTenantId, runtimeContext.companyName)}
 - sistema origem: ${formatAuditValue(runtimeContext.sourceSystem)}
 - filial: ${runtimeContext.sourceBranchCode}
-- modo de cadastro: ${isSchool ? 'ORIGEM ESCOLA E LEGADOS VINCULADOS A TITULOS' : 'CADASTRO LOCAL NO FINANCEIRO'}
+- modo de cadastro: ${isIntegratedSource ? 'ORIGEM INTEGRADA E LEGADOS VINCULADOS A TITULOS' : 'CADASTRO LOCAL NO FINANCEIRO'}
 - status selecionado: ${status}
 - busca aplicada: ${formatAuditValue(search)}
 - registros exibidos: ${items.length}
@@ -332,19 +330,16 @@ WHERE CO.sourceSystem = ${toSqlLiteral(runtimeContext.sourceSystem || '')}
     OR COALESCE(PA.document, '') LIKE '%' || ${toSqlLiteral(normalizeBrazilTaxId(search))} || '%')
 ORDER BY PA.name ASC;`,
     };
-  }, [appliedSearch, isSchool, items.length, runtimeContext, status]);
+  }, [appliedSearch, isIntegratedSource, items.length, runtimeContext, status]);
 
   useEffect(() => {
     if (!runtimeContext.embedded) return;
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
         auditText: auditContext.auditText,
         sqlText: auditContext.sqlText,
-      },
-      '*',
-    );
+      });
   }, [auditContext.auditText, auditContext.sqlText, runtimeContext.embedded]);
 
   const openNewCustomer = () => {
@@ -461,15 +456,15 @@ ORDER BY PA.name ASC;`,
               {runtimeContext.logoUrl ? (
                 <img src={runtimeContext.logoUrl} alt={runtimeContext.companyName || 'Empresa'} className="h-full w-full object-contain p-1.5" />
               ) : (
-                <img src="/logo-msinfor.jpg" alt="MSINFOR" className="h-full w-full object-cover" />
+                <img src={withFinanceBasePath('/logo-msinfor.jpg')} alt="MSINFOR" className="h-full w-full object-cover" />
               )}
             </div>
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">Contas a receber</div>
               <h1 className="mt-1 text-2xl font-black text-slate-900">Clientes</h1>
               <p className="mt-1 text-sm font-medium text-slate-500">
-                {isSchool
-                  ? 'Pagadores sincronizados da Escola e clientes vinculados aos títulos a receber.'
+                {isIntegratedSource
+                  ? 'Clientes sincronizados automaticamente do sistema de origem e vinculados aos títulos a receber.'
                   : 'Cadastre e mantenha os clientes utilizados nas vendas e contas a receber.'}
               </p>
             </div>
@@ -486,7 +481,7 @@ ORDER BY PA.name ASC;`,
           }}
           className="flex items-center gap-3"
         >
-          {!isSchool && canCreateLocally ? (
+          {!isIntegratedSource && canCreateLocally ? (
             <button
               type="button"
               onClick={openNewCustomer}
@@ -495,21 +490,6 @@ ORDER BY PA.name ASC;`,
               className={`${FINANCE_GRID_PAGE_LAYOUT.iconButton} h-11 w-11 shrink-0 text-2xl font-black`}
             >
               +
-            </button>
-          ) : null}
-          {isSchool ? (
-            <button
-              type="button"
-              onClick={() => void synchronizeSchoolCustomers(true)}
-              disabled={synchronizing}
-              title="Sincronizar clientes da Escola"
-              className="inline-flex h-11 shrink-0 items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
-            >
-              <svg className={`h-4 w-4 ${synchronizing ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 6v5h-5M4 18v-5h5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M18.5 9A7 7 0 0 0 6.6 6.6L4 9M5.5 15A7 7 0 0 0 17.4 17.4L20 15" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {synchronizing ? 'Sincronizando' : 'Sincronizar Escola'}
             </button>
           ) : null}
           <input
@@ -564,7 +544,7 @@ ORDER BY PA.name ASC;`,
               {loading || synchronizing ? (
                 <tr>
                   <td colSpan={visibleGridColumns.length + 1} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">
-                    {synchronizing ? 'Sincronizando clientes da Escola...' : 'Carregando clientes...'}
+                    {synchronizing ? 'Sincronizando clientes do sistema de origem...' : 'Carregando clientes...'}
                   </td>
                 </tr>
               ) : paginatedItems.length ? (
@@ -624,13 +604,13 @@ ORDER BY PA.name ASC;`,
                           <button
                             type="button"
                             onClick={(event) => { event.stopPropagation(); setViewingCustomer(customer); }}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-slate-900"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 border-slate-800 bg-white text-slate-800 transition hover:bg-slate-100"
                             title="Visualizar cliente"
                             aria-label={`Visualizar cliente ${customer.name}`}
                           >
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                              <circle cx="12" cy="12" r="2.5" />
+                              <rect x="5" y="3.5" width="14" height="17" rx="1.8" />
+                              <path d="M8.5 8h7M8.5 12h7M8.5 16h5" strokeLinecap="round" />
                             </svg>
                           </button>
                           {customer.canManageLocally ? (
@@ -638,7 +618,7 @@ ORDER BY PA.name ASC;`,
                               <button
                                 type="button"
                                 onClick={(event) => { event.stopPropagation(); openEditCustomer(customer); }}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-800"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 border-violet-500 bg-violet-50 text-lg font-black text-violet-600 transition hover:bg-violet-100 hover:text-violet-800"
                                 title="Editar cliente"
                                 aria-label={`Editar cliente ${customer.name}`}
                               >
@@ -647,11 +627,33 @@ ORDER BY PA.name ASC;`,
                               <button
                                 type="button"
                                 onClick={(event) => { event.stopPropagation(); setStatusCustomer(customer); }}
-                                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${customer.status === 'ACTIVE' ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-800' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800'}`}
+                                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 text-lg font-black transition ${customer.status === 'ACTIVE' ? 'border-rose-400 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-800' : 'border-emerald-400 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800'}`}
                                 title={customer.status === 'ACTIVE' ? 'Inativar cliente' : 'Reativar cliente'}
                                 aria-label={`${customer.status === 'ACTIVE' ? 'Inativar' : 'Reativar'} cliente ${customer.name}`}
                               >
                                 {customer.status === 'ACTIVE' ? '⊘' : '↺'}
+                              </button>
+                            </>
+                          ) : null}
+                          {!customer.canManageLocally ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border-2 border-violet-500 bg-violet-50 text-lg font-black text-violet-600 opacity-60"
+                                title="Edição será configurada na próxima etapa"
+                                aria-label={`Editar cliente ${customer.name} — em preparação`}
+                              >
+                                ✎
+                              </button>
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border-2 border-rose-400 bg-rose-50 text-lg font-black text-rose-600 opacity-60"
+                                title="Inativação será configurada na próxima etapa"
+                                aria-label={`Inativar cliente ${customer.name} — em preparação`}
+                              >
+                                ×
                               </button>
                             </>
                           ) : null}
@@ -838,8 +840,8 @@ ORDER BY PA.name ASC;`,
         isOpen={Boolean(viewingCustomer)}
         screenId={CUSTOMER_DETAILS_MODAL_ID}
         title="Detalhes do cliente"
-        eyebrow={viewingCustomer?.origin === 'ESCOLA' ? 'Cadastro sincronizado' : 'Cadastro local'}
-        description={viewingCustomer?.origin === 'ESCOLA' ? 'Os dados principais deste cliente são mantidos no sistema Escola.' : 'Cliente cadastrado diretamente no Financeiro.'}
+        eyebrow={viewingCustomer?.origin === 'FINANCEIRO' ? 'Cadastro local' : 'Cadastro sincronizado'}
+        description={viewingCustomer?.origin === 'FINANCEIRO' ? 'Cliente cadastrado diretamente no Financeiro.' : 'Visualização do cadastro. A manutenção dos dados principais ocorre no sistema de origem.'}
         brandingName={runtimeContext.companyName}
         logoUrl={runtimeContext.logoUrl}
         onClose={() => setViewingCustomer(null)}

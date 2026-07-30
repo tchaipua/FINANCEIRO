@@ -254,7 +254,15 @@ export class ProductsService {
     const variantKey = this.buildVariantKey(payload);
     const quantity = payload.currentStock;
 
-    for (const balanceBranchCode of [0, branchCode]) {
+    // Em uma operação autenticada a escrita deve ficar restrita à filial da
+    // sessão. O saldo compartilhado (filial 0) é reservado para rotinas de
+    // integração/serviço sem contexto operacional de uma filial.
+    const financeContext = getFinanceContext();
+    const balanceBranchCodes = financeContext?.authenticated
+      ? [branchCode]
+      : [0, branchCode];
+
+    for (const balanceBranchCode of balanceBranchCodes) {
       await this.prisma.productStockBalance.upsert({
         where: {
           companyId_productId_branchCode_variantKey: {
@@ -505,6 +513,10 @@ export class ProductsService {
       ibsCbsClassCode: product.ibsCbsClassCode || null,
       fiscalNotes: product.fiscalNotes || null,
       notes: product.notes || null,
+      imageS3SyncStatus: product.imageS3SyncStatus || "NOT_TRACKED",
+      imageS3ObjectKey: product.imageS3ObjectKey || null,
+      imageS3LastError: product.imageS3LastError || null,
+      imageS3SyncedAt: product.imageS3SyncedAt?.toISOString?.() || null,
       inventorySituation: this.getInventorySituation(product),
       branchCode: product.branchCode || DEFAULT_BRANCH_CODE,
       branch: this.getBranchSummary(product, branchConfig),
@@ -623,22 +635,12 @@ export class ProductsService {
       normalizedSourceTenantId,
     );
 
-    if (existing) {
-      return existing;
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar produtos.",
+      );
     }
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem: normalizedSourceSystem,
-        sourceTenantId: normalizedSourceTenantId,
-        name:
-          normalizeText(payload.companyName) ||
-          `${normalizedSourceSystem} ${normalizedSourceTenantId}`,
-        document: normalizeTaxId(payload.companyDocument),
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
-    });
+    return existing;
   }
 
   private async loadScopedProduct(

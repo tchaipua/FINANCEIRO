@@ -21,6 +21,7 @@ import {
   NfseService,
   normalizeNfseServiceDescriptions,
 } from "../src/modules/fiscal-documents/application/nfse/nfse.service";
+import { financeContext } from "../src/common/finance-context";
 
 assert.equal(SHARED_BRANCH_CODE, 0);
 assert.deepEqual(getVisibleBranchCodes(4), [SHARED_BRANCH_CODE, 4]);
@@ -245,7 +246,6 @@ async function assertSharedServiceScope() {
     sourceTenantId: "TENANT-A",
     sourceBranchCode: 4,
     environment: "HOMOLOGATION",
-    userRole: "ADMIN",
   });
   assert.deepEqual(
     overview.services.map((item) => item.id),
@@ -320,7 +320,6 @@ async function assertSharedServiceScope() {
     sourceSystem: "ESCOLA",
     sourceTenantId: "TENANT-A",
     sourceBranchCode: 4,
-    userRole: "ADMIN",
     internalCode: "NOVOSERVICO",
     name: "NOVO SERVIÇO",
     description: "NOVO SERVIÇO COMPARTILHADO",
@@ -348,7 +347,20 @@ async function assertSharedServiceScope() {
   );
 }
 
-assertSharedServiceScope()
+financeContext.run(
+  {
+    authenticated: true,
+    branchCode: 4,
+    sourceSystem: "ESCOLA",
+    sourceTenantId: "TENANT-A",
+    sourceBranchCode: 4,
+    sourceUserId: "TEST-USER",
+    companyId: "COMPANY-A",
+    branchId: "BRANCH-4",
+    scopes: ["FINANCE_ADMIN"],
+  },
+  assertSharedServiceScope,
+)
   .then(() => process.stdout.write("NFS-e Nacional core: OK\n"))
   .catch((error) => {
     console.error(error);

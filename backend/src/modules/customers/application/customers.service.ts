@@ -30,7 +30,7 @@ import {
   SyncedCustomerDto,
 } from "./dto/customers.dto";
 
-const SCHOOL_SOURCE_SYSTEM = "ESCOLA";
+const INTEGRATED_SOURCE_SYSTEMS = new Set(["ESCOLA", "PROJETO_INICIAL"]);
 const LOCAL_CUSTOMER_TYPE = "FINANCEIRO_CLIENTE";
 
 @Injectable()
@@ -66,7 +66,7 @@ export class CustomersService {
     companyDocument?: string | null;
     requestedBy?: string | null;
   }) {
-    const sourceSystem = normalizeText(payload.sourceSystem);
+    const sourceSystem = normalizeText(payload.sourceSystem) || "";
     const sourceTenantId = normalizeText(payload.sourceTenantId);
 
     if (!sourceSystem || !sourceTenantId) {
@@ -76,40 +76,18 @@ export class CustomersService {
     }
 
     const existing = await this.findCompany(sourceSystem, sourceTenantId);
-    const companyName = normalizeText(payload.companyName);
-    const companyDocument = normalizeTaxId(payload.companyDocument);
-
-    if (existing) {
-      if (!companyName && !companyDocument) {
-        return existing;
-      }
-
-      return this.prisma.company.update({
-        where: { id: existing.id },
-        data: {
-          ...(companyName ? { name: companyName } : {}),
-          ...(companyDocument ? { document: companyDocument } : {}),
-          updatedBy: payload.requestedBy || null,
-        },
-      });
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar clientes.",
+      );
     }
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem,
-        sourceTenantId,
-        name: companyName || `${sourceSystem} ${sourceTenantId}`,
-        document: companyDocument,
-        createdBy: payload.requestedBy || null,
-        updatedBy: payload.requestedBy || null,
-      },
-    });
+    return existing;
   }
 
   private assertLocalRegistrationAllowed(company: { sourceSystem: string }) {
-    if (normalizeText(company.sourceSystem) === SCHOOL_SOURCE_SYSTEM) {
+    if (INTEGRATED_SOURCE_SYSTEMS.has(normalizeText(company.sourceSystem) || "")) {
       throw new BadRequestException(
-        "Clientes da Escola devem ser cadastrados e alterados exclusivamente no sistema Escola.",
+        "Clientes integrados devem ser cadastrados e alterados exclusivamente no sistema de origem.",
       );
     }
   }
@@ -149,7 +127,9 @@ export class CustomersService {
     party: any,
     sourceSystem: string,
   ) {
-    const isSchool = normalizeText(sourceSystem) === SCHOOL_SOURCE_SYSTEM;
+    const isIntegrated = INTEGRATED_SOURCE_SYSTEMS.has(
+      normalizeText(sourceSystem) || "",
+    );
     const branchCode = this.branchCode();
     const customerRole = (party.roles || []).find(
       (role: any) =>
@@ -160,8 +140,8 @@ export class CustomersService {
       (reference: any) =>
         !reference.canceledAt &&
         [0, branchCode].includes(reference.branchCode) &&
-        (isSchool
-          ? ["ALUNO", "RESPONSAVEL", "PERSON"].includes(
+        (isIntegrated
+          ? ["ALUNO", "RESPONSAVEL", "CLIENTE", "PERSON"].includes(
               reference.externalEntityType,
             )
           : true),
@@ -170,8 +150,8 @@ export class CustomersService {
       id: party.id,
       status:
         party.canceledAt || customerRole?.canceledAt ? "INACTIVE" : "ACTIVE",
-      origin: isSchool ? SCHOOL_SOURCE_SYSTEM : "FINANCEIRO",
-      canManageLocally: !isSchool,
+      origin: isIntegrated ? normalizeText(sourceSystem) : "FINANCEIRO",
+      canManageLocally: !isIntegrated,
       externalEntityType:
         preferredReference?.externalEntityType || party.externalEntityType,
       externalEntityId:
@@ -267,7 +247,7 @@ export class CustomersService {
   async list(query: ListCustomersDto) {
     const company = await this.findCompany(query.sourceSystem, query.sourceTenantId);
     const sourceSystem = normalizeText(query.sourceSystem) || "FINANCEIRO";
-    const canCreateLocally = sourceSystem !== SCHOOL_SOURCE_SYSTEM;
+    const canCreateLocally = !INTEGRATED_SOURCE_SYSTEMS.has(sourceSystem);
 
     if (!company) {
       return {
@@ -454,10 +434,10 @@ export class CustomersService {
   }
 
   async sync(payload: SyncCustomersDto) {
-    const sourceSystem = normalizeText(payload.sourceSystem);
-    if (sourceSystem !== SCHOOL_SOURCE_SYSTEM) {
+    const sourceSystem = normalizeText(payload.sourceSystem) || "";
+    if (!INTEGRATED_SOURCE_SYSTEMS.has(sourceSystem || "")) {
       throw new BadRequestException(
-        "A sincronização externa de clientes está habilitada somente para o sistema Escola.",
+        "A sincronização externa de clientes não está habilitada para este sistema.",
       );
     }
 
@@ -502,7 +482,12 @@ export class CustomersService {
         branchCode,
         sourceSystem,
         sourceTenantId,
-        externalEntityType: { in: ["ALUNO", "RESPONSAVEL"] },
+        externalEntityType: {
+          in:
+            sourceSystem === "ESCOLA"
+              ? ["ALUNO", "RESPONSAVEL"]
+              : ["CLIENTE"],
+        },
         canceledAt: null,
       },
       select: { id: true, partyId: true, externalEntityType: true, externalEntityId: true },

@@ -17,6 +17,7 @@ type GridStandardFooterProps = {
   recordSummaryVariant?: 'text' | 'pill';
   recordSummaryLabel?: string;
   typographyVariant?: 'default' | 'school';
+  compact?: boolean;
   showColumnSettings?: boolean;
   showExport?: boolean;
   onColumnSettings?: () => void;
@@ -127,6 +128,7 @@ export default function GridStandardFooter({
   recordSummaryVariant = 'text',
   recordSummaryLabel = 'Total registros',
   typographyVariant = 'default',
+  compact = false,
   showColumnSettings = true,
   showExport = true,
   onColumnSettings,
@@ -161,9 +163,9 @@ export default function GridStandardFooter({
     : 'min-w-16 text-center text-xs font-black uppercase tracking-[0.12em] text-slate-500';
 
   return (
-    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+    <div className={`border-t border-slate-200 bg-slate-50 ${compact ? 'px-3 py-2' : 'px-4 py-3'}`}>
+      <div className={`flex flex-col ${compact ? 'gap-2' : 'gap-3'} xl:flex-row xl:items-center xl:justify-between`}>
+        <div className={`flex flex-wrap items-center ${compact ? 'gap-2' : 'gap-3'}`}>
           {showColumnSettings && onColumnSettings ? (
             <button
               type="button"
@@ -206,7 +208,7 @@ export default function GridStandardFooter({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className={`flex flex-wrap items-center justify-end ${compact ? 'gap-2' : 'gap-3'}`}>
           {children}
           <select
             value={pageSize}

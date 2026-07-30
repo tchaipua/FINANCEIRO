@@ -4,7 +4,7 @@ Core financeiro multiempresa desacoplado dos sistemas de origem.
 
 ## Objetivo
 
-- receber contas a receber geradas por sistemas como `Escola` e `Petshop`
+- receber contas a receber geradas por `ESCOLA` e `PROJETO_INICIAL`
 - centralizar títulos, parcelas, baixas e caixa
 - manter contrato genérico por `sourceSystem` + `sourceTenantId`
 
@@ -16,3 +16,7 @@ Core financeiro multiempresa desacoplado dos sistemas de origem.
 4. Rode `npm run start:dev`
 
 Base padrão da API: `http://localhost:3002/api/v1`
+
+O SQLite acima é exclusivo do desenvolvimento local. Para Docker/PostgreSQL,
+papéis separados e migrations de produção, consulte
+`../docs/deployment-postgresql-docker.md`.

@@ -28,6 +28,7 @@ import {
   decryptSecret,
   encryptSecret,
 } from "../../../../common/secret-crypto.utils";
+import { hasAuthenticatedFinanceScope } from "../../../../common/finance-context";
 import {
   IssueNfseDto,
   NfseContextDto,
@@ -170,25 +171,20 @@ export class NfseService {
     return Math.max(1, normalizeBranchCode(value, fallback));
   }
 
-  private assertAdmin(context: NfseContextDto) {
-    if (normalizeText(context.userRole) !== "ADMIN") {
+  private assertAdmin(_context: NfseContextDto) {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
       throw new ForbiddenException(
-        "A CONFIGURAÇÃO DA NFS-E EXIGE PERFIL ADMIN.",
+        "A CONFIGURAÇÃO DA NFS-E EXIGE O ESCOPO FINANCE_ADMIN.",
       );
     }
   }
 
-  private assertOperator(context: NfseContextDto) {
-    const permissions = String(context.permissions || "")
-      .split(",")
-      .map((item) => normalizeText(item))
-      .filter(Boolean);
+  private assertOperator(_context: NfseContextDto) {
     if (
-      normalizeText(context.userRole) !== "ADMIN" &&
-      !permissions.includes("MANAGE_FINANCIAL")
+      !hasAuthenticatedFinanceScope("FINANCE_ADMIN", "MANAGE_FINANCIAL")
     ) {
       throw new ForbiddenException(
-        "A EMISSÃO DA NFS-E EXIGE PERFIL ADMIN OU PERMISSÃO MANAGE_FINANCIAL.",
+        "A EMISSÃO DA NFS-E EXIGE ESCOPO FINANCE_ADMIN OU MANAGE_FINANCIAL.",
       );
     }
   }

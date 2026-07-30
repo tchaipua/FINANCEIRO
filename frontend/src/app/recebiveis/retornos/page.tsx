@@ -1,12 +1,14 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { API_BASE_URL, getJson } from '@/app/lib/api';
+import { financeApiFetch, getJson } from '@/app/lib/api';
 import {
   formatDateLabel,
   getFriendlyRequestErrorMessage,
@@ -924,13 +926,10 @@ export default function FinanceiroBankReturnsPage() {
   useEffect(() => {
     if (!isEmbedded) return;
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [isEmbedded]);
 
   useEffect(() => {
@@ -1452,7 +1451,7 @@ export default function FinanceiroBankReturnsPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(`${API_BASE_URL}/receivables/bank-return-imports`, {
+      const response = await financeApiFetch('/receivables/bank-return-imports', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

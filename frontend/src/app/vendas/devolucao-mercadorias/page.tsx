@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
@@ -147,6 +149,7 @@ function confirmReturnPassword(password: string) {
     }, 20000);
 
     function handleMessage(event: MessageEvent) {
+      if (!isTrustedMessageEvent(event)) return;
       const payload = event.data as {
         type?: string;
         requestId?: string;
@@ -182,14 +185,11 @@ function confirmReturnPassword(password: string) {
     }
 
     window.addEventListener('message', handleMessage);
-    window.parent.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_CONFIRM_CASH_CANCELLATION_PASSWORD',
         requestId,
         password,
-      },
-      '*',
-    );
+      });
   });
 }
 
@@ -248,13 +248,10 @@ export default function SaleReturnPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || typeof window === 'undefined') return;
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   const selectedReturnLines = useMemo(() => {

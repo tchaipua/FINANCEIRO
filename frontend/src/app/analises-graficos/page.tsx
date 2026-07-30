@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -7,6 +9,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type AnalysisArea = {
   id: string;
@@ -104,10 +107,7 @@ export default function AnalyticsHubPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded) return;
-    window.parent?.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: 'PRINCIPAL_FINANCEIRO_ANALISES_GRAFICOS' },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: 'PRINCIPAL_FINANCEIRO_ANALISES_GRAFICOS' });
   }, [runtimeContext.embedded]);
 
   return (
@@ -134,7 +134,7 @@ export default function AnalyticsHubPage() {
             const content = (
               <>
                 <div className="flex h-24 items-center justify-center bg-slate-100 p-4">
-                  <img src={area.image} alt={area.label} className="max-h-full max-w-full object-contain" />
+                  <img src={withFinanceBasePath(area.image)} alt={area.label} className="max-h-full max-w-full object-contain" />
                 </div>
                 <div className="min-h-20 border-t border-slate-100 px-3 py-3 text-center">
                   <strong className="block text-sm font-black text-slate-800">{area.label}</strong>

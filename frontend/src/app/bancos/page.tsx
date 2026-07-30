@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -7,7 +9,7 @@ import ScreenNameCopy from '@/app/components/screen-name-copy';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
-import { API_BASE_URL, getJson } from '@/app/lib/api';
+import { financeApiFetch, getJson } from '@/app/lib/api';
 import {
   formatCurrency,
   formatDateLabel,
@@ -24,6 +26,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { stripFinanceBasePath } from '@/app/lib/public-path';
 
 type BankItem = {
   id: string;
@@ -45,10 +48,6 @@ type BankItem = {
   beneficiaryDocument?: string | null;
   billingProvider?: string | null;
   billingEnvironment?: string | null;
-  billingApiClientId?: string | null;
-  billingApiClientSecret?: string | null;
-  billingCertificateBase64?: string | null;
-  billingCertificatePassword?: string | null;
   billingBeneficiaryCode?: string | null;
   billingWalletVariation?: string | null;
   billingContractNumber?: string | null;
@@ -102,6 +101,8 @@ type BankFormState = {
   billingApiClientSecret: string;
   billingCertificateBase64: string;
   billingCertificatePassword: string;
+  hasBillingApiCredentials: boolean;
+  hasBillingCertificate: boolean;
   billingBeneficiaryCode: string;
   billingWalletVariation: string;
   billingContractNumber: string;
@@ -426,6 +427,8 @@ function buildEmptyBankForm(companyName = ''): BankFormState {
     billingApiClientSecret: '',
     billingCertificateBase64: '',
     billingCertificatePassword: '',
+    hasBillingApiCredentials: false,
+    hasBillingCertificate: false,
     billingBeneficiaryCode: '',
     billingWalletVariation: '',
     billingContractNumber: '',
@@ -463,10 +466,12 @@ function buildFormFromBank(bank: BankItem): BankFormState {
     beneficiaryDocument: bank.beneficiaryDocument || '',
     billingProvider: bank.billingProvider || '',
     billingEnvironment: bank.billingEnvironment || '',
-    billingApiClientId: bank.billingApiClientId || '',
-    billingApiClientSecret: bank.billingApiClientSecret || '',
-    billingCertificateBase64: bank.billingCertificateBase64 || '',
-    billingCertificatePassword: bank.billingCertificatePassword || '',
+    billingApiClientId: '',
+    billingApiClientSecret: '',
+    billingCertificateBase64: '',
+    billingCertificatePassword: '',
+    hasBillingApiCredentials: Boolean(bank.hasBillingApiCredentials),
+    hasBillingCertificate: Boolean(bank.hasBillingCertificate),
     billingBeneficiaryCode: bank.billingBeneficiaryCode || '',
     billingWalletVariation: bank.billingWalletVariation || '',
     billingContractNumber: bank.billingContractNumber || '',
@@ -931,7 +936,7 @@ export default function FinanceiroBanksPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const router = useRouter();
   const pathname = usePathname();
-  const isCreateRoute = pathname.startsWith('/bancos/novo');
+  const isCreateRoute = stripFinanceBasePath(pathname).startsWith('/bancos/novo');
   const preservedQueryString = useMemo(
     () => buildFinanceNavigationQueryString(runtimeContext),
     [runtimeContext],
@@ -1054,10 +1059,13 @@ export default function FinanceiroBanksPage() {
     [preservedQueryString],
   );
   const hasBillingCredentials = Boolean(
-    form.billingApiClientId.trim() && form.billingApiClientSecret.trim(),
+    form.hasBillingApiCredentials ||
+      (form.billingApiClientId.trim() && form.billingApiClientSecret.trim()),
   );
   const hasBillingCertificate = Boolean(
-    form.billingCertificateBase64.trim() && form.billingCertificatePassword.trim(),
+    form.hasBillingCertificate ||
+      (form.billingCertificateBase64.trim() &&
+        form.billingCertificatePassword.trim()),
   );
   const screenContextLabel = isCreateRoute
     ? editBankId
@@ -1074,13 +1082,10 @@ export default function FinanceiroBanksPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: screenContextLabel,
-      },
-      '*',
-    );
+      });
   }, [screenContextLabel]);
 
   useEffect(() => {
@@ -1451,8 +1456,8 @@ export default function FinanceiroBanksPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/banks${form.id ? `/${form.id}` : ''}`,
+      const response = await financeApiFetch(
+        `/banks${form.id ? `/${form.id}` : ''}`,
         {
           method: form.id ? 'PATCH' : 'POST',
           headers: {
@@ -1563,8 +1568,8 @@ export default function FinanceiroBanksPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/banks/${bank.id}/${nextStatus === 'ACTIVE' ? 'activate' : 'inactivate'}`,
+      const response = await financeApiFetch(
+        `/banks/${bank.id}/${nextStatus === 'ACTIVE' ? 'activate' : 'inactivate'}`,
         {
           method: 'POST',
           headers: {

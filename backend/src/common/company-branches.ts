@@ -112,6 +112,8 @@ export function mapCompanyBranchSummary(branch: {
   stockNegativeControlMode?: string;
   allowSaleUnitPriceEdit?: boolean | null;
   allowSaleItemDiscount?: boolean | null;
+  allowProductImageEdit?: boolean | null;
+  requirePasswordToRemoveSaleItems?: boolean | null;
 }) {
   return {
     id: branch.id,
@@ -136,5 +138,7 @@ export function mapCompanyBranchSummary(branch: {
     ),
     allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
     allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
+    allowProductImageEdit: branch.allowProductImageEdit !== false,
+    requirePasswordToRemoveSaleItems: branch.requirePasswordToRemoveSaleItems === true,
   };
 }

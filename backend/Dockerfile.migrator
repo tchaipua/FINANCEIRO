@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_VERSION=22.22.1
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+
+ENV NODE_ENV=production \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    PRISMA_HIDE_UPDATE_MESSAGE=1 \
+    CHECKPOINT_DISABLE=1
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates openssl tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10002 financeiro_control_plane \
+    && useradd --uid 10002 --gid 10002 --no-create-home \
+       --home-dir /nonexistent --shell /usr/sbin/nologin financeiro_control_plane
+
+FROM base AS control-plane-dependencies
+WORKDIR /control-plane
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev \
+    && npm cache clean --force
+COPY --chown=10002:10002 prisma ./prisma
+COPY --chown=10002:10002 scripts/sync-postgresql-schema.mjs ./scripts/
+RUN node scripts/sync-postgresql-schema.mjs \
+    && DATABASE_URL='postgresql://schema_generator:build-only@127.0.0.1:5432/financeiro?schema=public' \
+       node node_modules/prisma/build/index.js generate \
+       --schema prisma/postgresql/schema.prisma
+
+FROM control-plane-dependencies AS migrator
+COPY --chown=10002:10002 scripts/deploy-postgresql-migrations.mjs ./scripts/
+USER 10002:10002
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "scripts/deploy-postgresql-migrations.mjs"]
+
+FROM control-plane-dependencies AS provisioner-build
+COPY scripts/provision-finance-tenant.ts ./scripts/
+RUN node node_modules/typescript/bin/tsc \
+      scripts/provision-finance-tenant.ts \
+      --target ES2022 \
+      --module commonjs \
+      --moduleResolution node \
+      --esModuleInterop \
+      --skipLibCheck \
+      --outDir provisioner-dist \
+    && npm prune --omit=dev
+
+FROM base AS provisioner
+WORKDIR /provisioner
+COPY --from=provisioner-build --chown=10002:10002 /control-plane/node_modules ./node_modules
+COPY --from=provisioner-build --chown=10002:10002 /control-plane/provisioner-dist/provision-finance-tenant.js ./provision-finance-tenant.js
+USER 10002:10002
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "provision-finance-tenant.js"]

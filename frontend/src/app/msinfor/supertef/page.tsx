@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -9,6 +11,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type SuperTefTabId =
   | 'configuracao'
@@ -325,7 +328,6 @@ export default function SuperTefPage() {
     () =>
       buildFinanceApiQueryString(runtimeContext, {
         sourceBranchCode: runtimeContext.sourceBranchCode,
-        userRole: runtimeContext.userRole,
       }),
     [runtimeContext],
   );
@@ -335,7 +337,6 @@ export default function SuperTefPage() {
       sourceSystem: runtimeContext.sourceSystem,
       sourceTenantId: runtimeContext.sourceTenantId,
       sourceBranchCode: runtimeContext.sourceBranchCode,
-      userRole: runtimeContext.userRole,
       requestedBy: actor,
     }),
     [actor, runtimeContext],
@@ -368,14 +369,12 @@ export default function SuperTefPage() {
           requestJson<SuperTefPayment[]>(
             `/supertef/payments${buildFinanceApiQueryString(runtimeContext, {
               sourceBranchCode: runtimeContext.sourceBranchCode,
-              userRole: runtimeContext.userRole,
               take: 30,
             })}`,
           ),
           requestJson<SuperTefAuditEvent[]>(
             `/supertef/audit${buildFinanceApiQueryString(runtimeContext, {
               sourceBranchCode: runtimeContext.sourceBranchCode,
-              userRole: runtimeContext.userRole,
               take: 100,
             })}`,
           ),
@@ -434,13 +433,10 @@ export default function SuperTefPage() {
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
@@ -459,7 +455,6 @@ export default function SuperTefPage() {
     const loadedAudit = await requestJson<SuperTefAuditEvent[]>(
       `/supertef/audit${buildFinanceApiQueryString(runtimeContext, {
         sourceBranchCode: runtimeContext.sourceBranchCode,
-        userRole: runtimeContext.userRole,
         take: 100,
       })}`,
     );
@@ -1830,7 +1825,7 @@ ORDER BY stp.requestedAt DESC;
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white p-1 shadow-lg">
                   <img
-                    src="/principal-financeiro/supertef.svg"
+                    src={withFinanceBasePath('/principal-financeiro/supertef.svg')}
                     alt="SuperTEF"
                     className="h-full w-full object-contain"
                   />

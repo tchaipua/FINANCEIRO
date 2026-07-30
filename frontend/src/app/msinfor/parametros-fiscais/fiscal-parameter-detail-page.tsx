@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -7,6 +9,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import type { FiscalParameterCatalogItem } from './fiscal-parameter-catalog';
 import FiscalParameterEditor from './fiscal-parameter-editor';
 
@@ -31,13 +34,10 @@ export default function FiscalParameterDetailPage({ item }: FiscalParameterDetai
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: embeddedScreenId,
-      },
-      '*',
-    );
+      });
   }, [embeddedScreenId, runtimeContext.embedded]);
 
   if (!isMounted) {
@@ -86,7 +86,7 @@ Regra:
           <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-white p-2 shadow-lg">
-                <img src={item.icon} alt={item.title} className="h-full w-full object-contain" />
+                <img src={withFinanceBasePath(item.icon)} alt={item.title} className="h-full w-full object-contain" />
               </div>
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">

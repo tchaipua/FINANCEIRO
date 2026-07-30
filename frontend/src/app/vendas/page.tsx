@@ -1,10 +1,13 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { API_BASE_URL, getJson, requestJson } from '@/app/lib/api';
+import SalesScreenParametersModal from '@/app/components/sales-screen-parameters-modal';
+import { API_BASE_URL, financeApiFetch, getJson, requestJson } from '@/app/lib/api';
 import {
   isValidBrazilTaxId,
   normalizeBrazilTaxId,
@@ -19,6 +22,7 @@ import {
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
 import { createAndDispatchPrintJob } from '@/app/lib/local-print-agent';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type ProductItem = {
   id: string;
@@ -46,12 +50,21 @@ type SaleBranchItem = {
   branchCode: number;
   allowSaleUnitPriceEdit?: boolean | null;
   allowSaleItemDiscount?: boolean | null;
+  allowProductImageEdit?: boolean | null;
 };
 
 type SaleBranchConfig = {
   allowSaleUnitPriceEdit: boolean;
   allowSaleItemDiscount: boolean;
   groupSameProduct: boolean;
+  allowProductImageEdit: boolean;
+  requirePasswordToRemoveSaleItems: boolean;
+};
+
+type ProductImageSearchItem = {
+  imageUrl: string;
+  thumbnailUrl: string;
+  sourceUrl: string;
 };
 
 type CartItem = {
@@ -323,6 +336,7 @@ const QUICK_CASH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA';
 const QUICK_CASH_PEOPLE_SEARCH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA_PESQUISAR_PESSOAS';
 const PIX_QR_CODE_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_PIX_SICOOB_QRCODE';
 const PRODUCT_LOOKUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_2_PESQUISAR_PRODUTO';
+const PRODUCT_IMAGE_SELECTION_SCREEN_ID = 'FINANCEIRO_ESTOQUE_SELECIONAR_IMAGEM';
 const VP_CUSTOMER_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_VP_SELECIONAR_CLIENTE';
 const VP_CONFIRMATION_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_VP_CONFIRMAR_VENDA';
 const SALE_DRAFT_STORAGE_PREFIX = 'financeiro:vendas:rascunho:';
@@ -334,12 +348,15 @@ const DEFAULT_SALE_BRANCH_CONFIG: SaleBranchConfig = {
   allowSaleUnitPriceEdit: true,
   allowSaleItemDiscount: true,
   groupSameProduct: true,
+  allowProductImageEdit: true,
+  requirePasswordToRemoveSaleItems: false,
 };
 
+const VENDAS2_LOCAL_IMAGE_AGENT_URL = 'http://127.0.0.1:47821';
 const VENDAS2_LOCAL_IMAGE_BASE_URL = 'http://127.0.0.1:47821/imagens';
 const VENDAS2_LOCAL_IMAGE_EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg', 'bmp'] as const;
 
-function getVendas2ProductImageUrls(product: ProductItem | null) {
+function getVendas2ProductImageUrls(product: ProductItem | null, refreshKey = 0) {
   if (!product) return [];
 
   const barcode = String(product.barcode || '').replace(/\D/g, '');
@@ -352,10 +369,116 @@ function getVendas2ProductImageUrls(product: ProductItem | null) {
     new Set(
       productCodes.flatMap((productCode) =>
         VENDAS2_LOCAL_IMAGE_EXTENSIONS.map(
-          (extension) => `${VENDAS2_LOCAL_IMAGE_BASE_URL}/${encodeURIComponent(`${productCode}.${extension}`)}`,
+          (extension) => `${VENDAS2_LOCAL_IMAGE_BASE_URL}/${encodeURIComponent(`${productCode}.${extension}`)}?t=${refreshKey}`,
         ),
       ),
     ),
+  );
+}
+
+function getVendas2ProductImageCode(product: ProductItem | null) {
+  if (!product) return '';
+  return String(product.internalCode || product.sku || product.barcode || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '');
+}
+
+function getVendas2ProductImageSearchCode(product: ProductItem | null) {
+  if (!product) return '';
+  const barcode = String(product.barcode || '').replace(/\D/g, '');
+  return barcode.length === 8 || barcode.length === 13
+    ? barcode
+    : getVendas2ProductImageCode(product);
+}
+
+function Vendas2ProductImageSelectionModal({
+  product,
+  searchCode,
+  logoUrl,
+  isSaving,
+  onClose,
+  onChoose,
+}: {
+  product: ProductItem;
+  searchCode: string;
+  logoUrl: string | null;
+  isSaving: boolean;
+  onClose: () => void;
+  onChoose: (imageUrl: string) => void;
+}) {
+  const [items, setItems] = useState<ProductImageSearchItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchOffset, setSearchOffset] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const loadImages = async () => {
+      setIsLoading(true);
+      setSearchError(null);
+      try {
+        const params = new URLSearchParams({ q: searchCode, offset: String(searchOffset) });
+        const response = await fetch(withFinanceBasePath(`/api/image-search?${params.toString()}`), { cache: 'no-store' });
+        const result = (await response.json().catch(() => null)) as { items?: ProductImageSearchItem[]; message?: string } | null;
+        if (!response.ok) throw new Error(result?.message || 'NÃO FOI POSSÍVEL BUSCAR IMAGENS AGORA.');
+        if (active) setItems(result?.items || []);
+      } catch (error) {
+        if (active) setSearchError(error instanceof Error ? error.message : 'NÃO FOI POSSÍVEL BUSCAR IMAGENS AGORA.');
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+    void loadImages();
+    return () => { active = false; };
+  }, [searchCode, searchOffset]);
+
+  return (
+    <div data-system-message-root className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="vendas2-image-selection-title">
+      <section className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-3xl border border-slate-200 bg-white shadow-2xl">
+        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-1">
+              {logoUrl ? <img src={withFinanceBasePath(logoUrl)} alt="Logotipo institucional" className="h-full w-full object-contain" /> : <img src={withFinanceBasePath('/logo-msinfor.jpg')} alt="Logotipo MSINFOR" className="h-full w-full object-cover" />}
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-violet-700">Selecionar imagem encontrada</p>
+              <h2 id="vendas2-image-selection-title" className="mt-1 text-lg font-black uppercase text-slate-800">{product.name}</h2>
+              <p className="mt-1 text-xs font-bold text-slate-500">Pesquisa: {searchCode}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} disabled={isSaving} className="h-9 w-9 rounded-full border border-slate-200 bg-white text-lg font-black text-slate-500 disabled:opacity-50" aria-label="Fechar seleção de imagem">×</button>
+        </header>
+
+        <div className="p-5">
+          <p className="mb-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-xs font-bold leading-5 text-violet-900">
+            Selecione uma das 10 imagens encontradas na web. Caso queira outras opções, use Procurar +10. A imagem será atualizada na pasta local e na pasta de imagens do S3.
+          </p>
+          {isLoading ? <p className="py-16 text-center text-sm font-bold text-slate-500">BUSCANDO IMAGENS...</p> : null}
+          {searchError ? <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold uppercase text-rose-700">{searchError}</p> : null}
+          {!isLoading && !searchError && !items.length ? <p className="py-16 text-center text-sm font-bold text-slate-500">NENHUMA IMAGEM FOI ENCONTRADA.</p> : null}
+          {!isLoading && items.length ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {items.map((item, index) => (
+                <button key={item.imageUrl} type="button" disabled={isSaving} onClick={() => onChoose(item.imageUrl)} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition hover:border-violet-400 hover:ring-2 hover:ring-violet-100 disabled:cursor-wait disabled:opacity-60" title="Usar esta imagem">
+                  <img src={item.thumbnailUrl} alt={`Imagem encontrada ${index + 1} para ${product.name}`} className="aspect-square w-full bg-slate-100 object-contain p-2" />
+                  <span className="block border-t border-slate-100 px-2 py-2 text-center text-[9px] font-black uppercase tracking-[0.1em] text-slate-600 group-hover:text-violet-700">Usar imagem {index + 1}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="mr-auto flex min-w-[220px] flex-col gap-1">
+            <span className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Auditoria visual: seleção manual e atualização local/S3</span>
+            <ScreenNameCopy screenId={PRODUCT_IMAGE_SELECTION_SCREEN_ID} originText="Origem: Sistema Financeiro - seleção de imagem encontrada para produto" auditText="Popup exclusivo para selecionar e atualizar a imagem local e no S3." className="justify-start" />
+          </div>
+          <button type="button" onClick={() => setSearchOffset((current) => current + 10)} disabled={isSaving || isLoading} className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-black uppercase text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50">Procurar +10</button>
+          <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black uppercase text-slate-600 disabled:opacity-50">Voltar</button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -433,6 +556,7 @@ function requestSchoolCustomersSyncFromHost() {
     const timeout = window.setTimeout(finish, 10000);
 
     function handleResult(event: MessageEvent) {
+      if (!isTrustedMessageEvent(event)) return;
       const payload = event.data;
       if (
         !payload ||
@@ -446,10 +570,7 @@ function requestSchoolCustomersSyncFromHost() {
     }
 
     window.addEventListener('message', handleResult);
-    window.parent.postMessage(
-      { type: 'MSINFOR_SYNC_FINANCIAL_CUSTOMERS', requestId },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SYNC_FINANCIAL_CUSTOMERS', requestId });
   });
 }
 
@@ -968,6 +1089,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     DEFAULT_SALE_BRANCH_CONFIG,
   );
   const [vendas2ProductImageIndex, setVendas2ProductImageIndex] = useState(0);
+  const [vendas2ProductImageRefreshKey, setVendas2ProductImageRefreshKey] = useState(0);
+  const [vendas2ProductImageSelection, setVendas2ProductImageSelection] = useState<ProductItem | null>(null);
+  const [isSalesScreenParametersOpen, setIsSalesScreenParametersOpen] = useState(false);
+  const [isSavingVendas2ProductImage, setIsSavingVendas2ProductImage] = useState(false);
   const [currentCompanyId, setCurrentCompanyId] = useState<string | null>(null);
   const [currentBranchId, setCurrentBranchId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
@@ -1180,14 +1305,29 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
 
   useEffect(() => {
     const handleSalesParametersUpdate = async (event: MessageEvent) => {
+      if (!isTrustedMessageEvent(event)) return;
+      if (event.data?.type === 'MSINFOR_OPEN_SALES_PARAMETERS') {
+        setIsSalesScreenParametersOpen(true);
+        return;
+      }
+      if (event.data?.type === 'MSINFOR_APPLY_SALES_PARAMETERS') {
+        setBranchSaleConfig({
+          allowSaleUnitPriceEdit: event.data.parameters?.allowSaleUnitPriceEdit !== false,
+          allowSaleItemDiscount: event.data.parameters?.allowSaleItemDiscount !== false,
+          groupSameProduct: event.data.parameters?.groupSameProduct !== false,
+          allowProductImageEdit: event.data.parameters?.allowProductImageEdit !== false,
+          requirePasswordToRemoveSaleItems: event.data.parameters?.requirePasswordToRemoveSaleItems === true,
+        });
+        return;
+      }
       if (event.data?.type !== 'MSINFOR_UPDATE_SALES_PARAMETERS') return;
       const requestId = event.data.requestId;
       if (!currentCompanyId || !currentBranchId) {
-        window.parent.postMessage({
+        postMessageToTrustedParent({
           type: 'MSINFOR_SALES_PARAMETERS_ERROR',
           requestId,
           message: 'O Financeiro ainda não carregou a empresa e a filial da venda.',
-        }, '*');
+        });
         return;
       }
 
@@ -1195,6 +1335,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         allowSaleUnitPriceEdit: event.data.parameters?.allowSaleUnitPriceEdit !== false,
         allowSaleItemDiscount: event.data.parameters?.allowSaleItemDiscount !== false,
         groupSameProduct: event.data.parameters?.groupSameProduct !== false,
+        allowProductImageEdit: event.data.parameters?.allowProductImageEdit !== false,
+        requirePasswordToRemoveSaleItems: event.data.parameters?.requirePasswordToRemoveSaleItems === true,
       };
 
       try {
@@ -1204,11 +1346,11 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           fallbackMessage: 'Não foi possível salvar os parâmetros da tela de vendas.',
         });
         setBranchSaleConfig(parameters);
-          window.parent.postMessage({ type: 'MSINFOR_SALES_PARAMETERS_SAVED', requestId, parameters }, '*');
+          postMessageToTrustedParent({ type: 'MSINFOR_SALES_PARAMETERS_SAVED', requestId, parameters });
         } catch (error) {
           const message = getFriendlyRequestErrorMessage(error, 'Não foi possível salvar os parâmetros da tela de vendas.');
           setErrorMessage(message);
-          window.parent.postMessage({ type: 'MSINFOR_SALES_PARAMETERS_ERROR', requestId, message }, '*');
+          postMessageToTrustedParent({ type: 'MSINFOR_SALES_PARAMETERS_ERROR', requestId, message });
         }
     };
 
@@ -1217,7 +1359,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   }, [currentBranchId, currentCompanyId, runtimeContext]);
 
   useEffect(() => {
-    window.parent.postMessage({ type: 'MSINFOR_SALES_PARAMETERS_STATE', parameters: branchSaleConfig }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SALES_PARAMETERS_STATE', parameters: branchSaleConfig });
   }, [branchSaleConfig]);
 
   const loadCurrentCashSession = useCallback(async () => {
@@ -1394,14 +1536,88 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     activeCartQuantity * activeCartUnitPrice - activeCartQuantity * activeCartUnitDiscount,
   );
   const activeVendas2ProductImageUrls = useMemo(
-    () => getVendas2ProductImageUrls(activeCartItem?.product || null),
-    [activeCartItem?.product],
+    () => getVendas2ProductImageUrls(activeCartItem?.product || null, vendas2ProductImageRefreshKey),
+    [activeCartItem?.product, vendas2ProductImageRefreshKey],
   );
   const activeVendas2ProductImageUrl = activeVendas2ProductImageUrls[vendas2ProductImageIndex] || '';
 
   useEffect(() => {
     setVendas2ProductImageIndex(0);
   }, [activeCartItem?.lineId]);
+
+  function openVendas2ProductImageSelection() {
+    const product = activeCartItem?.product;
+    if (!product || !branchSaleConfig.allowProductImageEdit) return;
+    if (!getVendas2ProductImageCode(product) || !getVendas2ProductImageSearchCode(product)) {
+      setErrorMessage('O PRODUTO NÃO POSSUI CÓDIGO VÁLIDO PARA ALTERAR A FOTO.');
+      return;
+    }
+
+    setErrorMessage('');
+    setVendas2ProductImageSelection(product);
+  }
+
+  async function saveVendas2ProductImage(imageUrl: string) {
+    const product = vendas2ProductImageSelection;
+    if (!product) return;
+    const productCode = getVendas2ProductImageCode(product);
+    if (!productCode) {
+      setVendas2ProductImageSelection(null);
+      setErrorMessage('O PRODUTO NÃO POSSUI CÓDIGO VÁLIDO PARA ALTERAR A FOTO.');
+      return;
+    }
+
+    setIsSavingVendas2ProductImage(true);
+    setErrorMessage('');
+    try {
+      const localConfigurationResponse = await fetch(
+        `${VENDAS2_LOCAL_IMAGE_AGENT_URL}/configuracao`,
+        { cache: 'no-store' },
+      );
+      const localConfiguration = (await localConfigurationResponse.json().catch(() => null)) as { imagesDirectory?: string; message?: string } | null;
+      if (!localConfigurationResponse.ok) {
+        throw new Error(localConfiguration?.message || 'O AGENTE LOCAL DE IMAGENS NÃO ESTÁ DISPONÍVEL.');
+      }
+      if (!String(localConfiguration?.imagesDirectory || '').trim()) {
+        throw new Error('INFORME A PASTA LOCAL DAS IMAGENS NO AGENTE MSINFOR.');
+      }
+
+      const localResponse = await fetch(`${VENDAS2_LOCAL_IMAGE_AGENT_URL}/imagens/${encodeURIComponent(productCode)}/from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: imageUrl }),
+      });
+      const localResult = (await localResponse.json().catch(() => null)) as { fileName?: string; message?: string } | null;
+      if (!localResponse.ok) {
+        throw new Error(localResult?.message || 'NÃO FOI POSSÍVEL GRAVAR A IMAGEM NA PASTA LOCAL.');
+      }
+
+      const fileName = String(localResult?.fileName || `${productCode}.webp`).trim();
+      const localImageUrl = `${VENDAS2_LOCAL_IMAGE_BASE_URL}/${encodeURIComponent(fileName)}?t=${Date.now()}`;
+      const localFileResponse = await fetch(localImageUrl, { cache: 'no-store' });
+      if (!localFileResponse.ok) {
+        throw new Error('A IMAGEM FOI GRAVADA LOCALMENTE, MAS NÃO PÔDE SER LIDA PARA ENVIO AO S3.');
+      }
+      const formData = new FormData();
+      formData.append('productId', product.id);
+      formData.append('originScreenId', 'PRINCIPAL_FINANCEIRO_VENDAS_2');
+      formData.append('file', await localFileResponse.blob(), fileName);
+      const syncResponse = await financeApiFetch('/s3-control/product-image', { method: 'POST', body: formData });
+      const syncResult = (await syncResponse.json().catch(() => null)) as { message?: string } | null;
+      if (!syncResponse.ok) {
+        throw new Error(syncResult?.message || 'A IMAGEM FOI GRAVADA LOCALMENTE, MAS NÃO FOI ATUALIZADA NO S3.');
+      }
+
+      setVendas2ProductImageSelection(null);
+      setVendas2ProductImageIndex(0);
+      setVendas2ProductImageRefreshKey(Date.now());
+    } catch (error) {
+      setVendas2ProductImageSelection(null);
+      setErrorMessage(getFriendlyRequestErrorMessage(error, 'NÃO FOI POSSÍVEL ATUALIZAR A FOTO DO PRODUTO.'));
+    } finally {
+      setIsSavingVendas2ProductImage(false);
+    }
+  }
 
   const visibleCartItems = useMemo(() => {
     const search = cartDescriptionSearch.trim().toUpperCase();
@@ -1834,6 +2050,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         }, 8000);
 
         function handleResult(event: MessageEvent) {
+          if (!isTrustedMessageEvent(event)) return;
           const payload = event.data;
           if (!payload || payload.type !== 'MSINFOR_PEOPLE_SEARCH_RESULT' || payload.requestId !== requestId) {
             return;
@@ -1884,15 +2101,12 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         }
 
         window.addEventListener('message', handleResult);
-        window.parent.postMessage(
-          {
+        postMessageToTrustedParent({
             type: 'MSINFOR_PEOPLE_SEARCH',
             requestId,
             search: normalizedSearch,
             sourceSystem: runtimeContext.sourceSystem,
-          },
-          '*',
-        );
+          });
       });
     },
     [runtimeContext.sourceSystem],
@@ -2982,70 +3196,70 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     });
   }, [cartTotals.total, submitSale, vpSaleState]);
 
+  const vendas2ProductImageElement = activeCartItem && activeVendas2ProductImageUrls.length ? (
+    activeVendas2ProductImageUrl ? (
+      <img
+        src={activeVendas2ProductImageUrl}
+        alt={`Imagem de ${activeCartItem.description || activeCartItem.product.name}`}
+        onError={() => setVendas2ProductImageIndex((current) => current + 1)}
+        className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-blue-100 bg-blue-50 object-contain shadow-inner"
+      />
+    ) : (
+      <img
+        src={withFinanceBasePath('/produto-imagem-nao-disponivel.svg')}
+        alt="Imagem não disponível"
+        className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-slate-200 bg-white object-contain shadow-inner"
+      />
+    )
+  ) : null;
+
   return (
     <form onSubmit={handleSubmit} className={`flex h-[100dvh] min-h-0 flex-col overflow-hidden ${pageBottomPaddingClass}`}>
       {visualVariant === 'v2' ? (
         <>
           <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden bg-slate-100 p-3">
-            <div className="flex min-h-[82px] shrink-0 items-center gap-4 rounded-xl bg-gradient-to-r from-[#061c3f] via-[#082a59] to-[#061c3f] px-5 py-3 text-white shadow-lg">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/35 bg-white">
-                {runtimeContext.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={runtimeContext.logoUrl}
-                    alt={`Logotipo de ${runtimeContext.companyName || 'ESCOLA'}`}
-                    className="h-full w-full object-contain p-1"
-                  />
-                ) : (
-                  <span className="text-xs font-black tracking-[0.16em] text-[#082a59]">
-                    {String(runtimeContext.companyName || 'ESCOLA').slice(0, 3).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-baseline justify-between gap-4 text-[clamp(1.35rem,3vw,2.7rem)] font-black uppercase leading-none tracking-tight">
-                  <span className="min-w-0 flex-1 truncate">
-                    {activeCartItem
-                      ? activeCartItem.description || activeCartItem.product.name
-                      : 'NOVA VENDA'}
-                  </span>
-                  {activeCartItem ? (
+            <div className="relative flex min-h-[82px] shrink-0 items-center gap-4 rounded-xl bg-gradient-to-r from-[#061c3f] via-[#082a59] to-[#061c3f] px-5 py-3 text-white shadow-lg">
+              {activeCartItem ? (
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-baseline justify-between gap-4 text-[clamp(1.35rem,3vw,2.7rem)] font-black uppercase leading-none tracking-tight">
+                    <span className="min-w-0 flex-1 truncate">
+                      {activeCartItem.description || activeCartItem.product.name}
+                    </span>
                     <span className="shrink-0 whitespace-nowrap tracking-normal text-blue-100">
                       {formatQuantityInput(activeCartQuantity)} x {formatCurrency(parseDecimal(activeCartItem.unitPrice))} = {formatCurrency(activeCartTotal)}
                     </span>
-                  ) : null}
+                  </div>
+                  <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">
+                    {activeCartItem.product.internalCode || activeCartItem.product.sku || activeCartItem.product.barcode || 'ITEM SELECIONADO'}
+                  </div>
                 </div>
-                <div className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-200">
-                  {activeCartItem
-                    ? activeCartItem.product.internalCode || activeCartItem.product.sku || activeCartItem.product.barcode || 'ITEM SELECIONADO'
-                    : 'INFORME O CÓDIGO OU PESQUISE UM PRODUTO'}
+              ) : (
+                <div className="pointer-events-none absolute inset-y-0 left-20 right-20 flex items-center justify-center text-center text-[clamp(1.35rem,3vw,2.7rem)] font-black uppercase leading-none tracking-tight">
+                  AGUARDANDO PRÓXIMO CLIENTE.....
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(230px,0.72fr)_minmax(310px,0.9fr)_minmax(460px,1.38fr)]">
               <section className="flex min-h-[250px] flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex h-full min-h-[210px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f8fafc_58%,_#e2e8f0_100%)]">
                   <div className="flex h-full w-full flex-col items-center justify-center gap-5 text-center">
-                    {activeCartItem && activeVendas2ProductImageUrls.length ? (
-                      activeVendas2ProductImageUrl ? (
-                        <img
-                          src={activeVendas2ProductImageUrl}
-                          alt={`Imagem de ${activeCartItem.description || activeCartItem.product.name}`}
-                          onError={() => setVendas2ProductImageIndex((current) => current + 1)}
-                          className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-blue-100 bg-blue-50 object-contain shadow-inner"
-                        />
-                      ) : (
-                        <img
-                          src="/produto-imagem-nao-disponivel.svg"
-                          alt="Imagem não disponível"
-                          className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-slate-200 bg-white object-contain shadow-inner"
-                        />
-                      )
+                    {vendas2ProductImageElement ? (
+                      branchSaleConfig.allowProductImageEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => void openVendas2ProductImageSelection()}
+                          className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet-500"
+                          title="Alterar foto do produto"
+                          aria-label={`Alterar foto do produto ${activeCartItem?.description || activeCartItem?.product.name || ''}`}
+                        >
+                          {vendas2ProductImageElement}
+                        </button>
+                      ) : vendas2ProductImageElement
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-4 text-center">
                         <img
-                          src="/logo-msinfor.jpg"
+                          src={withFinanceBasePath('/logo-msinfor.jpg')}
                           alt="Logotipo da tela de login"
                           className="mx-auto h-[240px] w-[240px] rounded-[32px] border border-blue-100 bg-white object-contain p-5 shadow-inner"
                         />
@@ -5026,7 +5240,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       )}
 
       {clearSaleConfirmationOpen ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+        <div
+          data-system-message-ignore
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/30">
             <div className="bg-rose-600 px-5 py-4 text-white">
               <div className="flex items-center gap-3">
@@ -5074,6 +5291,27 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
           </div>
         </div>
       ) : null}
+
+      {vendas2ProductImageSelection ? (
+        <Vendas2ProductImageSelectionModal
+          product={vendas2ProductImageSelection}
+          searchCode={getVendas2ProductImageSearchCode(vendas2ProductImageSelection)}
+          logoUrl={runtimeContext.logoUrl}
+          isSaving={isSavingVendas2ProductImage}
+          onClose={() => setVendas2ProductImageSelection(null)}
+          onChoose={(imageUrl) => void saveVendas2ProductImage(imageUrl)}
+        />
+      ) : null}
+
+      <SalesScreenParametersModal
+        isOpen={isSalesScreenParametersOpen}
+        parameters={branchSaleConfig}
+        companyId={currentCompanyId}
+        branchId={currentBranchId}
+        runtimeContext={runtimeContext}
+        onClose={() => setIsSalesScreenParametersOpen(false)}
+        onSaved={(parameters) => setBranchSaleConfig(parameters)}
+      />
 
       {!checkoutOpen && (errorMessage || successSale) && (
         <section

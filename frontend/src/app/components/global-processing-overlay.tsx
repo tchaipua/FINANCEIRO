@@ -2,15 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const SHOW_DELAY_MS = 180;
 const MIN_VISIBLE_MS = 320;
+const MAX_VISIBLE_MS = 15_000;
 
 export default function GlobalProcessingOverlay() {
   const pathname = usePathname();
   const pendingCount = useRef(0);
   const showTimer = useRef<number | null>(null);
+  const hideTimer = useRef<number | null>(null);
+  const maximumVisibleTimer = useRef<number | null>(null);
   const visibleSince = useRef(0);
+  const visibleRef = useRef(false);
   const [isVisible, setIsVisible] = useState(false);
 
   const clearShowTimer = () => {
@@ -20,19 +25,56 @@ export default function GlobalProcessingOverlay() {
     }
   };
 
+  const clearMaximumVisibleTimer = () => {
+    if (maximumVisibleTimer.current !== null) {
+      window.clearTimeout(maximumVisibleTimer.current);
+      maximumVisibleTimer.current = null;
+    }
+  };
+
+  const clearHideTimer = () => {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+
   const show = () => {
-    if (isVisible || showTimer.current !== null) return;
+    if (visibleRef.current) {
+      clearHideTimer();
+      return;
+    }
+    if (showTimer.current !== null) return;
     showTimer.current = window.setTimeout(() => {
       visibleSince.current = Date.now();
+      visibleRef.current = true;
       setIsVisible(true);
       showTimer.current = null;
+      clearMaximumVisibleTimer();
+      maximumVisibleTimer.current = window.setTimeout(() => {
+        // Não interrompe a requisição em andamento; somente devolve a tela ao
+        // usuário caso um serviço externo não responda.
+        pendingCount.current = 0;
+        visibleRef.current = false;
+        visibleSince.current = 0;
+        setIsVisible(false);
+        maximumVisibleTimer.current = null;
+      }, MAX_VISIBLE_MS);
     }, SHOW_DELAY_MS);
   };
 
   const hide = () => {
     clearShowTimer();
+    clearMaximumVisibleTimer();
+    if (!visibleRef.current) return;
+    clearHideTimer();
     const remaining = Math.max(0, MIN_VISIBLE_MS - (Date.now() - visibleSince.current));
-    window.setTimeout(() => setIsVisible(false), remaining);
+    hideTimer.current = window.setTimeout(() => {
+      visibleRef.current = false;
+      visibleSince.current = 0;
+      setIsVisible(false);
+      hideTimer.current = null;
+    }, remaining);
   };
 
   useEffect(() => {
@@ -68,8 +110,10 @@ export default function GlobalProcessingOverlay() {
       window.history.replaceState = originalReplaceState;
       window.removeEventListener('click', openForNavigation, true);
       clearShowTimer();
+      clearHideTimer();
+      clearMaximumVisibleTimer();
     };
-  }, [isVisible]);
+  }, []);
 
   useEffect(() => { hide(); }, [pathname]);
 
@@ -79,7 +123,7 @@ export default function GlobalProcessingOverlay() {
     <div className="flex flex-col items-center text-center">
       <div className="relative flex h-32 w-32 items-center justify-center">
         <div className="absolute inset-0 animate-spin rounded-full border-4 border-white/35 border-t-blue-500" />
-        <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-white bg-white shadow-2xl"><img src="/logo-msinfor.jpg" alt="MSINFOR" className="h-full w-full object-cover" /></div>
+        <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-white bg-white shadow-2xl"><img src={withFinanceBasePath('/logo-msinfor.jpg')} alt="MSINFOR" className="h-full w-full object-cover" /></div>
       </div>
       <div className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-white drop-shadow">Processando</div>
       <div className="mt-1 text-xs font-semibold text-white/85">Aguarde um instante</div>

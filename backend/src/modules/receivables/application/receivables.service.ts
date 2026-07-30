@@ -55,6 +55,7 @@ import {
   PARTY_ROLE,
   upsertPartyIdentity,
 } from "../../../common/party-registry";
+import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
 
 @Injectable()
 export class ReceivablesService {
@@ -216,50 +217,12 @@ export class ReceivablesService {
       },
     });
 
-    const normalizedCompanyName = normalizeText(filters.companyName);
-    const normalizedCompanyDocument = normalizeDigits(filters.companyDocument);
-
-    if (existing) {
-      const updateData: Record<string, unknown> = {
-        updatedBy: filters.requestedBy || null,
-      };
-
-      if (filters.financialSettings !== undefined) {
-        Object.assign(
-          updateData,
-          this.buildFinancialSettingsPersistenceData(filters.financialSettings),
-        );
-      }
-
-      if (normalizedCompanyName) {
-        updateData.name = normalizedCompanyName;
-      }
-
-      if (normalizedCompanyDocument) {
-        updateData.document = normalizedCompanyDocument;
-      }
-
-      return this.prisma.company.update({
-        where: { id: existing.id },
-        data: updateData,
-      });
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de operar contas a receber.",
+      );
     }
-
-    return this.prisma.company.create({
-      data: {
-        sourceSystem: normalizedSourceSystem,
-        sourceTenantId: normalizedSourceTenantId,
-        name:
-          normalizedCompanyName ||
-          `${normalizedSourceSystem} ${normalizedSourceTenantId}`,
-        document: normalizedCompanyDocument,
-        ...(filters.financialSettings !== undefined
-          ? this.buildFinancialSettingsPersistenceData(filters.financialSettings)
-          : {}),
-        createdBy: filters.requestedBy || null,
-        updatedBy: filters.requestedBy || null,
-      },
-    });
+    return existing;
   }
 
   private async ensurePayerParty(
@@ -2190,6 +2153,16 @@ export class ReceivablesService {
       );
     }
 
+    const billingApiClientSecret = decryptStoredBankSecret(
+      bank.billingApiClientSecret,
+    );
+    const billingCertificateBase64 = decryptStoredBankSecret(
+      bank.billingCertificateBase64,
+    );
+    const billingCertificatePassword = decryptStoredBankSecret(
+      bank.billingCertificatePassword,
+    );
+
     if (!bank.billingBeneficiaryCode) {
       throw new BadRequestException(
         provider === "SICREDI"
@@ -2321,7 +2294,7 @@ export class ReceivablesService {
                 {
                   environment: bank.billingEnvironment,
                   apiKey: bank.billingApiClientId,
-                  accessCode: bank.billingApiClientSecret || "",
+                  accessCode: billingApiClientSecret,
                   cooperative: sicrediCooperative || "",
                   posto: sicrediPosto || "",
                   beneficiaryCode: bank.billingBeneficiaryCode,
@@ -2334,8 +2307,8 @@ export class ReceivablesService {
                 {
                   environment: bank.billingEnvironment,
                   clientId: bank.billingApiClientId,
-                  certificateBase64: bank.billingCertificateBase64 || "",
-                  certificatePassword: bank.billingCertificatePassword || "",
+                  certificateBase64: billingCertificateBase64,
+                  certificatePassword: billingCertificatePassword,
                   beneficiaryCode: bank.billingBeneficiaryCode,
                   accountNumber: this.buildSicoobAccountNumber(bank) || "",
                   contractNumber: bank.billingContractNumber,
@@ -2626,6 +2599,16 @@ export class ReceivablesService {
       );
     }
 
+    const billingApiClientSecret = decryptStoredBankSecret(
+      bank.billingApiClientSecret,
+    );
+    const billingCertificateBase64 = decryptStoredBankSecret(
+      bank.billingCertificateBase64,
+    );
+    const billingCertificatePassword = decryptStoredBankSecret(
+      bank.billingCertificatePassword,
+    );
+
     if (!bank.billingBeneficiaryCode) {
       throw new BadRequestException(
         provider === "SICREDI"
@@ -2721,7 +2704,7 @@ export class ReceivablesService {
           {
             environment: bank.billingEnvironment,
             apiKey: bank.billingApiClientId,
-            accessCode: bank.billingApiClientSecret || "",
+            accessCode: billingApiClientSecret,
             cooperative: sicrediCooperative || "",
             posto: sicrediPosto || "",
             beneficiaryCode: bank.billingBeneficiaryCode,
@@ -2760,8 +2743,8 @@ export class ReceivablesService {
         const downloadResult = await this.sicoobBillingService.downloadMovements(
           {
             clientId: bank.billingApiClientId,
-            certificateBase64: bank.billingCertificateBase64 || "",
-            certificatePassword: bank.billingCertificatePassword || "",
+            certificateBase64: billingCertificateBase64,
+            certificatePassword: billingCertificatePassword,
           },
           {
             numeroCliente: Number(normalizeDigits(bank.billingBeneficiaryCode)),

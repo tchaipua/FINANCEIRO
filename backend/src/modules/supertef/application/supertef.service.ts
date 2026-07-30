@@ -10,6 +10,7 @@ import { createHash } from "crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { normalizeText, parseJson, serializeJson } from "../../../common/finance-core.utils";
 import { decryptSecret, encryptSecret } from "../../../common/secret-crypto.utils";
+import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 import {
   ChangeSuperTefTerminalStatusDto,
   CreateSuperTefPaymentDto,
@@ -36,10 +37,10 @@ export class SuperTefService {
     private readonly client: SuperTefClient,
   ) {}
 
-  private assertAdmin(userRole?: string | null) {
-    if (normalizeText(userRole) !== "ADMIN") {
+  private assertAdmin(_userRole?: string | null) {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
       throw new ForbiddenException(
-        "A CONFIGURAÇÃO DO SUPERTEF EXIGE PERFIL ADMIN.",
+        "A CONFIGURAÇÃO DO SUPERTEF EXIGE O ESCOPO FINANCE_ADMIN.",
       );
     }
   }
@@ -108,34 +109,12 @@ export class SuperTefService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
-    if (existing) {
-      const companyName = normalizeText(payload.companyName);
-      if (companyName && companyName !== existing.name) {
-        return this.prisma.company.update({
-          where: { id: existing.id },
-          data: {
-            name: companyName,
-            updatedBy: this.requestedBy(payload.requestedBy),
-          },
-        });
-      }
-      return existing;
+    if (!existing) {
+      throw new NotFoundException(
+        "A empresa deve ser provisionada antes de configurar o SuperTEF.",
+      );
     }
-
-    const sourceSystem = normalizeText(payload.sourceSystem)!;
-    const sourceTenantId = normalizeText(payload.sourceTenantId)!;
-    const actor = this.requestedBy(payload.requestedBy);
-    return this.prisma.company.create({
-      data: {
-        sourceSystem,
-        sourceTenantId,
-        name:
-          normalizeText(payload.companyName) ||
-          `${sourceSystem} ${sourceTenantId}`,
-        createdBy: actor,
-        updatedBy: actor,
-      },
-    });
+    return existing;
   }
 
   private async findConfiguration(companyId: string, branchCode: number) {

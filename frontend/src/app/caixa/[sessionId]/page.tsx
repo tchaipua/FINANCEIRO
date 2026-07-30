@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -7,6 +9,7 @@ import ScreenAuditModal from '@/app/components/screen-audit-modal';
 import { getJson, requestJson } from '@/app/lib/api';
 import { copyTextToClipboard } from '@/app/lib/clipboard';
 import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
@@ -338,6 +341,7 @@ function confirmCashCancellationPassword(password: string) {
     }, 20000);
 
     function handleMessage(event: MessageEvent) {
+      if (!isTrustedMessageEvent(event)) return;
       const payload = event.data as {
         type?: string;
         requestId?: string;
@@ -369,26 +373,20 @@ function confirmCashCancellationPassword(password: string) {
     }
 
     window.addEventListener('message', handleMessage);
-    window.parent.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_CONFIRM_CASH_CANCELLATION_PASSWORD',
         requestId,
         password,
-      },
-      '*',
-    );
+      });
   });
 }
 
 function requestHostLogoutAfterCashClose() {
   if (typeof window === 'undefined' || !window.parent) return;
 
-  window.parent.postMessage(
-    {
+  postMessageToTrustedParent({
       type: 'MSINFOR_CASH_SESSION_CLOSED_LOGOUT',
-    },
-    '*',
-  );
+    });
 }
 
 function wasCloseCashSessionOpenedFromGrid() {
@@ -506,7 +504,7 @@ export default function FinanceiroCashDetailPage() {
     if (isClosingCashSession) return;
 
     if (wasCloseCashSessionOpenedFromGrid()) {
-      window.location.href = `/caixa${preservedQueryString}`;
+      window.location.href = withFinanceBasePath(`/caixa${preservedQueryString}`);
       return;
     }
 
@@ -518,13 +516,10 @@ export default function FinanceiroCashDetailPage() {
       return;
     }
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
@@ -533,6 +528,7 @@ export default function FinanceiroCashDetailPage() {
     }
 
     const handleAuditRequest = (event: MessageEvent) => {
+      if (!isTrustedMessageEvent(event)) return;
       const data = event.data as { type?: string; screenId?: string } | null;
       if (
         data?.type === 'MSINFOR_OPEN_SCREEN_AUDIT' &&

@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { requestJson } from '@/app/lib/api';
@@ -259,8 +261,6 @@ export default function ManualFiscalIssuePage({
           runtimeContext.cashierDisplayName ||
           runtimeContext.cashierUserId ||
           'OPERADOR',
-        userRole: runtimeContext.userRole,
-        permissions: runtimeContext.permissions.join(','),
       }),
     [environment, runtimeContext],
   );
@@ -344,10 +344,7 @@ export default function ManualFiscalIssuePage({
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: embeddedScreenId },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: embeddedScreenId });
   }, [embeddedScreenId, runtimeContext.embedded]);
 
   const nfeTotal = useMemo(
@@ -492,8 +489,6 @@ export default function ManualFiscalIssuePage({
         runtimeContext.cashierDisplayName ||
         runtimeContext.cashierUserId ||
         'OPERADOR',
-      userRole: runtimeContext.userRole,
-      permissions: runtimeContext.permissions.join(','),
       payerPartyId,
       idempotencyKey: draftKey,
       createReceivable,

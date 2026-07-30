@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -7,6 +9,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_MSINFOR_CONFIGURACAO_RECIBOS';
 const ORIGIN_TEXT =
@@ -19,10 +22,7 @@ export default function ReceiptConfigurationPage() {
 
   useEffect(() => {
     if (!runtime.embedded || window.parent === window) return;
-    window.parent.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: SCREEN_ID });
   }, [runtime.embedded]);
 
   if (runtime.userRole !== 'ADMIN') {
@@ -60,7 +60,7 @@ export default function ReceiptConfigurationPage() {
         <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-5 py-5 text-white">
           <div className="flex items-center gap-4">
             <img
-              src="/logo-msinfor.jpg"
+              src={withFinanceBasePath('/logo-msinfor.jpg')}
               alt="Logo MSINFOR"
               className="h-14 w-14 rounded-2xl border border-white/20 bg-white object-contain shadow-lg"
             />

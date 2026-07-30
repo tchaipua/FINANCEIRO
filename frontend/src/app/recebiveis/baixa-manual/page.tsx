@@ -1,5 +1,7 @@
 'use client';
 
+import { getTrustedMessageOrigins, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,6 +11,7 @@ import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from 
 import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
 import { createAndDispatchPrintJob } from '@/app/lib/local-print-agent';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type ManualPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CHECK' | 'CUSTOMER_CREDIT';
 
@@ -153,20 +156,12 @@ function resolveSchoolBaseUrl() {
 
   try {
     const referrerUrl = new URL(document.referrer);
-    return referrerUrl.origin;
+    return getTrustedMessageOrigins().has(referrerUrl.origin)
+      ? referrerUrl.origin
+      : null;
   } catch {
     return null;
   }
-}
-
-function readCompanyLogoUrl() {
-  if (typeof window === 'undefined') return null;
-
-  const searchParams = new URLSearchParams(window.location.search);
-  const value = String(
-    searchParams.get('companyLogoUrl') || searchParams.get('logoUrl') || '',
-  ).trim();
-  return value || null;
 }
 
 function readIsModalMode() {
@@ -360,7 +355,7 @@ export default function FinanceiroManualSettlementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [schoolBaseUrl, setSchoolBaseUrl] = useState<string | null>(null);
-  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const companyLogoUrl = runtimeContext.logoUrl;
   const [isModalMode, setIsModalMode] = useState(false);
   const [discountAmountInput, setDiscountAmountInput] = useState('0,00');
   const [manualInterestAmountInput, setManualInterestAmountInput] = useState('0,00');
@@ -372,7 +367,6 @@ export default function FinanceiroManualSettlementPage() {
   useEffect(() => {
     setInstallmentIds(readSelectedInstallmentIds());
     setSchoolBaseUrl(resolveSchoolBaseUrl());
-    setCompanyLogoUrl(readCompanyLogoUrl());
     setIsModalMode(readIsModalMode());
     setIsPartialSettlement(readInitialPartialSettlement());
 
@@ -1007,13 +1001,13 @@ export default function FinanceiroManualSettlementPage() {
 
   function handleClose() {
     if (completionState && isModalMode && typeof window !== 'undefined' && window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_REFRESH' }, '*');
-      window.parent.postMessage({ type: 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CLOSE' }, '*');
+      postMessageToTrustedParent({ type: 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_REFRESH' });
+      postMessageToTrustedParent({ type: 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CLOSE' });
       return;
     }
 
     if (isModalMode && typeof window !== 'undefined' && window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CLOSE' }, '*');
+      postMessageToTrustedParent({ type: 'FINANCEIRO_RECEBIVEIS_BAIXA_MANUAL_CLOSE' });
       return;
     }
 
@@ -1031,7 +1025,7 @@ export default function FinanceiroManualSettlementPage() {
               <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl border border-white/20 bg-white shadow-xl">
                 {companyLogoUrl ? (
                   <img
-                    src={companyLogoUrl}
+                    src={withFinanceBasePath(companyLogoUrl)}
                     alt={`Logo de ${runtimeContext.companyName || 'ESCOLA'}`}
                     className="h-full w-full object-contain p-2"
                   />
@@ -1123,7 +1117,7 @@ export default function FinanceiroManualSettlementPage() {
               <div className={`flex shrink-0 items-center justify-center overflow-hidden border border-white/20 bg-white/10 shadow-lg backdrop-blur-sm ${logoBoxClass}`}>
                 {companyLogoUrl ? (
                   <img
-                    src={companyLogoUrl}
+                    src={withFinanceBasePath(companyLogoUrl)}
                     alt={`Logo de ${runtimeContext.companyName || 'ESCOLA'}`}
                     className="h-full w-full object-contain p-1.5"
                   />
@@ -1371,7 +1365,7 @@ export default function FinanceiroManualSettlementPage() {
               <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white">
                 {companyLogoUrl ? (
                   <img
-                    src={companyLogoUrl}
+                    src={withFinanceBasePath(companyLogoUrl)}
                     alt={`Logo de ${runtimeContext.companyName || 'ESCOLA'}`}
                     className="h-full w-full object-contain p-2"
                   />
@@ -1443,7 +1437,7 @@ export default function FinanceiroManualSettlementPage() {
               <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {companyLogoUrl ? (
                   <img
-                    src={companyLogoUrl}
+                    src={withFinanceBasePath(companyLogoUrl)}
                     alt={`Logo de ${runtimeContext.companyName || 'ESCOLA'}`}
                     className="h-full w-full object-contain p-2"
                   />

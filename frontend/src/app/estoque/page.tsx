@@ -208,17 +208,10 @@ function StockMenuCard({
 
 export default function FinanceiroEstoquePage() {
   const runtimeContext = useFinanceRuntimeContext();
-  const initialNavigationQueryString = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    return window.location.search;
-  }, []);
-  const preservedQueryString =
-    runtimeContext.sourceSystem && runtimeContext.sourceTenantId
-      ? buildFinanceNavigationQueryString(runtimeContext)
-      : initialNavigationQueryString;
-  const isEmbedded =
-    runtimeContext.embedded ||
-    new URLSearchParams(initialNavigationQueryString).get('embedded') === '1';
+  // O contexto inicia igual no servidor e no cliente; a query integrada e
+  // preenchida pelo hook apos a hidratacao para evitar hrefs divergentes.
+  const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
+  const isEmbedded = runtimeContext.embedded;
   const [branchInventoryConfig, setBranchInventoryConfig] = useState<BranchInventoryConfig>(
     DEFAULT_BRANCH_INVENTORY_CONFIG,
   );

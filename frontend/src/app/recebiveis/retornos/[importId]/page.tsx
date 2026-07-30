@@ -1,10 +1,12 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { API_BASE_URL, getJson } from '@/app/lib/api';
+import { financeApiFetch, getJson } from '@/app/lib/api';
 import {
   formatCurrency,
   formatDateLabel,
@@ -176,13 +178,10 @@ export default function FinanceiroBankReturnImportDetailPage() {
   );
 
   useEffect(() => {
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: EMBEDDED_SCREEN_ID,
-      },
-      '*',
-    );
+      });
   }, []);
 
   const loadImportDetail = useCallback(async () => {
@@ -293,8 +292,8 @@ export default function FinanceiroBankReturnImportDetailPage() {
       setError(null);
       setStatusMessage(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/receivables/bank-return-imports/${importDetail.id}/apply-liquidations`,
+      const response = await financeApiFetch(
+        `/receivables/bank-return-imports/${importDetail.id}/apply-liquidations`,
         {
           method: 'POST',
           headers: {

@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -256,9 +258,7 @@ export default function FinanceAnalyticsDashboard({ view: requestedView }: { vie
   useEffect(() => setHostOrigin(resolveHostOrigin()), []);
 
   useEffect(() => {
-    const search = typeof window === 'undefined' ? '' : window.location.search;
-    const expectsScope = new URLSearchParams(search).has('sourceSystem');
-    if (expectsScope && (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId)) return;
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
 
     let active = true;
     const now = new Date();
@@ -307,7 +307,7 @@ export default function FinanceAnalyticsDashboard({ view: requestedView }: { vie
 
   useEffect(() => {
     if (!runtimeContext.embedded) return;
-    window.parent?.postMessage({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: screenId(view) }, '*');
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: screenId(view) });
   }, [runtimeContext.embedded, view]);
 
   const usingDemo = !loading && !hasUsefulData(data);

@@ -63,7 +63,7 @@ export default function AuditedPopupShell({
   const usesBlueHeader = headerTheme === 'blue';
 
   return (
-    <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay}>
+    <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay} data-audited-popup-shell>
       <div className={`${FINANCE_GRID_PAGE_LAYOUT.modalPanel} ${panelClassName}`}>
         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${usesBlueHeader ? 'border-blue-700 bg-blue-700' : 'border-slate-100 bg-slate-50'}`}>
           <div className="flex items-start gap-3">

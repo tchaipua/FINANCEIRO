@@ -194,7 +194,6 @@ export type FiscalCertificateItem = {
   createdAt: string;
   updatedAt: string;
   canceledAt?: string | null;
-  certificatePassword?: string;
 };
 
 export type ApprovalItemState = {

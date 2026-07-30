@@ -1,5 +1,7 @@
 'use client';
 
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
@@ -1102,10 +1104,7 @@ export default function FinanceiroReceivableBatchesPage() {
   useEffect(() => {
     if (!isEmbedded) return;
 
-    window.parent.postMessage(
-      { type: 'MSINFOR_SCREEN_CONTEXT', screenId: EMBEDDED_SCREEN_ID },
-      '*',
-    );
+    postMessageToTrustedParent({ type: 'MSINFOR_SCREEN_CONTEXT', screenId: EMBEDDED_SCREEN_ID });
   }, [isEmbedded]);
 
   useEffect(

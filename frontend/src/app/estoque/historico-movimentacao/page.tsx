@@ -1,5 +1,7 @@
 'use client';
 
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
@@ -13,6 +15,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   useFinanceRuntimeContext,
@@ -659,17 +662,15 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   useEffect(() => {
     if (!runtimeContext.embedded) return;
 
-    window.parent?.postMessage(
-      {
+    postMessageToTrustedParent({
         type: 'MSINFOR_SCREEN_CONTEXT',
         screenId: 'PRINCIPAL_FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO',
-      },
-      '*',
-    );
+      });
   }, [runtimeContext.embedded]);
 
   useEffect(() => {
     const handleEmbeddedBackNavigation = (event: MessageEvent) => {
+      if (!isTrustedMessageEvent(event)) return;
       const data = event.data as { type?: string; screenId?: string } | null;
       if (event.source !== window.parent) return;
       if (!data || data.type !== 'MSINFOR_FINANCEIRO_NAVIGATE_BACK') return;
@@ -683,7 +684,9 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       const query = params.toString();
       const destination = historyOrigin === 'PRODUCTS' ? '/produtos' : '/estoque';
 
-      window.location.replace(`${destination}${query ? `?${query}` : ''}`);
+      window.location.replace(
+        withFinanceBasePath(`${destination}${query ? `?${query}` : ''}`),
+      );
     };
 
     window.addEventListener('message', handleEmbeddedBackNavigation);

@@ -39,8 +39,79 @@ const {
 const {
   evaluateBankReturnForInstallment,
 } = require("../dist/modules/receivables/application/bank-return.utils.js");
+const {
+  financeContext,
+} = require("../dist/common/finance-context.js");
+
+async function provisionTestTenant(
+  prisma,
+  sourceSystem,
+  sourceTenantId,
+  companyName,
+) {
+  const company = await prisma.company.create({
+    data: {
+      sourceSystem,
+      sourceTenantId,
+      name: companyName,
+      status: "ACTIVE",
+      createdBy: "TEST_CONTROL_PLANE",
+      updatedBy: "TEST_CONTROL_PLANE",
+    },
+  });
+  const branch = await prisma.companyBranch.create({
+    data: {
+      companyId: company.id,
+      branchCode: 1,
+      name: "MATRIZ",
+      isActive: true,
+      isDefault: true,
+      createdBy: "TEST_CONTROL_PLANE",
+      updatedBy: "TEST_CONTROL_PLANE",
+    },
+  });
+  return { company, branch };
+}
+
+async function runAsFinanceAdmin(
+  prisma,
+  sourceSystem,
+  sourceTenantId,
+  operation,
+) {
+  const company = await prisma.company.findUnique({
+    where: {
+      sourceSystem_sourceTenantId: { sourceSystem, sourceTenantId },
+    },
+  });
+  const branch = await prisma.companyBranch.findUnique({
+    where: {
+      companyId_branchCode: { companyId: company.id, branchCode: 1 },
+    },
+  });
+  return financeContext.run(
+    {
+      authenticated: true,
+      branchCode: 1,
+      sourceSystem,
+      sourceTenantId,
+      sourceBranchCode: 1,
+      sourceUserId: "CODEX",
+      companyId: company.id,
+      branchId: branch.id,
+      scopes: ["FINANCE_ACCESS", "MANAGE_FINANCIAL", "FINANCE_ADMIN"],
+    },
+    operation,
+  );
+}
 
 async function resetDatabase(prisma) {
+  await prisma.printAuditEvent.deleteMany();
+  await prisma.printJob.deleteMany();
+  await prisma.printTemplateBinding.deleteMany();
+  await prisma.printerProfile.deleteMany();
+  await prisma.printTemplateVersion.deleteMany();
+  await prisma.printTemplate.deleteMany();
   await prisma.superTefAuditEvent.deleteMany();
   await prisma.fiscalDocumentEvent.deleteMany();
   await prisma.fiscalDocumentEmailDelivery.deleteMany();
@@ -131,6 +202,42 @@ async function main() {
 
   try {
     await resetDatabase(prisma);
+    await provisionTestTenant(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_CLIENTES",
+      "ESCOLA CLIENTES",
+    );
+    await provisionTestTenant(
+      prisma,
+      "PROJETO_INICIAL",
+      "TENANT_PROJETO_CLIENTES",
+      "PROJETO CLIENTES",
+    );
+    await provisionTestTenant(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_BANCOS",
+      "ESCOLA BANCOS",
+    );
+    const schoolTestTenant = await provisionTestTenant(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_TESTE",
+      "ESCOLA TESTE",
+    );
+    await prisma.company.update({
+      where: { id: schoolTestTenant.company.id },
+      data: {
+        document: "12345678000199",
+        interestRate: 5,
+        penaltyRate: 2,
+        penaltyValue: 0,
+        interestGracePeriod: 5,
+        penaltyGracePeriod: 5,
+        updatedBy: "TEST_SOURCE_SETTINGS_SYNC",
+      },
+    });
 
     const liquidatedOpenInstallment = evaluateBankReturnForInstallment({
       movementStatus: "LIQUIDATED",
@@ -307,8 +414,8 @@ async function main() {
 
     const localCustomer = await customersService.create({
       requestedBy: "CODEX",
-      sourceSystem: "PETSHOP",
-      sourceTenantId: "TENANT_PETSHOP_CLIENTES",
+      sourceSystem: "PROJETO_INICIAL",
+      sourceTenantId: "TENANT_PROJETO_CLIENTES",
       companyName: "PETSHOP CLIENTES",
       name: "CLIENTE LOCAL",
       document: "04252011000110",
@@ -320,8 +427,8 @@ async function main() {
       localCustomer.id,
       {
         requestedBy: "CODEX",
-        sourceSystem: "PETSHOP",
-        sourceTenantId: "TENANT_PETSHOP_CLIENTES",
+        sourceSystem: "PROJETO_INICIAL",
+        sourceTenantId: "TENANT_PROJETO_CLIENTES",
       },
     );
     assert.equal(inactivatedLocalCustomer.status, "INACTIVE");
@@ -335,7 +442,11 @@ async function main() {
     });
     assert.ok(inactivatedCustomerRole.canceledAt);
 
-    const createdBank = await banksService.create({
+    const createdBank = await runAsFinanceAdmin(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_BANCOS",
+      () => banksService.create({
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
@@ -353,7 +464,8 @@ async function main() {
       beneficiaryName: "ESCOLA BANCOS",
       beneficiaryDocument: "04252011000110",
       notes: "CONTA PRINCIPAL",
-    });
+      }),
+    );
 
     assert.equal(createdBank.bankName, "SICOOB");
     assert.equal(createdBank.status, "ACTIVE");
@@ -366,7 +478,11 @@ async function main() {
 
     assert.equal(listedBanks.length, 1);
 
-    const updatedBank = await banksService.update(createdBank.id, {
+    const updatedBank = await runAsFinanceAdmin(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_BANCOS",
+      () => banksService.update(createdBank.id, {
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
@@ -382,25 +498,36 @@ async function main() {
       beneficiaryName: "ESCOLA BANCOS",
       beneficiaryDocument: "04252011000110",
       notes: "CONTA ATUALIZADA",
-    });
+      }),
+    );
 
     assert.equal(updatedBank.bankName, "SICOOB CENTRAL");
     assert.equal(updatedBank.walletCode, "2");
 
-    const inactivatedBank = await banksService.inactivate(createdBank.id, {
+    const inactivatedBank = await runAsFinanceAdmin(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_BANCOS",
+      () => banksService.inactivate(createdBank.id, {
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
-    });
+      }),
+    );
 
     assert.equal(inactivatedBank.status, "INACTIVE");
     assert.ok(inactivatedBank.canceledAt);
 
-    const activatedBank = await banksService.activate(createdBank.id, {
+    const activatedBank = await runAsFinanceAdmin(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_BANCOS",
+      () => banksService.activate(createdBank.id, {
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
-    });
+      }),
+    );
 
     assert.equal(activatedBank.status, "ACTIVE");
     assert.equal(activatedBank.canceledAt, null);
@@ -534,7 +661,11 @@ async function main() {
       }),
     });
 
-    const statementBank = await statementBanksService.create({
+    const statementBank = await runAsFinanceAdmin(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_BANCOS",
+      () => statementBanksService.create({
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
@@ -552,7 +683,8 @@ async function main() {
       billingApiClientId: "CLIENT_ID_TESTE",
       billingCertificateBase64: Buffer.from("CERTIFICADO TESTE").toString("base64"),
       billingCertificatePassword: "SENHA_TESTE",
-    });
+      }),
+    );
 
     const firstStatement = await statementBanksService.getStatement(statementBank.id, {
       sourceSystem: "ESCOLA",
@@ -683,7 +815,11 @@ async function main() {
     assert.equal(importResult.importedTitles, 1);
     assert.equal(importResult.importedInstallments, 2);
 
-    const boletoBank = await banksService.create({
+    const boletoBank = await runAsFinanceAdmin(
+      prisma,
+      "ESCOLA",
+      "TENANT_ESCOLA_TESTE",
+      () => banksService.create({
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_TESTE",
@@ -701,7 +837,8 @@ async function main() {
       beneficiaryName: "ESCOLA TESTE",
       beneficiaryDocument: "12345678000199",
       notes: "BANCO DE BOLETOS",
-    });
+      }),
+    );
 
     const installmentsBeforeSettlement = await receivablesService.listInstallments(
       {

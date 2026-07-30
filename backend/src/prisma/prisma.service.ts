@@ -1,6 +1,10 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { branchMiddleware } from "./prisma.middleware";
+import {
+  assertPostgresqlRuntimeRoleIsLeastPrivileged,
+  shouldVerifyPostgresqlRuntimeRole,
+} from "./postgresql-runtime-security";
 
 @Injectable()
 export class PrismaService
@@ -10,6 +14,9 @@ export class PrismaService
   async onModuleInit() {
     this.$use(branchMiddleware());
     await this.$connect();
+    if (shouldVerifyPostgresqlRuntimeRole()) {
+      await assertPostgresqlRuntimeRoleIsLeastPrivileged(this);
+    }
   }
 
   async onModuleDestroy() {

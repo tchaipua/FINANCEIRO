@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -17,6 +18,7 @@ import {
   normalizeTaxId,
 } from "../../../common/brazil-tax-id.utils";
 import { encryptSecret } from "../../../common/secret-crypto.utils";
+import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 import {
   NfeContextDto,
   SaveFiscalBranchDto,
@@ -32,6 +34,14 @@ const CURRENT_CBENEFF_CATALOG_VERSION = "20260626";
 @Injectable()
 export class FiscalParametersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private assertFinanceAdmin() {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      throw new ForbiddenException(
+        "A CONFIGURAÇÃO FISCAL EXIGE O ESCOPO FINANCE_ADMIN.",
+      );
+    }
+  }
 
   private async loadCompany(sourceSystem?: string, sourceTenantId?: string) {
     const normalizedSourceSystem = normalizeText(sourceSystem);
@@ -357,6 +367,7 @@ export class FiscalParametersService {
   }
 
   async saveBranch(payload: SaveFiscalBranchDto) {
+    this.assertFinanceAdmin();
     const company = await this.loadCompany(
       payload.sourceSystem,
       payload.sourceTenantId,
@@ -436,6 +447,7 @@ export class FiscalParametersService {
   }
 
   async saveOperation(payload: SaveFiscalOperationNatureDto) {
+    this.assertFinanceAdmin();
     const company = await this.loadCompany(
       payload.sourceSystem,
       payload.sourceTenantId,
@@ -533,6 +545,7 @@ export class FiscalParametersService {
   }
 
   async saveTaxRule(payload: SaveFiscalTaxRuleDto) {
+    this.assertFinanceAdmin();
     const company = await this.loadCompany(
       payload.sourceSystem,
       payload.sourceTenantId,
@@ -685,6 +698,7 @@ export class FiscalParametersService {
   }
 
   async saveBenefit(payload: SaveFiscalBenefitCodeDto) {
+    this.assertFinanceAdmin();
     const company = await this.loadCompany(
       payload.sourceSystem,
       payload.sourceTenantId,
@@ -792,6 +806,7 @@ export class FiscalParametersService {
   }
 
   async saveProfile(payload: SaveNfeProfileDto) {
+    this.assertFinanceAdmin();
     const company = await this.loadCompany(
       payload.sourceSystem,
       payload.sourceTenantId,
@@ -1013,6 +1028,7 @@ export class FiscalParametersService {
     entityId: string,
     payload: NfeContextDto,
   ) {
+    this.assertFinanceAdmin();
     const company = await this.loadCompany(
       payload.sourceSystem,
       payload.sourceTenantId,
