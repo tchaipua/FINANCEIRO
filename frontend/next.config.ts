@@ -24,9 +24,11 @@ function resolveBasePath() {
 }
 
 const basePath = resolveBasePath();
+const deploymentId = process.env.FINANCEIRO_FRONTEND_DEPLOYMENT_ID || 'financeiro-local-grid-icons-v5';
 
 const nextConfig: NextConfig = {
   basePath,
+  deploymentId,
   output: "standalone",
   env: {
     NEXT_PUBLIC_FINANCEIRO_BASE_PATH: basePath,

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from "class-validator";
 
 export class ListCompaniesDto {
@@ -340,6 +341,50 @@ export class SyncSourceIntegrationSettingsDto {
   @IsOptional()
   @IsBoolean()
   requirePasswordToRemoveSaleItems?: boolean;
+
+  @IsOptional()
+  @IsString()
+  businessType?: string;
+}
+
+export class ProvisionSourceTenantBranchDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  code!: number;
+
+  @IsString()
+  branchName!: string;
+}
+
+export class ProvisionSourceTenantDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  activeBranchCodes?: number[];
+
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @IsOptional()
+  @IsString()
+  companyDocument?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProvisionSourceTenantBranchDto)
+  branches!: ProvisionSourceTenantBranchDto[];
 }
 
 export class SaveCompanyBranchDto {

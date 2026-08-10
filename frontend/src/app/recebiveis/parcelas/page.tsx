@@ -12,6 +12,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 type InstallmentListStatus = 'OPEN' | 'PAID' | 'OVERDUE' | 'ALL';
@@ -1179,9 +1180,9 @@ export default function FinanceiroParcelasPage() {
 
     const separator = buildFinanceNavigationQueryString(runtimeContext) ? '&' : '?';
     setFinanceSettlementUrl(
-      `/recebiveis/baixa-manual${buildFinanceNavigationQueryString(
+      withFinanceBasePath(`/recebiveis/baixa-manual${buildFinanceNavigationQueryString(
         runtimeContext,
-      )}${separator}modal=1&installmentIds=${encodeURIComponent(selectedIds.join(','))}`,
+      )}${separator}modal=1&installmentIds=${encodeURIComponent(selectedIds.join(','))}`),
     );
   }
 

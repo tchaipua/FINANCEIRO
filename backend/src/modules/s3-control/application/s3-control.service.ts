@@ -8,7 +8,7 @@ import {
   getFinanceContext,
   hasAuthenticatedFinanceScope,
 } from "../../../common/finance-context";
-import { CreateS3FolderDto, DeleteS3FolderDto, DeleteS3ObjectDto, DeleteS3ObjectsBatchDto, DownloadProductImageDto, ListS3ObjectsDto, ProductImageReadinessDto, S3FolderStatusDto, SaveS3ConfigurationDto, SearchS3ObjectsDto, S3ControlContextDto, S3UsageDto, SyncProductImageDto, UploadS3ObjectDto } from "./dto/s3-control.dto";
+import { CreateS3FolderDto, DeleteS3FolderDto, DeleteS3ObjectDto, DeleteS3ObjectsBatchDto, DownloadProductImageDto, ListRecentS3ObjectsDto, ListS3ObjectsDto, ProductImageReadinessDto, S3FolderStatusDto, SaveS3ConfigurationDto, SearchS3ObjectsDto, S3ControlContextDto, S3UsageDto, SyncProductImageDto, UploadS3ObjectDto, ViewS3ObjectDto } from "./dto/s3-control.dto";
 
 const MAX_USAGE_OBJECTS = 10_000;
 const MAX_SEARCH_OBJECTS = 10_000;
@@ -258,11 +258,31 @@ export class S3ControlService {
     return relative;
   }
 
+  private async resolveImagesFolder(configuration: { imagesFolder?: string | null }) {
+    const configuredImagesFolder = this.relativePrefix(configuration.imagesFolder);
+    if (configuredImagesFolder) return configuredImagesFolder;
+
+    try {
+      return this.relativePrefix((await this.getCentralConfiguration()).imagesFolder);
+    } catch {
+      return "";
+    }
+  }
+
+  private productImageCodes(product: { internalCode?: string | null; sku?: string | null; barcode?: string | null }) {
+    const barcode = String(product.barcode || "").replace(/\D/g, "");
+    const candidates = [
+      barcode.length === 8 || barcode.length === 13 ? barcode : "",
+      product.internalCode,
+      product.sku,
+      product.barcode,
+    ];
+
+    return Array.from(new Set(candidates.map((value) => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "")).filter(Boolean)));
+  }
+
   private productImageCode(product: { internalCode?: string | null; sku?: string | null; barcode?: string | null }) {
-    return String(product.internalCode || product.sku || product.barcode || "")
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9_-]/g, "");
+    return this.productImageCodes(product)[0] || "";
   }
 
   private imageExtension(file?: { originalname: string; mimetype: string; size: number; buffer: Buffer }) {
@@ -317,10 +337,13 @@ export class S3ControlService {
     const productsByCode = new Map<string, { id: string; code: string }>();
     for (const product of products) {
       const code = this.productImageCode(product);
-      if (code && !productsByCode.has(code)) productsByCode.set(code, { id: product.id, code });
+      if (!code) continue;
+      for (const candidate of this.productImageCodes(product)) {
+        if (!productsByCode.has(candidate)) productsByCode.set(candidate, { id: product.id, code });
+      }
     }
 
-    const newestObjectByCode = new Map<string, { key: string; fileName: string; lastModified: Date; size: number }>();
+    const newestObjectByProduct = new Map<string, { productCode: string; key: string; fileName: string; lastModified: Date; size: number }>();
     let continuationToken: string | undefined;
     let scannedObjectCount = 0;
     const prefix = `${imagesFolder}/`;
@@ -340,10 +363,12 @@ export class S3ControlService {
           const code = separator > 0 ? normalizeText(fileName.slice(0, separator)) : "";
           const extension = separator > 0 ? fileName.slice(separator + 1).toLowerCase() : "";
           const lastModified = item.LastModified;
-          if (!code || !PRODUCT_IMAGE_EXTENSIONS.has(extension) || !lastModified || !productsByCode.has(code)) continue;
-          const previous = newestObjectByCode.get(code);
+          if (!code || !PRODUCT_IMAGE_EXTENSIONS.has(extension) || !lastModified) continue;
+          const product = productsByCode.get(code);
+          if (!product) continue;
+          const previous = newestObjectByProduct.get(product.id);
           if (!previous || lastModified.getTime() > previous.lastModified.getTime()) {
-            newestObjectByCode.set(code, { key, fileName, lastModified, size: Number(item.Size || 0) });
+            newestObjectByProduct.set(product.id, { productCode: product.code, key, fileName, lastModified, size: Number(item.Size || 0) });
           }
         }
         continuationToken = page.NextContinuationToken;
@@ -357,9 +382,9 @@ export class S3ControlService {
       imagesFolder,
       scannedObjectCount,
       complete: !continuationToken,
-      files: Array.from(newestObjectByCode.entries()).map(([code, item]) => ({
-        productId: productsByCode.get(code)!.id,
-        productCode: code,
+      files: Array.from(newestObjectByProduct.entries()).map(([productId, item]) => ({
+        productId,
+        productCode: item.productCode,
         key: item.key,
         fileName: item.fileName,
         size: item.size,
@@ -374,11 +399,11 @@ export class S3ControlService {
       where: { id: String(productId || "").trim(), companyId: company.id, canceledAt: null, status: "ACTIVE", branchCode: { in: [0, branchCode] } },
       select: { internalCode: true, sku: true, barcode: true },
     });
-    const productCode = product ? this.productImageCode(product) : "";
+    const productCodes = product ? this.productImageCodes(product) : [];
     const key = this.relativePrefix(query.key);
-    const expectedPrefix = `${imagesFolder}/${productCode}.`;
+    const expectedPrefixes = productCodes.map((code) => `${imagesFolder}/${code}.`);
     const extension = key.split(".").pop()?.toLowerCase();
-    if (!productCode || !key.startsWith(expectedPrefix) || !extension || !PRODUCT_IMAGE_EXTENSIONS.has(extension)) {
+    if (!productCodes.length || !expectedPrefixes.some((prefix) => key.startsWith(prefix)) || !extension || !PRODUCT_IMAGE_EXTENSIONS.has(extension)) {
       throw new ForbiddenException("IMAGEM DE PRODUTO NÃO AUTORIZADA PARA ESTA FILIAL.");
     }
     try {
@@ -444,6 +469,125 @@ export class S3ControlService {
     } catch (error: any) {
       if (error?.name === "NoSuchBucket") throw new BadRequestException("O BUCKET CONFIGURADO NÃO FOI LOCALIZADO.");
       throw new BadGatewayException("NÃO FOI POSSÍVEL CONSULTAR O S3. VERIFIQUE A CONFIGURAÇÃO.");
+    }
+  }
+
+  async recentObjects(query: ListRecentS3ObjectsDto) {
+    this.assertAdmin(query.userRole);
+    const { configuration } = await this.configuration(query);
+    if (!configuration || configuration.status !== "ACTIVE") throw new BadRequestException("CONFIGURE O S3 NO CADASTRO DA EMPRESA OU FILIAL DO SISTEMA DE ORIGEM ANTES DE CONSULTAR OS ÚLTIMOS MOVIMENTOS.");
+
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 100));
+    const client = this.client(configuration);
+    const recentFiles: Array<{ name: string; folder: string; key: string; size: number; lastModified: string | null }> = [];
+    let continuationToken: string | undefined;
+    let scannedObjectCount = 0;
+    const basePrefix = normalizePrefix(configuration.basePrefix);
+    const basePrefixWithSlash = basePrefix ? `${basePrefix}/` : "";
+    const imagesFolder = await this.resolveImagesFolder(configuration);
+    const allowedRootPrefixes = [basePrefix, imagesFolder].filter(Boolean);
+    const rootOnly = String(query.rootOnly || "").trim().toLowerCase() === "true";
+    const requestedPrefix = this.relativePrefix(query.prefix);
+    if (rootOnly && requestedPrefix) {
+      throw new BadRequestException("A CONSULTA DA RAIZ NÃO PODE RECEBER UMA PASTA.");
+    }
+    if (!rootOnly && requestedPrefix && !allowedRootPrefixes.some((allowedPrefix) => requestedPrefix === allowedPrefix || requestedPrefix.startsWith(`${allowedPrefix}/`))) {
+      throw new ForbiddenException("PASTA S3 NÃO AUTORIZADA PARA ESTA EMPRESA OU FILIAL.");
+    }
+    const searchPrefix = rootOnly ? "" : requestedPrefix || basePrefix;
+    const searchPrefixWithSlash = searchPrefix ? `${searchPrefix}/` : "";
+    const displayPrefixWithSlash = rootOnly ? "" : searchPrefix ? searchPrefixWithSlash : basePrefixWithSlash;
+
+    try {
+      do {
+        const page = await client.send(new ListObjectsV2Command({
+          Bucket: configuration.bucket,
+          Prefix: searchPrefixWithSlash || undefined,
+          Delimiter: rootOnly ? "/" : undefined,
+          MaxKeys: 1000,
+          ContinuationToken: continuationToken,
+        }));
+
+        for (const item of page.Contents || []) {
+          scannedObjectCount += 1;
+          const key = String(item.Key || "");
+          if (!key || key.endsWith("/")) continue;
+          if (rootOnly && key.includes("/")) continue;
+          const relativeKey = displayPrefixWithSlash && key.startsWith(displayPrefixWithSlash)
+            ? key.slice(displayPrefixWithSlash.length)
+            : key;
+          const separatorIndex = relativeKey.lastIndexOf("/");
+          const name = separatorIndex >= 0 ? relativeKey.slice(separatorIndex + 1) : relativeKey;
+          const folder = separatorIndex >= 0 ? relativeKey.slice(0, separatorIndex) : "RAIZ";
+          recentFiles.push({
+            name: name || key,
+            folder: folder || "RAIZ",
+            key,
+            size: Number(item.Size || 0),
+            lastModified: item.LastModified?.toISOString() || null,
+          });
+        }
+
+        recentFiles.sort((left, right) => {
+          const leftTime = left.lastModified ? Date.parse(left.lastModified) : 0;
+          const rightTime = right.lastModified ? Date.parse(right.lastModified) : 0;
+          return rightTime - leftTime || left.key.localeCompare(right.key);
+        });
+        if (recentFiles.length > limit) recentFiles.length = limit;
+        continuationToken = page.NextContinuationToken;
+      } while (continuationToken);
+
+      return { files: recentFiles, scannedObjectCount, complete: true };
+    } catch (error: any) {
+      if (error?.name === "NoSuchBucket") throw new BadRequestException("O BUCKET CONFIGURADO NÃO FOI LOCALIZADO.");
+      throw new BadGatewayException("NÃO FOI POSSÍVEL CONSULTAR OS ÚLTIMOS MOVIMENTOS DO S3. VERIFIQUE A CONFIGURAÇÃO.");
+    }
+  }
+
+  async viewObject(query: ViewS3ObjectDto) {
+    this.assertAdmin(query.userRole);
+    const { configuration } = await this.configuration(query);
+    if (!configuration || configuration.status !== "ACTIVE") throw new BadRequestException("CONFIGURE O S3 NO CADASTRO DA EMPRESA OU FILIAL DO SISTEMA DE ORIGEM ANTES DE VISUALIZAR OS ARQUIVOS.");
+
+    const key = this.relativePrefix(query.key);
+    const basePrefix = normalizePrefix(configuration.basePrefix);
+    const imagesFolder = await this.resolveImagesFolder(configuration);
+    const allowedRootPrefixes = [basePrefix, imagesFolder].filter(Boolean);
+    const isAllowedObject = allowedRootPrefixes.some((allowedPrefix) => key === allowedPrefix || key.startsWith(`${allowedPrefix}/`));
+    if (!key || key.endsWith("/") || !isAllowedObject) {
+      throw new ForbiddenException("ARQUIVO S3 NÃO AUTORIZADO PARA ESTA EMPRESA OU FILIAL.");
+    }
+
+    try {
+      const object = await this.client(configuration).send(new GetObjectCommand({ Bucket: configuration.bucket, Key: key }));
+      if (!object.Body) throw new NotFoundException("ARQUIVO NÃO ENCONTRADO NO S3.");
+      const fileName = key.split("/").pop() || key;
+      const extension = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() || "" : "";
+      const contentTypes: Record<string, string> = {
+        csv: "text/csv; charset=utf-8",
+        gif: "image/gif",
+        jpeg: "image/jpeg",
+        jpg: "image/jpeg",
+        json: "application/json; charset=utf-8",
+        pdf: "application/pdf",
+        png: "image/png",
+        text: "text/plain; charset=utf-8",
+        tif: "image/tiff",
+        tiff: "image/tiff",
+        txt: "text/plain; charset=utf-8",
+        webp: "image/webp",
+        xml: "application/xml; charset=utf-8",
+      };
+      return {
+        body: object.Body,
+        contentType: contentTypes[extension] || "application/octet-stream",
+        contentLength: Number(object.ContentLength || 0),
+        fileName,
+      };
+    } catch (error: any) {
+      if (error instanceof ForbiddenException || error instanceof NotFoundException) throw error;
+      if (error?.name === "NoSuchKey") throw new NotFoundException("ARQUIVO NÃO ENCONTRADO NO S3.");
+      throw new BadGatewayException("NÃO FOI POSSÍVEL VISUALIZAR O ARQUIVO DO S3.");
     }
   }
 

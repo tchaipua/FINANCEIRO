@@ -21,6 +21,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type InstallmentResponse = {
   id: string;
@@ -685,9 +686,9 @@ export default function FinanceiroRecebimentosPorClientePage() {
     const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
     const separator = navigationQuery ? '&' : '?';
     setFinanceSettlementUrl(
-      `/recebiveis/baixa-manual${navigationQuery}${separator}modal=1&installmentIds=${encodeURIComponent(
+      withFinanceBasePath(`/recebiveis/baixa-manual${navigationQuery}${separator}modal=1&installmentIds=${encodeURIComponent(
         installmentIds.join(','),
-      )}`,
+      )}`),
     );
   }
 

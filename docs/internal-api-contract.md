@@ -83,6 +83,7 @@ Escopos internos definidos:
 
 ```text
 SOURCE_SETTINGS_SYNC      sincroniza configurações após o provisionamento
+SOURCE_TENANT_PROVISION   cria de forma idempotente o vínculo inicial da empresa e das filiais
 FINANCE_ACCESS            acesso operacional comum ao Financeiro
 FINANCE_ADMIN             operações administrativas do Financeiro
 MANAGE_FINANCIAL          operações financeiras e fiscais autorizadas
@@ -98,17 +99,24 @@ escopos mais fortes no próprio serviço.
 
 ## Provisionamento inicial do vínculo
 
-Um tenant desconhecido nunca pode criar o próprio vínculo por uma chamada
-HTTP. Antes da primeira integração, um operador do plano de controle executa,
-no host do Financeiro e com acesso administrativo ao banco:
+O backend de origem provisiona automaticamente o vínculo antes de sincronizar
+os parâmetros da Central, usando a rota interna:
+
+```text
+POST /api/v1/companies/provision-source-tenant
+```
+
+Essa chamada exige o escopo `SOURCE_TENANT_PROVISION`, a assinatura HMAC do
+sistema de origem e uma lista de filiais. Ela é idempotente: cria somente o
+que ainda não existe, não recebe `companyId`, não reativa registros cancelados
+e não altera silenciosamente o vínculo de outro tenant. O comando abaixo fica
+apenas como ferramenta administrativa de recuperação/teste:
 
 ```powershell
 npm run tenant:provision -- --system=PROJETO_INICIAL --tenant=TENANT-001 --branch=1 --company-name="Empresa Exemplo" --branch-name="Matriz" --company-document=12345678000190
 ```
 
-O comando aceita somente `ESCOLA` ou `PROJETO_INICIAL`, não recebe
-`companyId`, não altera silenciosamente um vínculo existente e não reativa
-registros cancelados. Ele cria a relação explícita:
+O provisionamento cria a relação explícita:
 
 ```text
 sourceSystem + sourceTenantId -> companyId

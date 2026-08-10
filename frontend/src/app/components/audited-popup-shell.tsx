@@ -24,6 +24,7 @@ type AuditedPopupShellProps = {
   screenCopyWrapperClassName?: string;
   headerTheme?: 'default' | 'blue';
   showScreenIdInHeader?: boolean;
+  screenIdHeaderClassName?: string;
   footerScreenIdCompact?: boolean;
 };
 
@@ -54,6 +55,7 @@ export default function AuditedPopupShell({
   screenCopyWrapperClassName = 'mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3',
   headerTheme = 'default',
   showScreenIdInHeader = false,
+  screenIdHeaderClassName = 'max-w-[260px] truncate',
   footerScreenIdCompact = false,
 }: AuditedPopupShellProps) {
   if (!isOpen) {
@@ -94,7 +96,7 @@ export default function AuditedPopupShell({
 
           <div className="flex items-center gap-2">
             {headerActions}
-            {showScreenIdInHeader ? <span className="max-w-[260px] truncate rounded-xl bg-white/15 px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white" title={screenId}>{screenId}</span> : null}
+            {showScreenIdInHeader ? <span className={`${screenIdHeaderClassName} rounded-xl bg-white/15 px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-white`} title={screenId}>{screenId}</span> : null}
             <button
               type="button"
               onClick={onClose}

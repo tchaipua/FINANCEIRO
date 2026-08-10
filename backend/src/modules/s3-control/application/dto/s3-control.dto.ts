@@ -37,6 +37,16 @@ export class ListS3ObjectsDto extends S3ControlContextDto {
   @IsOptional() @IsString() @MaxLength(3000) continuationToken?: string;
 }
 
+export class ListRecentS3ObjectsDto extends S3ControlContextDto {
+  @IsOptional() @IsString() @MaxLength(600) prefix?: string;
+  @IsOptional() @IsString() @MaxLength(10) rootOnly?: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(100) @IsOptional() limit?: number;
+}
+
+export class ViewS3ObjectDto extends S3ControlContextDto {
+  @IsString() @MaxLength(1000) key!: string;
+}
+
 export class ListS3ObjectNamesDto extends S3ControlContextDto {
   @IsOptional() @IsString() @MaxLength(600) prefix?: string;
 }

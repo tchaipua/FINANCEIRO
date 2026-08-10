@@ -563,6 +563,7 @@ export class ProductsService {
       companyId: movement.companyId,
       branchCode: movement.branchCode || DEFAULT_BRANCH_CODE,
       productId: movement.productId,
+      sourceId: movement.sourceId || null,
       productName: product?.name || "PRODUTO NÃO IDENTIFICADO",
       productInternalCode: product?.internalCode || null,
       productBarcode: product?.barcode || null,
@@ -576,6 +577,7 @@ export class ProductsService {
         movement.unitCost === null || movement.unitCost === undefined
           ? null
           : roundMoney(movement.unitCost),
+      sourceTypeCode: sourceType,
       sourceType:
         sourceType === "SALE"
           ? "VENDA"
@@ -587,10 +589,12 @@ export class ProductsService {
           ? "NF-E"
           : "SISTEMA",
       sourceDocument:
-        sourceType === "SALE" || sourceType === "SALE_CANCEL"
-          ? `VENDA ${movement.sourceId || ""}`.trim()
+        sourceType === "SALE"
+          ? "VENDA"
+          : sourceType === "SALE_CANCEL"
+          ? "CANCELAMENTO DE VENDA"
           : sourceType === "MANUAL_STOCK"
-          ? movement.sourceId || null
+          ? "MOVIMENTAÇÃO MANUAL"
           : sourceImport?.invoiceNumber
           ? `NF-E ${sourceImport.invoiceNumber}${sourceImport.series ? `/${sourceImport.series}` : ""}`
           : null,

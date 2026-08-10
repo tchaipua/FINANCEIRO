@@ -11,6 +11,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CompaniesService } from "../application/companies.service";
 import {
   ListCompaniesDto,
+  ProvisionSourceTenantDto,
   SaveCompanyBranchDto,
   SaveSalesScreenParametersDto,
   SyncSourceIntegrationSettingsDto,
@@ -39,6 +40,14 @@ export class CompaniesController {
     @Body() payload: SyncSourceIntegrationSettingsDto,
   ) {
     return this.companiesService.syncSourceIntegrationSettings(payload);
+  }
+
+  @Post("provision-source-tenant")
+  @ApiOperation({
+    summary: "Provisiona de forma idempotente o vínculo inicial de empresa e filiais",
+  })
+  provisionSourceTenant(@Body() payload: ProvisionSourceTenantDto) {
+    return this.companiesService.provisionSourceTenant(payload);
   }
 
   @Patch(":id/financial-settings")

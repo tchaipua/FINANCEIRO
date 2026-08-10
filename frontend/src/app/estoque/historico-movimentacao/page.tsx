@@ -7,7 +7,7 @@ import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson } from '@/app/lib/api';
-import { getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
+import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildDefaultExportColumns,
   exportGridRows,
@@ -29,11 +29,16 @@ const ORIGIN_TEXT =
   'Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\historico-movimentacao\\page.tsx';
 const PRODUCT_FILTER_POPUP_ORIGIN_TEXT =
   'Origem: Sistema Financeiro - popup local em C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\historico-movimentacao\\page.tsx';
+const SALE_ORIGIN_DETAIL_POPUP_SCREEN_ID =
+  'FINANCEIRO_ESTOQUE_HISTORICO_MOVIMENTACAO_ORIGEM_VENDA';
+const SALE_ORIGIN_DETAIL_POPUP_ORIGIN_TEXT =
+  'Origem: Sistema Financeiro - popup local em C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\historico-movimentacao\\page.tsx';
 
 type StockMovementItem = {
   id: string;
   branchCode: number;
   productId: string;
+  sourceId?: string | null;
   productName: string;
   productInternalCode?: string | null;
   productBarcode?: string | null;
@@ -44,12 +49,55 @@ type StockMovementItem = {
   previousStock: number;
   resultingStock: number;
   unitCost?: number | null;
+  sourceTypeCode?: string | null;
   sourceType: string;
   sourceDocument?: string | null;
   sourceAccessKey?: string | null;
   notes?: string | null;
   occurredAt: string;
   createdBy?: string | null;
+};
+
+type SaleOriginDetailProduct = {
+  id: string;
+  productName: string;
+  productCode?: string | null;
+  unitCode: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  totalAmount: number;
+};
+
+type SaleOriginDetailPayment = {
+  id: string;
+  paymentMethod: string;
+  paymentMethodLabel?: string | null;
+  amount: number;
+  dueDate?: string | null;
+  installmentCount?: number | null;
+  status: string;
+  movementDate?: string | null;
+};
+
+type SaleOriginDetail = {
+  id: string;
+  branchCode: number;
+  saleNumber: string;
+  saleChannel: string;
+  status: string;
+  customerName: string;
+  customerDocument?: string | null;
+  subtotalAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  receivableAmount: number;
+  paymentSummary?: string | null;
+  notes?: string | null;
+  confirmedAt?: string | null;
+  items?: SaleOriginDetailProduct[];
+  payments?: SaleOriginDetailPayment[];
 };
 
 type ProductFilterItem = {
@@ -62,6 +110,7 @@ type ProductFilterItem = {
 };
 
 type MovementTypeFilter = 'ALL' | 'ENTRY' | 'EXIT';
+type SaleOriginDetailTab = 'header' | 'products' | 'payments';
 type MovementGridColumnKey =
   | 'occurredAt'
   | 'movementType'
@@ -72,6 +121,12 @@ type MovementGridColumnKey =
   | 'source'
   | 'createdBy'
   | 'notes';
+
+const SALE_ORIGIN_DETAIL_TABS: Array<{ key: SaleOriginDetailTab; label: string }> = [
+  { key: 'header', label: 'Cabeçalho' },
+  { key: 'products', label: 'Produtos' },
+  { key: 'payments', label: 'Parcelas' },
+];
 
 const auditText = `--- LOGICA DA TELA ---
 Esta tela lista o historico de movimentacoes de estoque gravado pelo Financeiro.
@@ -96,7 +151,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - saldo anterior
 - saldo resultante
 - documento de origem
-- usuario/operador e observacao
+- observacao
 
 FILTROS APLICADOS AGORA:
 - sourceSystem e sourceTenantId da vertical consumidora
@@ -118,8 +173,7 @@ const sqlText = `SELECT
   SM.quantity,
   SM.previousStock,
   SM.resultingStock,
-  PII.invoiceNumber,
-  SM.createdBy
+  PII.invoiceNumber
 FROM stock_movements SM
 JOIN products PR ON PR.id = SM.productId
 LEFT JOIN payable_invoice_imports PII ON PII.id = SM.sourceImportId
@@ -159,8 +213,7 @@ SELECT
   SM.quantity,
   SM.previousStock,
   SM.resultingStock,
-  PII.invoiceNumber,
-  SM.createdBy
+  PII.invoiceNumber
 FROM stock_movements SM
 JOIN companies CO ON CO.id = SM.companyId
 JOIN products PR ON PR.id = SM.productId
@@ -256,11 +309,6 @@ const MOVEMENT_GRID_COLUMNS: GridColumnDefinition<StockMovementItem, MovementGri
     getValue: (item) => item.sourceDocument || item.sourceType || '---',
   },
   {
-    key: 'createdBy',
-    label: 'Usuário',
-    getValue: (item) => item.createdBy || '---',
-  },
-  {
     key: 'notes',
     label: 'Observação',
     getValue: (item) => item.notes || '---',
@@ -268,7 +316,16 @@ const MOVEMENT_GRID_COLUMNS: GridColumnDefinition<StockMovementItem, MovementGri
 ];
 
 const DEFAULT_MOVEMENT_GRID_CONFIG = {
-  order: MOVEMENT_GRID_COLUMNS.map((column) => column.key),
+  order: [
+    'occurredAt',
+    'product',
+    'quantity',
+    'movementType',
+    'previousStock',
+    'resultingStock',
+    'source',
+    'notes',
+  ] as MovementGridColumnKey[],
   hidden: ['notes'] as MovementGridColumnKey[],
 };
 
@@ -592,25 +649,281 @@ ORDER BY PR.name ASC;`}
               key={product.id}
               type="button"
               onClick={() => onSelect(product)}
-              className="flex w-full items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 text-left transition last:border-b-0 hover:bg-emerald-50"
+              aria-label={`Selecionar ${product.name}`}
+              title={`Selecionar ${product.name}`}
+              className="group grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-4 border-b border-slate-100 bg-white px-5 py-4 text-left transition last:border-b-0 hover:bg-emerald-50"
             >
-              <div>
-                <div className="font-black uppercase tracking-[0.08em] text-slate-900">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition group-hover:bg-emerald-700">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <path d="m5 12 4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <div className="flex min-w-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="order-2 min-w-0 text-right font-black uppercase tracking-[0.08em] text-slate-900 sm:order-2">
                   {product.name}
                 </div>
-                <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                <div className="order-1 shrink-0 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:order-1">
                   {[product.internalCode, product.barcode, product.unitCode]
                     .filter(Boolean)
                     .join(' | ') || 'SEM CODIGO'}
                 </div>
               </div>
-              <span className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white shadow-sm">
-                Selecionar
-              </span>
             </button>
           ))}
         </div>
       </div>
+    </AuditedPopupShell>
+  );
+}
+
+function formatSaleStatus(value?: string | null) {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'CONFIRMED') return 'CONFIRMADA';
+  if (normalized === 'CANCELED') return 'CANCELADA';
+  return normalized || '---';
+}
+
+function normalizeFinanceLogoUrl(value?: string | null) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (/^(?:data:|https?:\/\/|blob:|\/)/i.test(normalized)) return normalized;
+  return `/${normalized}`;
+}
+
+function formatSalePaymentStatus(value?: string | null) {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'PAID') return 'PAGO';
+  if (normalized === 'OPEN') return 'EM ABERTO';
+  if (normalized === 'CANCELED') return 'CANCELADO';
+  if (normalized === 'REGISTERED') return 'REGISTRADO';
+  return normalized || '---';
+}
+
+function SaleOriginDetailModal({
+  isOpen,
+  sale,
+  activeTab,
+  isLoading,
+  errorMessage,
+  movementCreatedBy,
+  runtimeContext,
+  onTabChange,
+  onClose,
+}: {
+  isOpen: boolean;
+  sale: SaleOriginDetail | null;
+  activeTab: SaleOriginDetailTab;
+  isLoading: boolean;
+  errorMessage: string | null;
+  movementCreatedBy?: string | null;
+  runtimeContext: ReturnType<typeof useFinanceRuntimeContext>;
+  onTabChange: (tab: SaleOriginDetailTab) => void;
+  onClose: () => void;
+}) {
+  return (
+    <AuditedPopupShell
+      isOpen={isOpen}
+      screenId={SALE_ORIGIN_DETAIL_POPUP_SCREEN_ID}
+      title={sale ? `Venda ${sale.saleNumber}` : 'Movimento original'}
+      eyebrow="Origem da movimentação"
+      description="Consulte o cabeçalho, os produtos e as parcelas do movimento original."
+      brandingName={runtimeContext.companyName}
+      logoUrl={normalizeFinanceLogoUrl(runtimeContext.logoUrl)}
+      headerTheme="blue"
+      footerScreenIdCompact
+      originText={SALE_ORIGIN_DETAIL_POPUP_ORIGIN_TEXT}
+      auditText={`--- LOGICA DO POPUP ---
+Este popup consulta a venda original vinculada à movimentação de estoque.
+
+FILTROS APLICADOS:
+- sourceSystem: ${formatAuditValue(runtimeContext.sourceSystem)}
+- sourceTenantId: ${formatTenantAuditValue(runtimeContext.sourceTenantId)}
+- sourceBranchCode: ${formatAuditValue(runtimeContext.sourceBranchCode, '1')}
+- venda consultada: ${formatAuditValue(sale?.saleNumber)}`}
+      sqlText={`SELECT
+  S.saleNumber,
+  S.customerNameSnapshot,
+  SI.productNameSnapshot,
+  SP.amount,
+  SP.dueDate
+FROM sales S
+LEFT JOIN sale_items SI ON SI.saleId = S.id
+LEFT JOIN sale_payments SP ON SP.saleId = S.id
+WHERE S.id = :saleId
+  AND S.sourceSystem = :sourceSystem
+  AND S.sourceTenantId = :sourceTenantId
+  AND S.branchCode = :sourceBranchCode;`}
+      onClose={onClose}
+      panelClassName="max-w-5xl"
+      bodyClassName="gap-5 overflow-y-auto"
+    >
+      {isLoading ? (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm font-black uppercase tracking-[0.14em] text-slate-500">
+          Carregando movimento original...
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          {errorMessage}
+        </div>
+      ) : null}
+
+      {!isLoading && !errorMessage && sale ? (
+        <>
+          <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
+            {SALE_ORIGIN_DETAIL_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onTabChange(tab.key)}
+                className={`rounded-xl px-4 py-2 text-xs font-black uppercase tracking-[0.18em] transition ${
+                  activeTab === tab.key
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'header' ? (
+            <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700 md:grid-cols-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Cliente</div>
+                <div className="mt-1 text-slate-900">{sale.customerName || '---'}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Documento</div>
+                <div className="mt-1 text-slate-900">{sale.customerDocument || '---'}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Data</div>
+                <div className="mt-1 text-slate-900">{formatDateTime(sale.confirmedAt)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Status</div>
+                <div className="mt-1 text-slate-900">{formatSaleStatus(sale.status)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Usuário do movimento</div>
+                <div className="mt-1 break-all text-slate-900">
+                  {movementCreatedBy &&
+                  runtimeContext.cashierUserId &&
+                  movementCreatedBy.toUpperCase() === runtimeContext.cashierUserId.toUpperCase()
+                    ? runtimeContext.cashierDisplayName || movementCreatedBy
+                    : movementCreatedBy || '---'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Canal</div>
+                <div className="mt-1 text-slate-900">{sale.saleChannel || '---'}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Total</div>
+                <div className="mt-1 text-slate-900">{formatCurrency(sale.totalAmount)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Recebido</div>
+                <div className="mt-1 text-slate-900">{formatCurrency(sale.paidAmount)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">A receber</div>
+                <div className="mt-1 text-slate-900">{formatCurrency(sale.receivableAmount)}</div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Resumo do pagamento</div>
+                <div className="mt-1 text-slate-900">{sale.paymentSummary || '---'}</div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Observação</div>
+                <div className="mt-1 text-slate-900">{sale.notes || '---'}</div>
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === 'products' ? (
+            <div className="overflow-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Produto</th>
+                    <th className="px-4 py-3 text-right">Qtd</th>
+                    <th className="px-4 py-3 text-right">Unitário</th>
+                    <th className="px-4 py-3 text-right">Desconto</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(sale.items || []).map((product) => (
+                    <tr key={product.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 font-semibold text-slate-900">
+                        {product.productName || '---'}
+                        {product.productCode ? (
+                          <span className="ml-2 text-xs font-bold text-slate-500">{product.productCode}</span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">{product.quantity} {product.unitCode}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(product.unitPrice)}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(product.discountAmount)}</td>
+                      <td className="px-4 py-3 text-right font-black text-slate-900">{formatCurrency(product.totalAmount)}</td>
+                    </tr>
+                  ))}
+                  {!(sale.items || []).length ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center font-semibold text-slate-500">
+                        Nenhum produto localizado para esta venda.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {activeTab === 'payments' ? (
+            <div className="overflow-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full text-left text-sm text-slate-600">
+                <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Forma</th>
+                    <th className="px-4 py-3">Vencimento</th>
+                    <th className="px-4 py-3">Movimento</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(sale.payments || []).map((payment, index) => (
+                    <tr key={payment.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 font-semibold text-slate-900">
+                        {payment.paymentMethodLabel || payment.paymentMethod || '---'}
+                        {payment.installmentCount && payment.installmentCount > 1 ? (
+                          <span className="ml-2 text-xs font-bold text-slate-500">
+                            {index + 1}/{payment.installmentCount}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">{formatDateTime(payment.dueDate)}</td>
+                      <td className="px-4 py-3">{formatDateTime(payment.movementDate)}</td>
+                      <td className="px-4 py-3">{formatSalePaymentStatus(payment.status)}</td>
+                      <td className="px-4 py-3 text-right font-black text-slate-900">{formatCurrency(payment.amount)}</td>
+                    </tr>
+                  ))}
+                  {!(sale.payments || []).length ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center font-semibold text-slate-500">
+                        Nenhuma parcela ou pagamento localizado para esta venda.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </AuditedPopupShell>
   );
 }
@@ -633,6 +946,12 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   const [isProductLoading, setIsProductLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [productErrorMessage, setProductErrorMessage] = useState<string | null>(null);
+  const [isSaleOriginModalOpen, setIsSaleOriginModalOpen] = useState(false);
+  const [isSaleOriginLoading, setIsSaleOriginLoading] = useState(false);
+  const [saleOriginErrorMessage, setSaleOriginErrorMessage] = useState<string | null>(null);
+  const [saleOriginDetail, setSaleOriginDetail] = useState<SaleOriginDetail | null>(null);
+  const [saleOriginMovementUser, setSaleOriginMovementUser] = useState<string | null>(null);
+  const [saleOriginDetailTab, setSaleOriginDetailTab] = useState<SaleOriginDetailTab>('header');
   const [isColumnConfigOpen, setIsColumnConfigOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
@@ -755,6 +1074,33 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       setIsProductLoading(false);
     }
   }, [isProductModalOpen, productSearch, runtimeContext]);
+
+  const openSaleOriginDetails = useCallback(async (movement: StockMovementItem) => {
+    if (movement.sourceTypeCode !== 'SALE' || !movement.sourceId) return;
+
+    setIsSaleOriginModalOpen(true);
+    setIsSaleOriginLoading(true);
+    setSaleOriginErrorMessage(null);
+    setSaleOriginDetail(null);
+    setSaleOriginMovementUser(movement.createdBy || null);
+    setSaleOriginDetailTab('header');
+
+    try {
+      const sale = await getJson<SaleOriginDetail>(
+        `/sales/${encodeURIComponent(movement.sourceId)}${buildFinanceApiQueryString(runtimeContext)}`,
+      );
+      setSaleOriginDetail(sale);
+    } catch (error) {
+      setSaleOriginErrorMessage(
+        getFriendlyRequestErrorMessage(
+          error,
+          'Não foi possível carregar o movimento original da venda.',
+        ),
+      );
+    } finally {
+      setIsSaleOriginLoading(false);
+    }
+  }, [runtimeContext]);
 
   useEffect(() => {
     void loadMovements();
@@ -889,22 +1235,6 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       </section>
 
       <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex min-h-0 flex-1 flex-col overflow-hidden`}>
-        <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-6 py-4">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-                Movimentações encontradas
-              </div>
-              <div className="mt-1 text-xl font-black text-slate-900">
-                {isLoading ? 'Carregando...' : `${movements.length} registro(s)`}
-              </div>
-            </div>
-            <div className="text-sm font-medium text-slate-500">
-              Filial {runtimeContext.sourceBranchCode}
-            </div>
-          </div>
-        </div>
-
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="sticky top-0 z-20 bg-white shadow-[0_1px_0_rgba(148,163,184,0.35)]">
@@ -949,6 +1279,38 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
                     }`}
                   >
                     {activeColumns.map((column) => {
+                      if (column.key === 'source') {
+                        const canOpenSaleOrigin =
+                          movement.sourceTypeCode === 'SALE' && Boolean(movement.sourceId);
+
+                        return (
+                          <td key={column.key} className="px-4 py-4 align-top">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-700">
+                                {movement.sourceDocument || movement.sourceType || '---'}
+                              </span>
+                              {canOpenSaleOrigin ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void openSaleOriginDetails(movement);
+                                  }}
+                                  title="Visualizar movimento original"
+                                  aria-label="Visualizar movimento original"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100"
+                                >
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.9} d="M4 5h16v14H4z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.9} d="M8 9h8M8 13h5" />
+                                  </svg>
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        );
+                      }
+
                       if (column.key === 'product') {
                         return (
                           <td key={column.key} className="px-4 py-4 align-top">
@@ -1000,8 +1362,8 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
           </table>
         </div>
 
-        <div className="grid shrink-0 gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 xl:grid-cols-[1fr_auto_1fr] xl:items-center">
-          <div className="flex items-center gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => setIsColumnConfigOpen(true)}
@@ -1027,59 +1389,60 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
                 <path d="M6 14h12v7H6z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-          </div>
 
-          <div className="flex items-center justify-center gap-2">
-            {[
-              {
-                value: 'ENTRY' as const,
-                label: 'Entradas',
-                tone: 'bg-emerald-500',
-                activeTone: 'bg-emerald-700',
-              },
-              {
-                value: 'ALL' as const,
-                label: 'Todos',
-                tone: 'bg-amber-200',
-                activeTone: 'bg-amber-400',
-              },
-              {
-                value: 'EXIT' as const,
-                label: 'Saídas',
-                tone: 'bg-rose-200',
-                activeTone: 'bg-rose-400',
-              },
-            ].map((item) => {
-              const isActive = movementTypeFilter === item.value;
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setMovementTypeFilter(item.value)}
-                  aria-label={item.label}
-                  title={item.label}
-                  aria-pressed={isActive}
-                  className={`relative h-6 w-14 rounded-full border transition duration-200 ${
-                    isActive
-                      ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
-                      : `${item.tone} border-transparent opacity-55 hover:opacity-85`
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm ${
-                      isActive ? 'right-1' : 'left-1'
+            <div className="flex items-center justify-start gap-2">
+              {[
+                {
+                  value: 'ENTRY' as const,
+                  label: 'Entradas',
+                  tone: 'bg-emerald-500',
+                  activeTone: 'bg-emerald-700',
+                },
+                {
+                  value: 'ALL' as const,
+                  label: 'Todos',
+                  tone: 'bg-amber-200',
+                  activeTone: 'bg-amber-400',
+                },
+                {
+                  value: 'EXIT' as const,
+                  label: 'Saídas',
+                  tone: 'bg-rose-200',
+                  activeTone: 'bg-rose-400',
+                },
+              ].map((item) => {
+                const isActive = movementTypeFilter === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setMovementTypeFilter(item.value)}
+                    aria-label={item.label}
+                    title={item.label}
+                    aria-pressed={isActive}
+                    className={`relative h-6 w-14 rounded-full border transition duration-200 ${
+                      isActive
+                        ? `${item.activeTone} border-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35),0_8px_24px_rgba(15,23,42,0.22)] ring-4 ring-slate-400 ring-offset-2 ring-offset-slate-100 scale-105`
+                        : `${item.tone} border-transparent opacity-55 hover:opacity-85`
                     }`}
-                  />
-                  <span className="sr-only">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
+                  >
+                    <span
+                      className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm ${
+                        isActive ? 'right-1' : 'left-1'
+                      }`}
+                    />
+                    <span className="sr-only">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm">
               Total registros: <span className="ml-1 text-blue-700">{movements.length}</span>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <select
               value={pageSize}
               onChange={(event) => {
@@ -1182,6 +1545,23 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
           setIsProductModalOpen(false);
         }}
         onClose={() => setIsProductModalOpen(false)}
+      />
+
+      <SaleOriginDetailModal
+        isOpen={isSaleOriginModalOpen}
+        sale={saleOriginDetail}
+        activeTab={saleOriginDetailTab}
+        isLoading={isSaleOriginLoading}
+        errorMessage={saleOriginErrorMessage}
+        movementCreatedBy={saleOriginMovementUser}
+        runtimeContext={runtimeContext}
+        onTabChange={setSaleOriginDetailTab}
+        onClose={() => {
+          setIsSaleOriginModalOpen(false);
+          setSaleOriginDetail(null);
+          setSaleOriginMovementUser(null);
+          setSaleOriginErrorMessage(null);
+        }}
       />
 
       <GridExportModal

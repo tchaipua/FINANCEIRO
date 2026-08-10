@@ -35,6 +35,8 @@ const DUMMY_SECRET =
   "financeiro-dummy-secret-used-only-for-timing-normalization";
 const SOURCE_SETTINGS_SYNC_PATH =
   "/api/v1/companies/sync-source-integration-settings";
+const SOURCE_TENANT_PROVISION_PATH =
+  "/api/v1/companies/provision-source-tenant";
 const OPERATIONAL_SCOPES = new Set([
   "FINANCE_ACCESS",
   "FINANCE_ADMIN",
@@ -306,8 +308,11 @@ export class InternalApiAuthGuard implements CanActivate {
       "http://internal.invalid",
     ).pathname;
     const isSourceSettingsSync = requestPath === SOURCE_SETTINGS_SYNC_PATH;
+    const isSourceTenantProvision = requestPath === SOURCE_TENANT_PROVISION_PATH;
     const isReadMethod = request.method === "GET" || request.method === "HEAD";
-    const hasRequiredScope = isSourceSettingsSync
+    const hasRequiredScope = isSourceTenantProvision
+      ? scopes.includes("SOURCE_TENANT_PROVISION")
+      : isSourceSettingsSync
       ? scopes.includes("SOURCE_SETTINGS_SYNC")
       : scopes.some((scope) =>
           (isReadMethod ? OPERATIONAL_SCOPES : MUTATION_SCOPES).has(scope),
@@ -328,6 +333,71 @@ export class InternalApiAuthGuard implements CanActivate {
       throw new ServiceUnavailableException(
         "SERVIÇO DE PROTEÇÃO CONTRA REPLAY INDISPONÍVEL.",
       );
+    }
+
+    if (isSourceTenantProvision) {
+      const scope: AuthenticatedScope = Object.freeze({
+        sourceSystem: systemId,
+        sourceTenantId: tenantId,
+        sourceBranchCode: branchCode,
+        sourceUserId: userId,
+        companyId: "",
+        branchId: "",
+        scopes: Object.freeze(scopes),
+        timestamp,
+        nonce,
+      });
+
+      assertEquivalentSystem(
+        request.headers["x-source-system"],
+        scope.sourceSystem,
+      );
+      assertEquivalentSystem(
+        request.headers["x-source-tenant-id"],
+        scope.sourceTenantId,
+      );
+      assertEquivalentNumber(
+        request.headers["x-source-branch-code"],
+        scope.sourceBranchCode,
+      );
+      assertEquivalentString(
+        request.headers["x-source-user-id"],
+        scope.sourceUserId,
+      );
+      for (const forbiddenHeader of [
+        "x-company-id",
+        "x-branch-id",
+        "x-user-role",
+        "x-permissions",
+        "x-api-key",
+      ]) {
+        if (request.headers[forbiddenHeader] !== undefined) {
+          throw new ForbiddenException(CONTEXT_DIVERGENCE_MESSAGE);
+        }
+      }
+
+      validateDeclaredContext(request.query, scope);
+      validateDeclaredContext(request.body, scope);
+      validateDeclaredContext(request.params, scope);
+
+      const financeContext = getFinanceContext();
+      if (!financeContext || financeContext.authenticated) {
+        throw new UnauthorizedException(GENERIC_UNAUTHORIZED_MESSAGE);
+      }
+      Object.assign(financeContext, {
+        authenticated: true,
+        sourceSystem: scope.sourceSystem,
+        sourceTenantId: scope.sourceTenantId,
+        sourceBranchCode: scope.sourceBranchCode,
+        sourceUserId: scope.sourceUserId,
+        companyId: scope.companyId,
+        branchId: scope.branchId,
+        scopes: scope.scopes,
+        branchCode: scope.sourceBranchCode,
+      });
+      Object.freeze(financeContext);
+      defineImmutableRequestContext(request, scope);
+      return true;
     }
 
     const company = await this.prisma.company.findUnique({

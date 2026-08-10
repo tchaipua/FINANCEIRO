@@ -12,6 +12,7 @@ import {
 } from "../../../common/finance-core.utils";
 import {
   ListCompaniesDto,
+  ProvisionSourceTenantDto,
   SaveCompanyBranchDto,
   SaveSalesScreenParametersDto,
   SyncSourceIntegrationSettingsDto,
@@ -703,6 +704,133 @@ export class CompaniesService {
       telegramConfigured: Boolean(payload.telegramBotToken),
       synchronizedAt: new Date().toISOString(),
     };
+  }
+
+  async provisionSourceTenant(payload: ProvisionSourceTenantDto) {
+    if (!hasAuthenticatedFinanceScope("SOURCE_TENANT_PROVISION")) {
+      throw new ForbiddenException(
+        "A PROVISÃO INICIAL EXIGE O ESCOPO SOURCE_TENANT_PROVISION.",
+      );
+    }
+
+    const sourceSystem = normalizeText(payload.sourceSystem);
+    const sourceTenantId = normalizeText(payload.sourceTenantId);
+    const companyName =
+      normalizeText(payload.companyName) || `${sourceSystem} ${sourceTenantId}`;
+    const companyDocument = normalizeTaxId(payload.companyDocument);
+    const branches = Array.from(
+      new Map(
+        payload.branches.map((branch) => [
+          Number(branch.code),
+          {
+            branchCode: Number(branch.code),
+            name: normalizeText(branch.branchName) || "",
+          },
+        ]),
+      ).values(),
+    );
+
+    if (
+      !sourceSystem ||
+      !sourceTenantId ||
+      !branches.length ||
+      branches.some(
+        (branch) =>
+          !Number.isSafeInteger(branch.branchCode) ||
+          branch.branchCode < 1 ||
+          !branch.name,
+      )
+    ) {
+      throw new BadRequestException("CONTEXTO DA PROVISÃO INICIAL INVÁLIDO.");
+    }
+
+    const actor = String(payload.requestedBy || "INTEGRACAO_ORIGEM").trim();
+    return this.prisma.$transaction(async (transaction) => {
+      let company = await transaction.company.findUnique({
+        where: {
+          sourceSystem_sourceTenantId: {
+            sourceSystem,
+            sourceTenantId,
+          },
+        },
+      });
+      const companyCreated = !company;
+
+      if (company && (company.status !== "ACTIVE" || company.canceledAt)) {
+        throw new ForbiddenException(
+          "O vínculo da empresa existe, mas está inativo ou cancelado.",
+        );
+      }
+
+      if (!company) {
+        company = await transaction.company.create({
+          data: {
+            sourceSystem,
+            sourceTenantId,
+            name: companyName,
+            document: companyDocument,
+            status: "ACTIVE",
+            createdBy: actor,
+            updatedBy: actor,
+          },
+        });
+      }
+
+      const provisionedBranches: Array<{
+        branchCode: number;
+        branchId: string;
+        name: string;
+        created: boolean;
+      }> = [];
+
+      for (const branchInput of branches) {
+        let branch = await transaction.companyBranch.findUnique({
+          where: {
+            companyId_branchCode: {
+              companyId: company.id,
+              branchCode: branchInput.branchCode,
+            },
+          },
+        });
+        const branchCreated = !branch;
+
+        if (branch && (!branch.isActive || branch.canceledAt)) {
+          throw new ForbiddenException(
+            `O vínculo da filial ${branchInput.branchCode} existe, mas está inativo ou cancelado.`,
+          );
+        }
+
+        if (!branch) {
+          branch = await transaction.companyBranch.create({
+            data: {
+              companyId: company.id,
+              branchCode: branchInput.branchCode,
+              name: branchInput.name,
+              isActive: true,
+              isDefault: branchInput.branchCode === DEFAULT_BRANCH_CODE,
+              createdBy: actor,
+              updatedBy: actor,
+            },
+          });
+        }
+
+        provisionedBranches.push({
+          branchCode: branch.branchCode,
+          branchId: branch.id,
+          name: branch.name,
+          created: branchCreated,
+        });
+      }
+
+      return {
+        provisioned: true,
+        companyCreated,
+        sourceSystem: company.sourceSystem,
+        sourceTenantId: company.sourceTenantId,
+        companyId: company.id,
+        branches: provisionedBranches,
+      };
+    });
   }
 
   async listBranches(id: string, scope: ListCompaniesDto) {

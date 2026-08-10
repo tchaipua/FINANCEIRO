@@ -3,7 +3,7 @@ import { ApiConsumes, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import type { Readable } from "node:stream";
 import { S3ControlService } from "../application/s3-control.service";
-import { CreateS3FolderDto, DeleteS3FolderDto, DeleteS3ObjectDto, DeleteS3ObjectsBatchDto, DownloadProductImageDto, ListS3ObjectNamesDto, ListS3ObjectsDto, ProductImageReadinessDto, S3FolderStatusDto, SaveS3ConfigurationDto, SearchS3ObjectsDto, S3ControlContextDto, S3UsageDto, SyncProductImageDto, UploadS3ObjectDto } from "../application/dto/s3-control.dto";
+import { CreateS3FolderDto, DeleteS3FolderDto, DeleteS3ObjectDto, DeleteS3ObjectsBatchDto, DownloadProductImageDto, ListRecentS3ObjectsDto, ListS3ObjectNamesDto, ListS3ObjectsDto, ProductImageReadinessDto, S3FolderStatusDto, SaveS3ConfigurationDto, SearchS3ObjectsDto, S3ControlContextDto, S3UsageDto, SyncProductImageDto, UploadS3ObjectDto, ViewS3ObjectDto } from "../application/dto/s3-control.dto";
 
 @ApiTags("Controle S3")
 @Controller("s3-control")
@@ -21,6 +21,20 @@ export class S3ControlController {
 
   @Get("objects") @ApiOperation({ summary: "Lista arquivos e pastas autorizados do S3" })
   listObjects(@Query() query: ListS3ObjectsDto) { return this.service.listObjects(query); }
+
+  @Get("recent-objects") @ApiOperation({ summary: "Lista os 100 arquivos alterados mais recentemente no S3" })
+  recentObjects(@Query() query: ListRecentS3ObjectsDto) { return this.service.recentObjects(query); }
+
+  @Get("object/view") @ApiOperation({ summary: "Visualiza um arquivo S3 autorizado sem expor as credenciais" })
+  async viewObject(@Query() query: ViewS3ObjectDto, @Res({ passthrough: true }) response: Response) {
+    const artifact = await this.service.viewObject(query);
+    response.setHeader("Content-Type", artifact.contentType);
+    response.setHeader("Content-Length", String(artifact.contentLength));
+    response.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(artifact.fileName)}`);
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    return new StreamableFile(artifact.body as unknown as Readable);
+  }
 
   @Get("objects/names") @ApiOperation({ summary: "Lista os nomes de arquivos de uma pasta S3 para retomar envios" })
   listObjectNames(@Query() query: ListS3ObjectNamesDto) { return this.service.listObjectNames(query); }
