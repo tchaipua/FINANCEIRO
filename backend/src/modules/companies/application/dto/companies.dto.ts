@@ -443,6 +443,11 @@ export class SaveCompanyBranchDto {
   stockNegativeControlMode?: string;
 
   @IsOptional()
+  @IsString()
+  @IsIn(["GROUP_ONLY", "GROUP_AND_SUBGROUP"])
+  stockClassificationMode?: string;
+
+  @IsOptional()
   @IsBoolean()
   allowSaleUnitPriceEdit?: boolean;
 

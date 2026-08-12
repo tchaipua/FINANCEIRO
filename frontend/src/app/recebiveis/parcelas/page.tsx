@@ -1728,9 +1728,13 @@ export default function FinanceiroParcelasPage() {
               <button
                 type="button"
                 onClick={() => setFinanceSettlementUrl(null)}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600 transition hover:bg-slate-100"
+                className="flex h-10 w-11 items-center justify-center rounded-full border border-white/90 bg-rose-600 text-white shadow-lg shadow-rose-900/30 transition hover:bg-rose-700"
+                aria-label="Fechar baixa manual"
+                title="Fechar"
               >
-                Fechar
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
               </button>
             </div>
             <iframe

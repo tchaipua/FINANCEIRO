@@ -30,14 +30,6 @@ const MENU_ITEMS: MenuItem[] = [
     image: '/principal-financeiro/historico-cliente.svg?v=1',
   },
   {
-    id: 'empresa',
-    label: 'Empresa',
-    href: '/empresas',
-    hostPath: '/principal/financeiro/empresa',
-    description: 'Cadastro financeiro da empresa atual.',
-    image: '/principal-financeiro/empresa.svg?v=2',
-  },
-  {
     id: 'bancos-e-boletos',
     label: 'Bancos e Boletos',
     href: '/bancos-e-boletos',
@@ -84,6 +76,15 @@ const MENU_ITEMS: MenuItem[] = [
     hostPath: '/principal/financeiro/estoque',
     description: 'Acesse o controle de produtos e estoque.',
     image: '/principal-financeiro/estoque.svg?v=1',
+  },
+  {
+    id: 'estoque-grupos',
+    label: 'Grupos e Subgrupos',
+    href: '/estoque/grupos',
+    hostPath: '/principal/financeiro/estoque/grupos',
+    description: 'Cadastre e organize os grupos e subgrupos do estoque por filial.',
+    image: '/principal-financeiro/estoque.svg?v=1',
+    adminOnly: true,
   },
   {
     id: 'caixa',
@@ -142,13 +143,32 @@ const MENU_ITEMS: MenuItem[] = [
 ];
 
 function resolveHostBaseUrl() {
-  if (typeof document === 'undefined' || !document.referrer) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // O Projeto Inicial embarca o Financeiro no mesmo host e usa
+  // referrerPolicy="no-referrer". Nesse cenário document.referrer fica vazio,
+  // mas a janela pai continua sendo a rota correta para a navegação.
+  try {
+    if (window.parent !== window) {
+      const parentOrigin = window.parent.location.origin;
+      if (parentOrigin) {
+        return parentOrigin;
+      }
+    }
+  } catch {
+    // Em um iframe cross-origin não é permitido ler a janela pai; usamos o
+    // referrer como fallback quando ele estiver disponível.
+  }
+
+  if (!document.referrer) {
     return null;
   }
 
   try {
     const referrerUrl = new URL(document.referrer);
-    if (typeof window !== 'undefined' && referrerUrl.origin === window.location.origin) {
+    if (referrerUrl.origin === window.location.origin) {
       return null;
     }
     return referrerUrl.origin;

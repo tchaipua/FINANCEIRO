@@ -196,6 +196,13 @@ export class CompaniesService {
       : "BY_PRODUCT";
   }
 
+  private normalizeStockClassificationMode(value?: string | null) {
+    const normalized = normalizeText(value) || "GROUP_ONLY";
+    return ["GROUP_ONLY", "GROUP_AND_SUBGROUP"].includes(normalized)
+      ? normalized
+      : "GROUP_ONLY";
+  }
+
   private getStockModesFromBranchPayload(
     payload: SaveCompanyBranchDto,
     fallback?: {
@@ -205,6 +212,7 @@ export class CompaniesService {
       stockExpirationControlMode?: string | null;
       stockGridControlMode?: string | null;
       stockNegativeControlMode?: string | null;
+      stockClassificationMode?: string | null;
       inventoryControlType?: string | null;
       quantityPrecision?: string | null;
     },
@@ -994,6 +1002,9 @@ export class CompaniesService {
       branchId,
       scope,
     );
+    const stockClassificationMode = this.normalizeStockClassificationMode(
+      payload.stockClassificationMode || branch.stockClassificationMode,
+    );
     const parameters = {
       ...stockModes,
       allowSaleUnitPriceEdit:
@@ -1023,6 +1034,7 @@ export class CompaniesService {
           inventoryControlType,
           quantityPrecision,
           ...stockModes,
+          stockClassificationMode,
           allowSaleUnitPriceEdit: parameters.allowSaleUnitPriceEdit,
           allowSaleItemDiscount: parameters.allowSaleItemDiscount,
           allowProductImageEdit: parameters.allowProductImageEdit,

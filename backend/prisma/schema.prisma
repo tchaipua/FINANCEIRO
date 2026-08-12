@@ -73,6 +73,8 @@ model Company {
   customerCredits                 CustomerCredit[]
   customerCreditMovements         CustomerCreditMovement[]
   branches                        CompanyBranch[]
+  productGroups                   ProductGroup[]
+  productSubgroups                ProductSubgroup[]
   sales                           Sale[]
   saleReturns                     SaleReturn[]
   saleItems                       SaleItem[]
@@ -222,6 +224,7 @@ model CompanyBranch {
   stockExpirationControlMode String    @default("BY_PRODUCT")
   stockGridControlMode       String    @default("BY_PRODUCT")
   stockNegativeControlMode   String    @default("BY_PRODUCT")
+  stockClassificationMode    String    @default("GROUP_ONLY")
   allowSaleUnitPriceEdit     Boolean   @default(true)
   allowSaleItemDiscount      Boolean   @default(true)
   allowProductImageEdit      Boolean   @default(true)
@@ -704,6 +707,8 @@ model Product {
   ibsCbsClassCode         String?
   fiscalNotes             String?
   notes                   String?
+  groupId                 String?
+  subgroupId              String?
   imageS3SyncStatus       String    @default("NOT_TRACKED")
   imageS3ObjectKey        String?
   imageS3LastError        String?
@@ -723,6 +728,8 @@ model Product {
   saleReturnItems           SaleReturnItem[]
   fiscalTaxRules            FiscalTaxRule[]
   fiscalDocumentItems       FiscalDocumentItem[]
+  group                     ProductGroup?               @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  subgroup                  ProductSubgroup?            @relation(fields: [subgroupId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, branchCode, internalCode])
   @@unique([companyId, branchCode, sku])
@@ -730,7 +737,59 @@ model Product {
   @@index([companyId, status, name])
   @@index([companyId, productType, tracksInventory])
   @@index([companyId, branchCode, imageS3SyncStatus])
+  @@index([companyId, branchCode, groupId])
+  @@index([companyId, branchCode, subgroupId])
   @@map("products")
+}
+
+model ProductGroup {
+  id          String    @id @default(uuid())
+  companyId   String
+  branchCode  Int       @default(1)
+  code        String?
+  name        String
+  description String?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+  updatedAt   DateTime  @updatedAt
+  updatedBy   String?
+  canceledAt  DateTime?
+  canceledBy  String?
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subgroups   ProductSubgroup[]
+  products    Product[]
+
+  @@unique([companyId, branchCode, name])
+  @@index([companyId, branchCode, status, name])
+  @@map("product_groups")
+}
+
+model ProductSubgroup {
+  id          String    @id @default(uuid())
+  companyId   String
+  branchCode  Int       @default(1)
+  groupId     String
+  code        String?
+  name        String
+  description String?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+  updatedAt   DateTime  @updatedAt
+  updatedBy   String?
+  canceledAt  DateTime?
+  canceledBy  String?
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  group       ProductGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  products    Product[]
+
+  @@unique([companyId, branchCode, groupId, name])
+  @@index([companyId, branchCode, status, name])
+  @@index([companyId, branchCode, groupId])
+  @@map("product_subgroups")
 }
 
 model ProductStockBalance {

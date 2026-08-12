@@ -1,14 +1,13 @@
 'use client';
 
-import { getTrustedMessageOrigins, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
-import Link from 'next/link';
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { requestJson } from '@/app/lib/api';
 import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
-import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
 import { createAndDispatchPrintJob } from '@/app/lib/local-print-agent';
 import { withFinanceBasePath } from '@/app/lib/public-path';
@@ -147,21 +146,6 @@ function readSelectedInstallmentIds() {
         .filter(Boolean),
     ),
   );
-}
-
-function resolveSchoolBaseUrl() {
-  if (typeof document === 'undefined' || !document.referrer) {
-    return null;
-  }
-
-  try {
-    const referrerUrl = new URL(document.referrer);
-    return getTrustedMessageOrigins().has(referrerUrl.origin)
-      ? referrerUrl.origin
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function readIsModalMode() {
@@ -354,7 +338,6 @@ export default function FinanceiroManualSettlementPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alert, setAlert] = useState<AlertState | null>(null);
-  const [schoolBaseUrl, setSchoolBaseUrl] = useState<string | null>(null);
   const companyLogoUrl = runtimeContext.logoUrl;
   const [isModalMode, setIsModalMode] = useState(false);
   const [discountAmountInput, setDiscountAmountInput] = useState('0,00');
@@ -366,7 +349,6 @@ export default function FinanceiroManualSettlementPage() {
 
   useEffect(() => {
     setInstallmentIds(readSelectedInstallmentIds());
-    setSchoolBaseUrl(resolveSchoolBaseUrl());
     setIsModalMode(readIsModalMode());
     setIsPartialSettlement(readInitialPartialSettlement());
 
@@ -538,13 +520,6 @@ export default function FinanceiroManualSettlementPage() {
     [effectiveReceivedAmount, finalReceivedAmount],
   );
   const hasInterestOverride = Math.abs(manualInterestAmount - calculatedInterestAmount) > 0.009;
-  const returnHref = useMemo(() => {
-    if (!runtimeContext.embedded || !schoolBaseUrl) {
-      return `/recebiveis/parcelas${buildFinanceNavigationQueryString(runtimeContext)}`;
-    }
-
-    return `${schoolBaseUrl}/principal/parcelas`;
-  }, [runtimeContext, schoolBaseUrl]);
   const isCompactModal = isModalMode;
   const pageSpacingClass = isCompactModal ? 'space-y-2' : 'space-y-6';
   const headerPaddingClass = isCompactModal ? 'px-4 py-3' : 'px-4 py-5';
@@ -1529,7 +1504,7 @@ export default function FinanceiroManualSettlementPage() {
                 type="button"
                 onClick={() => void executeConfirmedSettlement()}
                 disabled={isSubmitting}
-                className="rounded-2xl bg-blue-600 px-6 py-3 text-xs font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                className="rounded-2xl bg-emerald-600 px-6 py-3 text-xs font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
                 {isSubmitting ? 'Processando...' : 'Confirmar baixa'}
               </button>
@@ -1544,19 +1519,6 @@ export default function FinanceiroManualSettlementPage() {
             Forma selecionada: <span className="font-black text-slate-900">{selectedPaymentMethodOption.label}</span>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link
-              href={returnHref}
-              target={runtimeContext.embedded && schoolBaseUrl && !isModalMode ? '_top' : undefined}
-              onClick={(event) => {
-                if (isModalMode) {
-                  event.preventDefault();
-                  handleClose();
-                }
-              }}
-              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-600 transition hover:bg-slate-100"
-            >
-              Voltar
-            </Link>
             <button
               type="button"
               onClick={() => void handleConfirmSettlement()}
@@ -1567,7 +1529,7 @@ export default function FinanceiroManualSettlementPage() {
                 (selectedPaymentMethod === 'PIX' && !selectedBankId) ||
                 (selectedPaymentMethod === 'CUSTOMER_CREDIT' && !selectedCustomerCreditId)
               }
-              className="rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+              className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
             >
               {isSubmitting ? 'Processando...' : 'Confirmar baixa'}
             </button>

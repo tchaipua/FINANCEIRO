@@ -17,14 +17,31 @@ const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_MSINFOR';
 const ORIGIN_TEXT =
   'Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/msinfor/page.tsx';
 
+function resolveHostBaseUrl() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    if (window.parent !== window) {
+      const parentOrigin = window.parent.location.origin;
+      if (parentOrigin) return parentOrigin;
+    }
+  } catch {
+    // Em iframe cross-origin, usa-se a navegação interna como fallback.
+  }
+
+  return null;
+}
+
 export default function MsinforPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [isMounted, setIsMounted] = useState(false);
+  const [hostBaseUrl, setHostBaseUrl] = useState<string | null>(null);
   const screenId = runtimeContext.embedded ? EMBEDDED_SCREEN_ID : FINANCE_SCREEN_ID;
   const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
 
   useEffect(() => {
     setIsMounted(true);
+    setHostBaseUrl(resolveHostBaseUrl());
   }, []);
 
   useEffect(() => {
@@ -87,6 +104,11 @@ Estrutura atual:
 - credenciais do S3 são mantidas criptografadas no banco do Financeiro e nunca exibidas na tela
 - todas as integrações futuras devem preservar o isolamento por sourceSystem + sourceTenantId`;
 
+  const empresaHref = hostBaseUrl
+    ? `${hostBaseUrl}/principal/financeiro/empresa`
+    : `/empresas${preservedQueryString}`;
+  const empresaTarget = hostBaseUrl ? '_top' : undefined;
+
   return (
     <div className="space-y-6">
 
@@ -113,6 +135,25 @@ Estrutura atual:
 
       <section className={`${cardClass} p-6`}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <a
+            href={empresaHref}
+            target={empresaTarget}
+            rel={empresaTarget ? 'noreferrer' : undefined}
+            title="Cadastro financeiro da empresa atual."
+            className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+          >
+            <div className="flex h-20 items-center justify-center overflow-hidden bg-slate-100 p-3">
+              <img
+                src={withFinanceBasePath('/principal-financeiro/empresa.svg?v=2')}
+                alt="Empresa"
+                className="max-h-full max-w-full object-contain opacity-95 transition-transform duration-300 group-hover:scale-105"
+              />
+            </div>
+            <div className="flex min-h-11 items-center justify-center p-2.5 text-center">
+              <div className="text-sm font-black text-slate-800">EMPRESA</div>
+            </div>
+          </a>
+
           <Link
             href={`/msinfor/supertef${preservedQueryString}`}
             title="Configurar máquinas, checkouts, roteamento, operações e estornos do SuperTEF."

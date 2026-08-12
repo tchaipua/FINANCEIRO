@@ -110,6 +110,7 @@ export function mapCompanyBranchSummary(branch: {
   stockExpirationControlMode?: string;
   stockGridControlMode?: string;
   stockNegativeControlMode?: string;
+  stockClassificationMode?: string;
   allowSaleUnitPriceEdit?: boolean | null;
   allowSaleItemDiscount?: boolean | null;
   allowProductImageEdit?: boolean | null;
@@ -136,6 +137,10 @@ export function mapCompanyBranchSummary(branch: {
     stockNegativeControlMode: normalizeStockParameterMode(
       branch.stockNegativeControlMode,
     ),
+    stockClassificationMode:
+      branch.stockClassificationMode === "GROUP_AND_SUBGROUP"
+        ? "GROUP_AND_SUBGROUP"
+        : "GROUP_ONLY",
     allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
     allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
     allowProductImageEdit: branch.allowProductImageEdit !== false,

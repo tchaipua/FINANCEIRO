@@ -8,6 +8,7 @@ import { ReceivablesModule } from "./modules/receivables/receivables.module";
 import { CashSessionsModule } from "./modules/cash-sessions/cash-sessions.module";
 import { BanksModule } from "./modules/banks/banks.module";
 import { ProductsModule } from "./modules/products/products.module";
+import { ProductClassificationsModule } from "./modules/product-classifications/product-classifications.module";
 import { PayablesModule } from "./modules/payables/payables.module";
 import { FiscalCertificatesModule } from "./modules/fiscal-certificates/fiscal-certificates.module";
 import { SalesModule } from "./modules/sales/sales.module";
@@ -33,6 +34,7 @@ import { MultipartBodyMiddleware } from "./common/multipart-body.middleware";
     CashSessionsModule,
     BanksModule,
     ProductsModule,
+    ProductClassificationsModule,
     PayablesModule,
     FiscalCertificatesModule,
     FiscalDocumentsModule,
