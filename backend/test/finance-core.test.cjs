@@ -135,6 +135,8 @@ async function resetDatabase(prisma) {
   await prisma.fiscalOperationNature.deleteMany();
   await prisma.salePixIntent.deleteMany();
   await prisma.salePayment.deleteMany();
+  await prisma.saleStockConsumptionItem.deleteMany();
+  await prisma.saleStockConsumption.deleteMany();
   await prisma.saleReturnItem.deleteMany();
   await prisma.saleReturn.deleteMany();
   await prisma.stockMovement.deleteMany();
@@ -409,7 +411,7 @@ async function main() {
           sourceTenantId: "TENANT_ESCOLA_CLIENTES",
           name: "CLIENTE INDEVIDO",
         }),
-      /exclusivamente no sistema Escola/i,
+      /exclusivamente no sistema de origem/i,
     );
 
     const localCustomer = await customersService.create({
@@ -429,6 +431,8 @@ async function main() {
         requestedBy: "CODEX",
         sourceSystem: "PROJETO_INICIAL",
         sourceTenantId: "TENANT_PROJETO_CLIENTES",
+        password: "TEST_PASSWORD",
+        reason: "TEST_INATIVACAO",
       },
     );
     assert.equal(inactivatedLocalCustomer.status, "INACTIVE");
@@ -512,6 +516,8 @@ async function main() {
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      password: "TEST_PASSWORD",
+      reason: "TEST_INATIVACAO",
       }),
     );
 
@@ -577,6 +583,8 @@ async function main() {
       requestedBy: "CODEX",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT_ESCOLA_BANCOS",
+      password: "TEST_PASSWORD",
+      reason: "TEST_INATIVACAO",
       sourceBranchCode: 1,
     };
     const synchronizedDdas = await ddaBanksService.getOpenDda(
@@ -1614,6 +1622,91 @@ async function main() {
 
     assert.equal(gridBalanceAfterSale.quantity, 1);
     assert.equal(gridProductAfterSale.currentStock, 9);
+
+    const reservedPackageSale = await salesService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+      saleChannel: "PET_PACKAGE",
+      cashierUserId: "USR_CAIXA_001",
+      cashierDisplayName: "CAIXA TESTE",
+      items: [
+        {
+          productId: gridProduct.id,
+          quantity: 1,
+          unitPrice: 10,
+          colorCode: "AMARELO",
+          colorName: "AMARELO",
+          sizeCode: "10",
+          deferInventory: true,
+        },
+      ],
+      payments: [{ paymentMethod: "CASH", amount: 10 }],
+    });
+    const reservedBalance = await prisma.productStockBalance.findFirstOrThrow({
+      where: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        productId: gridProduct.id,
+        variantKey: "COR:AMARELO|NUM:10|LOTE:GERAL",
+      },
+    });
+    assert.equal(reservedBalance.quantity, 1);
+    assert.equal(reservedBalance.reservedQuantity, 1);
+    assert.equal(
+      (await prisma.product.findUniqueOrThrow({ where: { id: gridProduct.id } })).currentStock,
+      9,
+    );
+    const productsWithReservation = await productsService.list({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+    });
+    const reservedProductSummary = productsWithReservation.find(
+      (product) => product.id === gridProduct.id,
+    );
+    assert.equal(reservedProductSummary.committedStock, 1);
+    assert.equal(reservedProductSummary.availableStock, 8);
+
+    const stockConsumption = await salesService.consumeReservedStock(
+      reservedPackageSale.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        sourceBranchCode: 1,
+        sourceUsageId: "PACKAGE-USAGE-001",
+        items: [{ productId: gridProduct.id, quantity: 1 }],
+      },
+    );
+    assert.equal(stockConsumption.idempotent, false);
+    const repeatedStockConsumption = await salesService.consumeReservedStock(
+      reservedPackageSale.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        sourceBranchCode: 1,
+        sourceUsageId: "PACKAGE-USAGE-001",
+        items: [{ productId: gridProduct.id, quantity: 1 }],
+      },
+    );
+    assert.equal(repeatedStockConsumption.idempotent, true);
+    const consumedBalance = await prisma.productStockBalance.findFirstOrThrow({
+      where: {
+        companyId: salesCompany.id,
+        branchCode: 1,
+        productId: gridProduct.id,
+        variantKey: "COR:AMARELO|NUM:10|LOTE:GERAL",
+      },
+    });
+    assert.equal(consumedBalance.quantity, 0);
+    assert.equal(consumedBalance.reservedQuantity, 0);
+    assert.equal(
+      (await prisma.product.findUniqueOrThrow({ where: { id: gridProduct.id } })).currentStock,
+      8,
+    );
 
     const paidUnpreparedSettlement =
       await cashSessionsService.settleManualInstallment(thirdInstallment.id, {

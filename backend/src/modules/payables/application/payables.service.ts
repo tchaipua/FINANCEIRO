@@ -41,7 +41,10 @@ import {
   createLocalExternalEntityId,
   PARTY_ROLE,
   upsertPartyIdentity,
+  setPartyRoleActive,
 } from "../../../common/party-registry";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
+import { ChangePayableSupplierStatusDto } from "./dto/payables.dto";
 
 type ResolvedCompany = {
   id: string;
@@ -1290,7 +1293,11 @@ export class PayablesService {
     const suppliers = await this.prisma.supplier.findMany({
       where: {
         companyId: company.id,
-        canceledAt: null,
+        ...(normalizedStatus === "ACTIVE"
+          ? { canceledAt: null }
+          : normalizedStatus === "INACTIVE"
+            ? { canceledAt: { not: null } }
+            : {}),
         ...(normalizedStatus && normalizedStatus !== "ALL"
           ? { status: normalizedStatus }
           : {}),
@@ -1314,7 +1321,13 @@ export class PayablesService {
         },
         payableTitles: {
           where: { canceledAt: null },
-          select: { id: true },
+          select: {
+            id: true,
+            installments: {
+              where: { status: "OPEN", openAmount: { gt: 0 }, canceledAt: null },
+              select: { id: true },
+            },
+          },
         },
       },
       orderBy: [{ legalName: "asc" }],
@@ -1337,11 +1350,117 @@ export class PayablesService {
       notes: supplier.notes,
       invoiceImportsCount: supplier.payableInvoiceImports.length,
       payableTitlesCount: supplier.payableTitles.length,
+      openPayableInstallmentsCount: supplier.payableTitles.reduce(
+        (total, title) => total + title.installments.length,
+        0,
+      ),
       createdAt: supplier.createdAt,
       createdBy: supplier.createdBy,
       updatedAt: supplier.updatedAt,
       updatedBy: supplier.updatedBy,
     }));
+  }
+
+  private async loadScopedSupplier(
+    supplierId: string,
+    sourceSystem: string,
+    sourceTenantId: string,
+  ) {
+    const company = await this.resolveCompany({ sourceSystem, sourceTenantId });
+    const supplier = await this.prisma.supplier.findFirst({
+      where: {
+        id: supplierId,
+        companyId: company.id,
+        branchCode: this.currentBranchCode(),
+      },
+    });
+    if (!supplier) throw new NotFoundException("Fornecedor não encontrado nesta filial.");
+    return { company, supplier };
+  }
+
+  async activateSupplier(
+    supplierId: string,
+    payload: ChangePayableSupplierStatusDto,
+  ) {
+    const { company, supplier } = await this.loadScopedSupplier(
+      supplierId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const updated = await this.prisma.supplier.update({
+      where: { id: supplier.id },
+      data: {
+        status: "ACTIVE",
+        canceledAt: null,
+        canceledBy: null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+    if (supplier.partyId) {
+      await setPartyRoleActive(this.prisma, {
+        companyId: company.id,
+        partyId: supplier.partyId,
+        branchCode: supplier.branchCode,
+        roleType: PARTY_ROLE.SUPPLIER,
+        active: true,
+        requestedBy: payload.requestedBy,
+      });
+    }
+    return updated;
+  }
+
+  async inactivateSupplier(
+    supplierId: string,
+    payload: ChangePayableSupplierStatusDto,
+  ) {
+    const { company, supplier } = await this.loadScopedSupplier(
+      supplierId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    if (supplier.status !== "ACTIVE") {
+      throw new BadRequestException("O fornecedor já está inativo.");
+    }
+    const openInstallment = await this.prisma.payableInstallment.findFirst({
+      where: {
+        companyId: company.id,
+        branchCode: supplier.branchCode,
+        status: "OPEN",
+        openAmount: { gt: 0 },
+        canceledAt: null,
+        title: {
+          canceledAt: null,
+          supplierId: supplier.id,
+        },
+      },
+      select: { id: true },
+    });
+    if (openInstallment) {
+      throw new BadRequestException(
+        "Não é possível inativar este fornecedor enquanto existirem parcelas em aberto. Baixe ou cancele todas as parcelas antes de inativar.",
+      );
+    }
+    assertInactivationConfirmation(payload);
+    const updated = await this.prisma.supplier.update({
+      where: { id: supplier.id },
+      data: {
+        status: "INACTIVE",
+        canceledAt: new Date(),
+        canceledBy: payload.requestedBy || null,
+        updatedBy: payload.requestedBy || null,
+      },
+    });
+    if (supplier.partyId) {
+      await setPartyRoleActive(this.prisma, {
+        companyId: company.id,
+        partyId: supplier.partyId,
+        branchCode: supplier.branchCode,
+        roleType: PARTY_ROLE.SUPPLIER,
+        active: false,
+        requestedBy: payload.requestedBy,
+      });
+    }
+    return updated;
   }
 
   async getInvoiceImport(

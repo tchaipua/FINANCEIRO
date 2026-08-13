@@ -19,6 +19,71 @@ function normalizeStockParameterMode(value?: string | null) {
     : "BY_PRODUCT";
 }
 
+type SourceOwnedBranchStockSettings = {
+  inventoryControlType?: string | null;
+  quantityPrecision?: string | null;
+  stockControlMode?: string | null;
+  stockIntegerQuantityMode?: string | null;
+  stockLotControlMode?: string | null;
+  stockExpirationControlMode?: string | null;
+  stockGridControlMode?: string | null;
+  stockNegativeControlMode?: string | null;
+  stockClassificationMode?: string | null;
+};
+
+const SOURCE_OWNED_STOCK_MODE_FIELDS = [
+  "stockControlMode",
+  "stockIntegerQuantityMode",
+  "stockLotControlMode",
+  "stockExpirationControlMode",
+  "stockGridControlMode",
+  "stockNegativeControlMode",
+] as const;
+
+function normalizeInventoryControlType(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ["TRADITIONAL", "COLOR_SIZE", "LOT"].includes(normalized)
+    ? normalized
+    : "TRADITIONAL";
+}
+
+function normalizeQuantityPrecision(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ["INTEGER_ONLY", "DECIMAL_ALLOWED", "PRODUCT_DEFINED"].includes(
+    normalized,
+  )
+    ? normalized
+    : "INTEGER_ONLY";
+}
+
+export function hasSourceOwnedBranchStockChanges(
+  requested: SourceOwnedBranchStockSettings,
+  current: SourceOwnedBranchStockSettings,
+) {
+  if (
+    requested.inventoryControlType !== undefined &&
+    normalizeInventoryControlType(requested.inventoryControlType) !==
+      normalizeInventoryControlType(current.inventoryControlType)
+  ) {
+    return true;
+  }
+
+  if (
+    requested.quantityPrecision !== undefined &&
+    normalizeQuantityPrecision(requested.quantityPrecision) !==
+      normalizeQuantityPrecision(current.quantityPrecision)
+  ) {
+    return true;
+  }
+
+  return SOURCE_OWNED_STOCK_MODE_FIELDS.some(
+    (field) =>
+      requested[field] !== undefined &&
+      normalizeStockParameterMode(requested[field]) !==
+        normalizeStockParameterMode(current[field]),
+  );
+}
+
 export async function ensureDefaultCompanyBranch(
   prisma: CompanyBranchClient,
   companyId: string,
@@ -100,6 +165,7 @@ export function mapCompanyBranchSummary(branch: {
   id: string;
   branchCode: number;
   name: string;
+  fiscalDocument?: string | null;
   isActive: boolean;
   isDefault: boolean;
   inventoryControlType?: string;
@@ -110,6 +176,7 @@ export function mapCompanyBranchSummary(branch: {
   stockExpirationControlMode?: string;
   stockGridControlMode?: string;
   stockNegativeControlMode?: string;
+  notifyMinimumStockOnMovement?: boolean | null;
   stockClassificationMode?: string;
   allowSaleUnitPriceEdit?: boolean | null;
   allowSaleItemDiscount?: boolean | null;
@@ -120,6 +187,7 @@ export function mapCompanyBranchSummary(branch: {
     id: branch.id,
     branchCode: branch.branchCode,
     name: branch.name,
+    fiscalDocument: branch.fiscalDocument || null,
     isActive: branch.isActive,
     isDefault: branch.isDefault,
     isShared: branch.branchCode === SHARED_BRANCH_CODE,
@@ -137,10 +205,14 @@ export function mapCompanyBranchSummary(branch: {
     stockNegativeControlMode: normalizeStockParameterMode(
       branch.stockNegativeControlMode,
     ),
+    notifyMinimumStockOnMovement:
+      branch.notifyMinimumStockOnMovement === true,
     stockClassificationMode:
-      branch.stockClassificationMode === "GROUP_AND_SUBGROUP"
-        ? "GROUP_AND_SUBGROUP"
-        : "GROUP_ONLY",
+      branch.stockClassificationMode === "NONE"
+        ? "NONE"
+        : branch.stockClassificationMode === "GROUP_AND_SUBGROUP"
+          ? "GROUP_AND_SUBGROUP"
+          : "GROUP_ONLY",
     allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
     allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
     allowProductImageEdit: branch.allowProductImageEdit !== false,

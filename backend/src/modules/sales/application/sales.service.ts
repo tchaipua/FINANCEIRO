@@ -23,6 +23,7 @@ import { getSuperTefCardApplicationError } from "../../../common/supertef-paymen
 import {
   CancelSaleDto,
   CheckSalePixStatusDto,
+  ConsumeReservedStockDto,
   CreateSalePixIntentDto,
   CreateSaleReturnDto,
   CreateSaleDto,
@@ -54,6 +55,7 @@ type BranchStockConfig = {
   stockExpirationControlMode: BranchStockParameterMode;
   stockGridControlMode: BranchStockParameterMode;
   stockNegativeControlMode: BranchStockParameterMode;
+  notifyMinimumStockOnMovement: boolean;
   allowSaleUnitPriceEdit: boolean;
   allowSaleItemDiscount: boolean;
 };
@@ -262,6 +264,8 @@ export class SalesService {
         branch?.stockNegativeControlMode,
         "BY_PRODUCT",
       ),
+      notifyMinimumStockOnMovement:
+        branch?.notifyMinimumStockOnMovement === true,
       allowSaleUnitPriceEdit:
         salesScreenSettings.allowSaleUnitPriceEdit !== undefined
           ? salesScreenSettings.allowSaleUnitPriceEdit !== false
@@ -918,6 +922,12 @@ export class SalesService {
           item.resultingStock === null || item.resultingStock === undefined
             ? null
             : roundMoney(item.resultingStock),
+        inventoryDisposition: item.inventoryDisposition || "IMMEDIATE",
+        reservedQuantity: roundMoney(item.reservedQuantity || 0),
+        consumedQuantity: roundMoney(item.consumedQuantity || 0),
+        remainingReservedQuantity: roundMoney(
+          Math.max(0, Number(item.reservedQuantity || 0) - Number(item.consumedQuantity || 0)),
+        ),
       })),
       payments: payments.map((payment: any) => ({
         id: payment.id,
@@ -1184,6 +1194,7 @@ export class SalesService {
 
         const stockOptions = this.resolveStockOptions(product, branchConfig);
         const isGenericProduct = this.isGenericProduct(product);
+        const reservationOnly = item.reservationOnly === true;
         const quantity = roundMoney(Number(item.quantity || 0));
 
         if (quantity <= 0) {
@@ -1222,11 +1233,13 @@ export class SalesService {
           );
         }
 
-        const unitPrice = roundMoney(
-          item.unitPrice === undefined || item.unitPrice === null
-            ? Number(product.salePrice || 0)
-            : Number(item.unitPrice || 0),
-        );
+        const unitPrice = reservationOnly
+          ? 0
+          : roundMoney(
+              item.unitPrice === undefined || item.unitPrice === null
+                ? Number(product.salePrice || 0)
+                : Number(item.unitPrice || 0),
+            );
         const productSalePrice =
           product.salePrice === null || product.salePrice === undefined
             ? 0
@@ -1260,6 +1273,7 @@ export class SalesService {
         }
 
         if (
+          !reservationOnly &&
           !branchConfig.allowSaleUnitPriceEdit &&
           !isGenericProduct &&
           Math.abs(unitPrice - productSalePrice) > 0.009
@@ -1269,7 +1283,7 @@ export class SalesService {
           );
         }
 
-        if (unitPrice <= 0) {
+        if (!reservationOnly && unitPrice <= 0) {
           throw new BadRequestException(
             `Informe preço de venda válido para ${product.name}.`,
           );
@@ -1306,6 +1320,9 @@ export class SalesService {
           sizeCode,
           lotNumber,
           lotExpirationDate,
+          inventoryDisposition:
+            reservationOnly || item.deferInventory ? "RESERVED" : "IMMEDIATE",
+          reservationOnly,
           variantKey: this.buildVariantKey({
             options: stockOptions,
             colorCode,
@@ -1415,6 +1432,7 @@ export class SalesService {
 
     const saleNumber = this.buildSaleNumber(branchCode);
     const paymentSummary = this.buildPaymentSummary(normalizedPayments);
+    const minimumStockWarnings: string[] = [];
 
     const createdSale = await this.prisma.$transaction(async (tx: any) => {
       const customerParty = await this.ensureCustomerParty(
@@ -1495,10 +1513,10 @@ export class SalesService {
 
         let previousStock: number | null = null;
         let resultingStock: number | null = null;
+        let reservedQuantity = 0;
 
         if (item.stockOptions.tracksInventory) {
           previousStock = roundMoney(Number(currentProduct.currentStock || 0));
-          resultingStock = roundMoney(previousStock - item.quantity);
           const usesDetailedStock =
             item.stockOptions.usesColorSize || item.stockOptions.usesLotControl;
           const existingBalance = await tx.productStockBalance.findFirst({
@@ -1513,10 +1531,19 @@ export class SalesService {
           const previousBalance = roundMoney(
             Number(existingBalance?.quantity ?? (usesDetailedStock ? 0 : previousStock)),
           );
-          const resultingBalance = roundMoney(previousBalance - item.quantity);
+          const previousReserved = roundMoney(Number(existingBalance?.reservedQuantity || 0));
+          const isReservation = item.inventoryDisposition === "RESERVED";
+          resultingStock = isReservation
+            ? previousStock
+            : roundMoney(previousStock - item.quantity);
+          const resultingBalance = isReservation
+            ? previousBalance
+            : roundMoney(previousBalance - item.quantity);
+          const availableBalance = roundMoney(previousBalance - previousReserved);
+          const availableStock = roundMoney(previousStock - previousReserved);
           const insufficientStock = usesDetailedStock
-            ? resultingBalance < 0
-            : resultingStock < 0;
+            ? availableBalance - item.quantity < 0
+            : availableStock - item.quantity < 0;
 
           if (!item.stockOptions.allowsNegativeStock && insufficientStock) {
             const currentBalanceLabel = usesDetailedStock
@@ -1527,13 +1554,17 @@ export class SalesService {
             );
           }
 
-          await tx.product.update({
-            where: { id: currentProduct.id },
-            data: {
-              currentStock: resultingStock,
-              updatedBy: normalizedRequestedBy,
-            },
-          });
+          if (!isReservation) {
+            await tx.product.update({
+              where: { id: currentProduct.id },
+              data: {
+                currentStock: resultingStock,
+                updatedBy: normalizedRequestedBy,
+              },
+            });
+          } else {
+            reservedQuantity = item.quantity;
+          }
 
           await tx.productStockBalance.upsert({
             where: {
@@ -1555,12 +1586,15 @@ export class SalesService {
               lotNumber: item.lotNumber,
               lotExpirationDate: item.lotExpirationDate,
               quantity: resultingBalance,
-              reservedQuantity: 0,
+              reservedQuantity: isReservation ? item.quantity : 0,
               createdBy: normalizedRequestedBy,
               updatedBy: normalizedRequestedBy,
             },
             update: {
               quantity: resultingBalance,
+              reservedQuantity: isReservation
+                ? { increment: item.quantity }
+                : previousReserved,
               colorCode: item.colorCode,
               colorName: item.colorName,
               sizeCode: item.sizeCode,
@@ -1601,12 +1635,18 @@ export class SalesService {
             lotExpirationDate: item.lotExpirationDate,
             previousStock,
             resultingStock,
+            inventoryDisposition: item.inventoryDisposition,
+            reservedQuantity,
+            consumedQuantity: 0,
             createdBy: normalizedRequestedBy,
             updatedBy: normalizedRequestedBy,
           },
         });
 
-        if (item.stockOptions.tracksInventory) {
+        if (
+          item.stockOptions.tracksInventory &&
+          item.inventoryDisposition !== "RESERVED"
+        ) {
           await tx.stockMovement.create({
             data: {
               companyId: company.id,
@@ -1626,6 +1666,14 @@ export class SalesService {
               updatedBy: normalizedRequestedBy,
             },
           });
+          if (
+            branchConfig.notifyMinimumStockOnMovement &&
+            Number(resultingStock || 0) <= Number(currentProduct.minimumStock || 0)
+          ) {
+            minimumStockWarnings.push(
+              `${currentProduct.name}: saldo ${roundMoney(resultingStock || 0)}, mínimo ${roundMoney(currentProduct.minimumStock || 0)}`,
+            );
+          }
         }
       }
 
@@ -1897,15 +1945,20 @@ export class SalesService {
       (fiscalEmission.fiscalDocument as any)?.status,
     );
     const fiscalModel = fiscalEmission.nfe ? "NF-e" : "NFC-e";
+    const fiscalMessage =
+      fiscalStatus === "AUTHORIZED"
+        ? `Venda confirmada e ${fiscalModel} autorizada com sucesso.`
+        : fiscalStatus === "REJECTED" || fiscalStatus === "ERROR"
+          ? `Venda confirmada. A ${fiscalModel} requer correção ou reprocessamento.`
+          : "Venda confirmada com sucesso.";
+    const minimumStockWarning = minimumStockWarnings.length
+      ? ` Atenção: estoque mínimo atingido — ${minimumStockWarnings.join("; ")}.`
+      : "";
     return {
       ...this.mapSale(createdSale),
       ...fiscalEmission,
-      message:
-        fiscalStatus === "AUTHORIZED"
-          ? `Venda confirmada e ${fiscalModel} autorizada com sucesso.`
-          : fiscalStatus === "REJECTED" || fiscalStatus === "ERROR"
-            ? `Venda confirmada. A ${fiscalModel} requer correção ou reprocessamento.`
-            : "Venda confirmada com sucesso.",
+      minimumStockWarnings,
+      message: `${fiscalMessage}${minimumStockWarning}`,
     };
   }
 
@@ -2642,6 +2695,245 @@ export class SalesService {
     };
   }
 
+  async consumeReservedStock(
+    saleId: string,
+    payload: ConsumeReservedStockDto,
+  ) {
+    const normalizedSaleId = String(saleId || "").trim();
+    const sourceSystem = normalizeText(payload.sourceSystem)!;
+    const sourceTenantId = normalizeText(payload.sourceTenantId)!;
+    const sourceUsageId = String(payload.sourceUsageId || "").trim().slice(0, 200);
+    if (!normalizedSaleId || !sourceUsageId) {
+      throw new BadRequestException("Informe a venda e a utilização do pacote.");
+    }
+
+    const company = await this.resolveCompany({ sourceSystem, sourceTenantId });
+    const existing = await this.prisma.saleStockConsumption.findUnique({
+      where: {
+        companyId_sourceSystem_sourceTenantId_sourceUsageId: {
+          companyId: company.id,
+          sourceSystem,
+          sourceTenantId,
+          sourceUsageId,
+        },
+      },
+      include: { items: { include: { product: true } } },
+    });
+    if (existing) {
+      return {
+        id: existing.id,
+        saleId: existing.saleId,
+        sourceUsageId: existing.sourceUsageId,
+        occurredAt: existing.occurredAt,
+        items: existing.items.map((item: any) => ({
+          productId: item.productId,
+          productName: item.product?.name || null,
+          quantity: roundMoney(item.quantity),
+          previousStock: roundMoney(item.previousStock),
+          resultingStock: roundMoney(item.resultingStock),
+        })),
+        idempotent: true,
+      };
+    }
+
+    const branchCode = this.currentBranchCode(payload.sourceBranchCode);
+    const sale = await this.prisma.sale.findFirst({
+      where: {
+        id: normalizedSaleId,
+        companyId: company.id,
+        branchCode,
+        sourceSystem,
+        sourceTenantId,
+        status: "CONFIRMED",
+        canceledAt: null,
+      },
+      include: {
+        items: {
+          where: { canceledAt: null, inventoryDisposition: "RESERVED" },
+          orderBy: { lineNumber: "asc" },
+        },
+      },
+    });
+    if (!sale) {
+      throw new NotFoundException("Venda de pacote não encontrada ou cancelada.");
+    }
+
+    const requestedItems = new Map<string, number>();
+    for (const requestedItem of payload.items || []) {
+      const productId = String(requestedItem?.productId || "").trim();
+      const quantity = roundMoney(Number(requestedItem?.quantity || 0));
+      if (!productId || quantity <= 0) {
+        throw new BadRequestException("Informe produtos e quantidades válidos para a baixa.");
+      }
+      requestedItems.set(
+        productId,
+        roundMoney((requestedItems.get(productId) || 0) + quantity),
+      );
+    }
+
+    const requestedBy = normalizeText(payload.requestedBy) || "INTEGRAÇÃO PETSHOP";
+    const occurredAt = new Date();
+    const result = await this.prisma.$transaction(async (tx: any) => {
+      const consumption = await tx.saleStockConsumption.create({
+        data: {
+          companyId: company.id,
+          branchCode,
+          saleId: sale.id,
+          sourceSystem,
+          sourceTenantId,
+          sourceUsageId,
+          notes: normalizeText(payload.notes),
+          occurredAt,
+          createdBy: requestedBy,
+        },
+      });
+
+      for (const [productId, requestedQuantity] of requestedItems.entries()) {
+        const reservedItems = (sale.items || []).filter(
+          (item: any) =>
+            item.productId === productId &&
+            Number(item.reservedQuantity || 0) - Number(item.consumedQuantity || 0) > 0,
+        );
+        const remainingReserved = roundMoney(
+          reservedItems.reduce(
+            (total: number, item: any) =>
+              total + Math.max(0, Number(item.reservedQuantity || 0) - Number(item.consumedQuantity || 0)),
+            0,
+          ),
+        );
+        if (remainingReserved + 0.0001 < requestedQuantity) {
+          throw new BadRequestException(
+            `A venda não possui saldo reservado suficiente para o produto ${productId}.`,
+          );
+        }
+
+        let pendingQuantity = requestedQuantity;
+        for (const saleItem of reservedItems) {
+          if (pendingQuantity <= 0) break;
+          const itemRemaining = roundMoney(
+            Number(saleItem.reservedQuantity || 0) - Number(saleItem.consumedQuantity || 0),
+          );
+          const quantity = roundMoney(Math.min(itemRemaining, pendingQuantity));
+          if (!saleItem.allowFraction && !Number.isInteger(quantity)) {
+            throw new BadRequestException(
+              `O produto ${saleItem.productNameSnapshot} exige quantidade inteira.`,
+            );
+          }
+
+          const product = await tx.product.findFirst({
+            where: { id: productId, companyId: company.id, status: "ACTIVE", canceledAt: null },
+          });
+          if (!product) throw new NotFoundException("Produto reservado não encontrado.");
+
+          const balance = await tx.productStockBalance.findFirst({
+            where: {
+              companyId: company.id,
+              branchCode,
+              productId,
+              variantKey: saleItem.variantKey || "GERAL",
+              canceledAt: null,
+            },
+          });
+          if (!balance) {
+            throw new BadRequestException(
+              `A reserva de ${saleItem.productNameSnapshot} não foi encontrada. Atualize e tente novamente.`,
+            );
+          }
+          const previousStock = roundMoney(Number(product.currentStock || 0));
+          const resultingStock = roundMoney(previousStock - quantity);
+          const previousBalance = roundMoney(Number(balance.quantity));
+          const resultingBalance = roundMoney(previousBalance - quantity);
+          const previousReserved = roundMoney(Number(balance.reservedQuantity || 0));
+          if (!saleItem.allowsNegativeStock && (resultingStock < 0 || resultingBalance < 0)) {
+            throw new BadRequestException(
+              `Estoque físico insuficiente para consumir ${saleItem.productNameSnapshot}.`,
+            );
+          }
+          if (previousReserved + 0.0001 < quantity) {
+            throw new BadRequestException(
+              `A reserva de ${saleItem.productNameSnapshot} foi alterada. Atualize e tente novamente.`,
+            );
+          }
+
+          await tx.product.update({
+            where: { id: product.id },
+            data: { currentStock: resultingStock, updatedBy: requestedBy },
+          });
+          await tx.productStockBalance.update({
+            where: { id: balance.id },
+            data: {
+              quantity: resultingBalance,
+              reservedQuantity: roundMoney(previousReserved - quantity),
+              updatedBy: requestedBy,
+            },
+          });
+          await tx.saleItem.update({
+            where: { id: saleItem.id },
+            data: {
+              consumedQuantity: { increment: quantity },
+              updatedBy: requestedBy,
+            },
+          });
+          const consumptionItem = await tx.saleStockConsumptionItem.create({
+            data: {
+              companyId: company.id,
+              branchCode,
+              consumptionId: consumption.id,
+              saleItemId: saleItem.id,
+              productId,
+              quantity,
+              previousStock,
+              resultingStock,
+              createdBy: requestedBy,
+            },
+          });
+          await tx.stockMovement.create({
+            data: {
+              companyId: company.id,
+              branchCode,
+              productId,
+              sourceType: "PACKAGE_CONSUMPTION",
+              sourceId: consumption.id,
+              sourceItemId: consumptionItem.id,
+              movementType: "EXIT",
+              quantity,
+              previousStock,
+              resultingStock,
+              unitCost: saleItem.unitCost,
+              notes: normalizeText(
+                `SAÍDA POR CONSUMO DE PACOTE - VENDA ${sale.saleNumber}`,
+              ),
+              occurredAt,
+              createdBy: requestedBy,
+              updatedBy: requestedBy,
+            },
+          });
+          pendingQuantity = roundMoney(pendingQuantity - quantity);
+        }
+      }
+
+      return tx.saleStockConsumption.findUnique({
+        where: { id: consumption.id },
+        include: { items: { include: { product: true } } },
+      });
+    });
+
+    return {
+      id: result.id,
+      saleId: result.saleId,
+      sourceUsageId: result.sourceUsageId,
+      occurredAt: result.occurredAt,
+      items: result.items.map((item: any) => ({
+        productId: item.productId,
+        productName: item.product?.name || null,
+        quantity: roundMoney(item.quantity),
+        previousStock: roundMoney(item.previousStock),
+        resultingStock: roundMoney(item.resultingStock),
+      })),
+      idempotent: false,
+    };
+  }
+
   async cancel(saleId: string, payload: CancelSaleDto) {
     const normalizedSaleId = String(saleId || "").trim();
     if (!normalizedSaleId) {
@@ -2676,6 +2968,16 @@ export class SalesService {
 
     if (!sale) {
       throw new NotFoundException("VENDA NÃO ENCONTRADA OU JÁ CANCELADA.");
+    }
+    if (
+      (sale.items || []).some(
+        (item: any) =>
+          item.inventoryDisposition === "RESERVED" && Number(item.consumedQuantity || 0) > 0,
+      )
+    ) {
+      throw new BadRequestException(
+        "A venda possui produtos de pacote já consumidos e não pode ser cancelada integralmente.",
+      );
     }
 
     const authorizedNfce = await this.prisma.fiscalDocument.findFirst({
@@ -2731,6 +3033,35 @@ export class SalesService {
 
       for (const item of sale.items || []) {
         if (!item.tracksInventory) {
+          continue;
+        }
+
+        if (item.inventoryDisposition === "RESERVED") {
+          const remainingReserved = roundMoney(
+            Math.max(0, Number(item.reservedQuantity || 0) - Number(item.consumedQuantity || 0)),
+          );
+          if (remainingReserved > 0) {
+            const balance = await tx.productStockBalance.findFirst({
+              where: {
+                companyId: company.id,
+                branchCode: item.branchCode,
+                productId: item.productId,
+                variantKey: item.variantKey || "GERAL",
+                canceledAt: null,
+              },
+            });
+            if (balance) {
+              await tx.productStockBalance.update({
+                where: { id: balance.id },
+                data: {
+                  reservedQuantity: roundMoney(
+                    Math.max(0, Number(balance.reservedQuantity || 0) - remainingReserved),
+                  ),
+                  updatedBy: canceledBy,
+                },
+              });
+            }
+          }
           continue;
         }
 

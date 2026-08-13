@@ -4,6 +4,7 @@ import { SalesService } from "../application/sales.service";
 import {
   CancelSaleDto,
   CheckSalePixStatusDto,
+  ConsumeReservedStockDto,
   CreateSalePixIntentDto,
   CreateSaleReturnDto,
   CreateSaleDto,
@@ -47,6 +48,17 @@ export class SalesController {
   })
   create(@Body() payload: CreateSaleDto) {
     return this.salesService.create(payload);
+  }
+
+  @Post(":saleId/stock-consumptions")
+  @ApiOperation({
+    summary: "Baixa produtos reservados de uma venda de pacote",
+  })
+  consumeReservedStock(
+    @Param("saleId") saleId: string,
+    @Body() payload: ConsumeReservedStockDto,
+  ) {
+    return this.salesService.consumeReservedStock(saleId, payload);
   }
 
   @Post("pix-intents")

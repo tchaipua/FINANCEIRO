@@ -65,6 +65,14 @@ export class ChangeFiscalCertificateStatusDto {
 
   @IsString()
   sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class SaveFiscalCertificateDto {

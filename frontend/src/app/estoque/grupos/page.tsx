@@ -5,6 +5,7 @@ import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import { getJson, requestJson } from '@/app/lib/api';
 import { formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import { buildDefaultExportColumns, exportGridRows, type GridColumnDefinition, type GridExportFormat } from '@/app/lib/grid-export-utils';
@@ -93,6 +94,7 @@ export default function StockGroupsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<ClassificationForm | null>(null);
+  const [pendingClassificationInactivation, setPendingClassificationInactivation] = useState<ClassificationRow | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
   const [exportColumns, setExportColumns] = useState(buildDefaultExportColumns(GRID_COLUMNS));
@@ -143,6 +145,13 @@ export default function StockGroupsPage() {
       setError(form.type === 'SUBGROUP' ? 'Informe o nome e o grupo pai do subgrupo.' : 'Informe o nome do grupo.');
       return;
     }
+    if (form.id && form.status === 'INACTIVE') {
+      const current = rows.find((row) => row.id === form.id && row.type === form.type);
+      if (current?.status === 'ACTIVE') {
+        setPendingClassificationInactivation(current);
+        return;
+      }
+    }
     setSaving(true); setError(null); setMessage(null);
     const payload = {
       sourceSystem: runtimeContext.sourceSystem,
@@ -163,6 +172,33 @@ export default function StockGroupsPage() {
       setForm(null); setMessage(`${form.type === 'GROUP' ? 'Grupo' : 'Subgrupo'} salvo com sucesso.`); await load();
     } catch (currentError) { setError(getFriendlyRequestErrorMessage(currentError, 'Não foi possível salvar o cadastro.')); }
     finally { setSaving(false); }
+  }
+
+  async function confirmClassificationInactivation(password: string, reason: string) {
+    if (!pendingClassificationInactivation || !runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
+    setSaving(true); setError(null); setMessage(null);
+    try {
+      const path = pendingClassificationInactivation.type === 'GROUP' ? 'groups' : 'subgroups';
+      await requestJson(`/product-classifications/${path}/${pendingClassificationInactivation.id}/status`, {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceSystem: runtimeContext.sourceSystem,
+          sourceTenantId: runtimeContext.sourceTenantId,
+          requestedBy: runtimeContext.cashierUserId || runtimeContext.userRole || 'FINANCEIRO_ESTOQUE',
+          status: 'INACTIVE',
+          password,
+          reason,
+        }),
+      });
+      setPendingClassificationInactivation(null);
+      setForm(null);
+      setMessage(`${pendingClassificationInactivation.type === 'GROUP' ? 'Grupo' : 'Subgrupo'} inativado com sucesso.`);
+      await load();
+    } catch (currentError) {
+      setError(getFriendlyRequestErrorMessage(currentError, 'Não foi possível inativar o cadastro.'));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const exportRows = filteredRows;
@@ -230,6 +266,19 @@ export default function StockGroupsPage() {
       <section className="rounded-3xl border border-slate-200 bg-white px-5 py-3 shadow-sm"><ScreenNameCopy screenId={SCREEN_ID} className="justify-end" originText={ORIGIN_TEXT} auditText="Cadastro financeiro por empresa e filial de grupos e subgrupos do estoque." sqlText="SELECT * FROM product_groups UNION ALL SELECT * FROM product_subgroups;" /></section>
 
       <GridExportModal isOpen={isExportOpen} title="Exportar grupos e subgrupos" description={`A exportação considera ${exportRows.length} registro(s) do filtro atual.`} format={exportFormat} onFormatChange={setExportFormat} columns={GRID_COLUMNS} selectedColumns={exportColumns} storageKey={`financeiro:estoque-grupos:export:${runtimeContext.sourceTenantId || 'default'}`} brandingName={runtimeContext.companyName || 'FINANCEIRO'} brandingLogoUrl={runtimeContext.logoUrl} onClose={() => setIsExportOpen(false)} onExport={async (config) => { await exportGridRows({ rows: exportRows, columns: GRID_COLUMNS, selectedColumns: config.selectedColumns, format: exportFormat, fileBaseName: 'grupos-subgrupos-estoque', branding: { title: 'Grupos e subgrupos de estoque', schoolName: runtimeContext.companyName || 'FINANCEIRO', logoUrl: runtimeContext.logoUrl }, pdfOptions: config.pdfOptions }); setExportColumns(config.selectedColumns); setIsExportOpen(false); }} />
+
+      <InactivationConfirmationPopup
+        isOpen={Boolean(pendingClassificationInactivation)}
+        screenId="POPUP_FINANCEIRO_ESTOQUE_GRUPOS_INATIVAR"
+        title={`Inativar ${pendingClassificationInactivation?.type === 'GROUP' ? 'grupo' : 'subgrupo'}`}
+        targetName={pendingClassificationInactivation?.name || ''}
+        description="Ao inativar esta classificação, os produtos e o histórico de estoque serão preservados."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setPendingClassificationInactivation(null)}
+        onConfirm={confirmClassificationInactivation}
+        isSaving={saving}
+      />
 
       {form ? <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"><div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5"><div><div className="text-[11px] font-black uppercase tracking-[0.24em] text-blue-600">Cadastro do estoque</div><h2 className="mt-1 text-2xl font-black text-slate-900">{form.id ? 'Alterar' : 'Cadastrar'} {form.type === 'GROUP' ? 'grupo' : 'subgrupo'}</h2></div><button type="button" onClick={() => setForm(null)} className="text-2xl font-black text-slate-400 hover:text-rose-600">×</button></div><div className="grid gap-4 p-6"><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Tipo</span><select value={form.type} disabled={Boolean(form.id)} onChange={(event) => setForm((current) => current ? { ...current, type: event.target.value as 'GROUP' | 'SUBGROUP', groupId: '' } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input}><option value="GROUP">GRUPO</option><option value="SUBGROUP">SUBGRUPO</option></select></label>{form.type === 'SUBGROUP' ? <label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Grupo pai</span><select value={form.groupId} onChange={(event) => setForm((current) => current ? { ...current, groupId: event.target.value } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input}><option value="">Selecione o grupo</option>{groups.filter((group) => group.status === 'ACTIVE').map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label> : null}<div className="grid gap-4 md:grid-cols-2"><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Código</span><input value={form.code} onChange={(event) => setForm((current) => current ? { ...current, code: event.target.value } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input} /></label><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Situação</span><select value={form.status} onChange={(event) => setForm((current) => current ? { ...current, status: event.target.value as 'ACTIVE' | 'INACTIVE' } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input}><option value="ACTIVE">ATIVO</option><option value="INACTIVE">INATIVO</option></select></label></div><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Nome</span><input autoFocus value={form.name} onChange={(event) => setForm((current) => current ? { ...current, name: event.target.value } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input} /></label><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Descrição</span><textarea value={form.description} onChange={(event) => setForm((current) => current ? { ...current, description: event.target.value } : current)} className={`${FINANCE_GRID_PAGE_LAYOUT.input} min-h-24`} /></label></div><div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4"><button type="button" onClick={() => setForm(null)} className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-bold text-slate-600">Cancelar</button><button type="button" disabled={saving} onClick={() => void saveForm()} className="rounded-2xl bg-blue-600 px-5 py-2 text-sm font-black text-white disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar cadastro'}</button></div></div></div> : null}
     </div>

@@ -4,6 +4,7 @@ import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/tru
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -49,7 +50,10 @@ type ProductItem = {
   usesExpirationControl?: boolean;
   allowsNegativeStock?: boolean;
   currentStock: number;
+  committedStock: number;
+  availableStock: number;
   minimumStock: number;
+  maximumStock: number;
   purchasePrice?: number | null;
   salePrice?: number | null;
   ncmCode?: string | null;
@@ -119,6 +123,7 @@ type ProductFormState = {
   allowsNegativeStock: boolean;
   currentStock: string;
   minimumStock: string;
+  maximumStock: string;
   purchasePrice: string;
   salePrice: string;
   ncmCode: string;
@@ -165,6 +170,8 @@ type ManualStockMovementResponse = {
   id: string;
   previousStock: number;
   resultingStock: number;
+  minimumStockReached?: boolean;
+  minimumStockWarning?: string | null;
   message?: string;
 };
 
@@ -175,6 +182,8 @@ type ProductGridColumnKey =
   | 'unitCode'
   | 'productType'
   | 'stock'
+  | 'committedStock'
+  | 'availableStock'
   | 'updatedAt';
 
 type ProductExportColumnKey =
@@ -183,6 +192,7 @@ type ProductExportColumnKey =
   | 'purchasePrice'
   | 'salePrice'
   | 'minimumStock'
+  | 'maximumStock'
   | 'notes'
   | 'createdAt'
   | 'status';
@@ -288,13 +298,29 @@ const PRODUCT_GRID_COLUMNS: GridColumnDefinition<ProductItem, ProductGridColumnK
   },
   {
     key: 'stock',
-    label: 'Estoque',
+    label: 'Estoque físico',
     getValue: (item) =>
       item.tracksInventory
         ? `${formatStock(item.currentStock, item.allowFraction)} / mín ${formatStock(
             item.minimumStock,
             item.allowFraction,
           )}`
+        : 'SEM CONTROLE',
+  },
+  {
+    key: 'committedStock',
+    label: 'Previsão de saída',
+    getValue: (item) =>
+      item.tracksInventory
+        ? formatStock(item.committedStock || 0, item.allowFraction)
+        : 'SEM CONTROLE',
+  },
+  {
+    key: 'availableStock',
+    label: 'Disponível',
+    getValue: (item) =>
+      item.tracksInventory
+        ? formatStock(item.availableStock ?? item.currentStock, item.allowFraction)
         : 'SEM CONTROLE',
   },
   {
@@ -322,10 +348,32 @@ const PRODUCT_EXPORT_COLUMNS: GridColumnDefinition<ProductItem, ProductExportCol
       item.tracksInventory ? formatStock(item.currentStock, item.allowFraction) : 'SEM CONTROLE',
   },
   {
+    key: 'committedStock',
+    label: 'Previsão de saída',
+    getValue: (item) =>
+      item.tracksInventory ? formatStock(item.committedStock || 0, item.allowFraction) : '---',
+  },
+  {
+    key: 'availableStock',
+    label: 'Estoque disponível',
+    getValue: (item) =>
+      item.tracksInventory
+        ? formatStock(item.availableStock ?? item.currentStock, item.allowFraction)
+        : '---',
+  },
+  {
     key: 'minimumStock',
     label: 'Estoque mínimo',
     getValue: (item) =>
       item.tracksInventory ? formatStock(item.minimumStock, item.allowFraction) : '---',
+  },
+  {
+    key: 'maximumStock',
+    label: 'Estoque máximo',
+    getValue: (item) =>
+      item.tracksInventory && item.maximumStock > 0
+        ? formatStock(item.maximumStock, item.allowFraction)
+        : 'NÃO DEFINIDO',
   },
   {
     key: 'purchasePrice',
@@ -368,6 +416,7 @@ const emptyFormState: ProductFormState = {
   allowsNegativeStock: true,
   currentStock: '0',
   minimumStock: '0',
+  maximumStock: '0',
   purchasePrice: '',
   salePrice: '',
   ncmCode: '',
@@ -416,6 +465,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - tipo do produto
 - estoque atual
 - estoque mínimo
+- estoque máximo
 - situação cadastral
 - data da última atualização
 
@@ -441,6 +491,7 @@ SELECT
   PR.allowFraction,
   PR.currentStock,
   PR.minimumStock,
+  PR.maximumStock,
   PR.purchasePrice,
   PR.salePrice,
   PR.status,
@@ -497,6 +548,7 @@ SELECT
   PR.allowFraction,
   PR.currentStock,
   PR.minimumStock,
+  PR.maximumStock,
   PR.purchasePrice,
   PR.salePrice,
   PR.status,
@@ -674,9 +726,10 @@ function StockParameterButton({
   return (
     <button
       type="button"
+      data-system-message-ignore
       onClick={onToggle}
       disabled={!editable}
-      className={`rounded-3xl border px-4 py-4 text-left transition ${
+      className={`rounded-3xl border px-4 py-2.5 text-left transition ${
         editable ? '' : 'cursor-not-allowed'
       } ${
         value
@@ -687,7 +740,7 @@ function StockParameterButton({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="text-sm font-black uppercase tracking-[0.16em]">{label}</div>
+        <div className="text-sm font-black uppercase leading-tight tracking-[0.16em]">{label}</div>
         <span
           className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${
             editable
@@ -698,7 +751,7 @@ function StockParameterButton({
           {editable ? 'NO PRODUTO' : 'NA FILIAL'}
         </span>
       </div>
-      <div className="mt-1 text-sm font-medium">{value ? enabledText : disabledText}</div>
+      <div className="mt-0.5 text-sm font-medium leading-tight">{value ? enabledText : disabledText}</div>
       {!editable ? (
         <div className="mt-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
           Configuração bloqueada pela filial
@@ -767,6 +820,7 @@ function buildProductForm(product: ProductItem): ProductFormState {
     allowsNegativeStock: Boolean(product.allowsNegativeStock),
     currentStock: formatOptionalNumberInput(product.currentStock),
     minimumStock: formatOptionalNumberInput(product.minimumStock),
+    maximumStock: formatOptionalNumberInput(product.maximumStock),
     purchasePrice: formatOptionalNumberInput(product.purchasePrice),
     salePrice: formatOptionalNumberInput(product.salePrice),
     ncmCode: product.ncmCode || '',
@@ -1207,6 +1261,8 @@ export default function FinanceiroProdutosPage() {
   const [manualMovementError, setManualMovementError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [pendingProductInactivation, setPendingProductInactivation] = useState<ProductItem | null>(null);
+  const [statusProductId, setStatusProductId] = useState<string | null>(null);
   const [returnSuccessMessage, setReturnSuccessMessage] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productFormTab, setProductFormTab] = useState<ProductFormTab>('IDENTIFICATION');
@@ -1605,6 +1661,16 @@ export default function FinanceiroProdutosPage() {
     try {
       const effectiveForm = applyBranchInventoryRules(formState, branchInventoryConfig);
       const allowStockFraction = effectiveForm.allowFraction;
+      const minimumStock = effectiveForm.tracksInventory
+        ? parseStockNumber(formState.minimumStock, allowStockFraction)
+        : 0;
+      const maximumStock = effectiveForm.tracksInventory
+        ? parseStockNumber(formState.maximumStock, allowStockFraction)
+        : 0;
+      if (maximumStock > 0 && maximumStock < minimumStock) {
+        setProductFormTab('STOCK_PRICES');
+        throw new Error('O estoque máximo deve ser maior ou igual ao estoque mínimo.');
+      }
       const payload = {
         requestedBy: runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO',
         sourceSystem: runtimeContext.sourceSystem,
@@ -1625,9 +1691,8 @@ export default function FinanceiroProdutosPage() {
         currentStock: effectiveForm.tracksInventory
           ? parseStockNumber(formState.currentStock, allowStockFraction)
           : 0,
-        minimumStock: effectiveForm.tracksInventory
-          ? parseStockNumber(formState.minimumStock, allowStockFraction)
-          : 0,
+        minimumStock,
+        maximumStock,
         purchasePrice: parseOptionalNumber(formState.purchasePrice),
         salePrice: parseOptionalNumber(formState.salePrice),
         ncmCode: formState.ncmCode || undefined,
@@ -1787,7 +1852,12 @@ export default function FinanceiroProdutosPage() {
     );
   }
 
-  async function handleStatusChange(product: ProductItem, action: 'activate' | 'inactivate') {
+  async function handleStatusChange(
+    product: ProductItem,
+    action: 'activate' | 'inactivate',
+    password = '',
+    reason = '',
+  ) {
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
       setErrorMessage('Informe o tenant de origem para alterar a situação do produto.');
       return;
@@ -1795,6 +1865,7 @@ export default function FinanceiroProdutosPage() {
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setStatusProductId(product.id);
 
     try {
       await requestJson(`/products/${product.id}/${action}`, {
@@ -1803,6 +1874,8 @@ export default function FinanceiroProdutosPage() {
           requestedBy: runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO',
           sourceSystem: runtimeContext.sourceSystem,
           sourceTenantId: runtimeContext.sourceTenantId,
+          password,
+          reason,
         }),
         fallbackMessage:
           action === 'activate'
@@ -1815,6 +1888,7 @@ export default function FinanceiroProdutosPage() {
           ? 'Produto reativado com sucesso.'
           : 'Produto inativado com sucesso.',
       );
+      if (action === 'inactivate') setPendingProductInactivation(null);
       await loadProducts();
     } catch (error) {
       setErrorMessage(
@@ -1825,6 +1899,8 @@ export default function FinanceiroProdutosPage() {
             : 'Não foi possível inativar o produto.',
         ),
       );
+    } finally {
+      setStatusProductId(null);
     }
   }
 
@@ -2040,11 +2116,11 @@ export default function FinanceiroProdutosPage() {
                       {product.status === 'ACTIVE' ? (
                         <button
                           type="button"
-                          onClick={() => void handleStatusChange(product, 'inactivate')}
+                          onClick={() => setPendingProductInactivation(product)}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-800"
                           title="Inativar produto"
                         >
-                          ⊘
+                          <i className="bi bi-x-octagon" aria-hidden="true" />
                         </button>
                       ) : (
                         <button
@@ -2370,7 +2446,7 @@ export default function FinanceiroProdutosPage() {
                   <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
                     Estoque e valores
                   </div>
-                  <div className="grid gap-4 lg:grid-cols-4">
+                  <div className="grid gap-4 lg:grid-cols-5">
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                         Estoque atual
@@ -2394,6 +2470,21 @@ export default function FinanceiroProdutosPage() {
                         value={formState.minimumStock}
                         onChange={(event) =>
                           setFormState((current) => ({ ...current, minimumStock: event.target.value }))
+                        }
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                        inputMode={formState.allowFraction ? 'decimal' : 'numeric'}
+                        disabled={!formState.tracksInventory}
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Estoque máximo
+                      </span>
+                      <input
+                        value={formState.maximumStock}
+                        onChange={(event) =>
+                          setFormState((current) => ({ ...current, maximumStock: event.target.value }))
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
                         inputMode={formState.allowFraction ? 'decimal' : 'numeric'}
@@ -2806,6 +2897,19 @@ VALUES
           setHiddenColumns(hidden);
         }}
         onClose={() => setIsColumnConfigOpen(false)}
+      />
+
+      <InactivationConfirmationPopup
+        isOpen={Boolean(pendingProductInactivation)}
+        screenId="POPUP_FINANCEIRO_PRODUTOS_INATIVAR"
+        title="Inativar produto"
+        targetName={pendingProductInactivation?.name || ''}
+        description="Ao inativar o produto, o histórico de estoque e financeiro será preservado."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setPendingProductInactivation(null)}
+        onConfirm={(password, reason) => pendingProductInactivation ? handleStatusChange(pendingProductInactivation, 'inactivate', password, reason) : undefined}
+        isSaving={Boolean(pendingProductInactivation && statusProductId === pendingProductInactivation.id)}
       />
 
       <GridExportModal

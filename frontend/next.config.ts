@@ -24,7 +24,7 @@ function resolveBasePath() {
 }
 
 const basePath = resolveBasePath();
-const deploymentId = process.env.FINANCEIRO_FRONTEND_DEPLOYMENT_ID || 'financeiro-local-grid-icons-v5';
+const deploymentId = process.env.FINANCEIRO_FRONTEND_DEPLOYMENT_ID || 'financeiro-product-inventory-limits-v7';
 
 const nextConfig: NextConfig = {
   basePath,

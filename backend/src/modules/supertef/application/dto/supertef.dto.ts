@@ -50,6 +50,14 @@ export class SuperTefMutationContextDto extends SuperTefContextDto {
   @IsOptional()
   @IsString()
   requestedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class SaveSuperTefConfigurationDto extends SuperTefMutationContextDto {

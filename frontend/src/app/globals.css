@@ -1,5 +1,55 @@
 @import "tailwindcss";
 
+.finance-inactivation-popup > div {
+  overflow: hidden;
+  border-radius: 28px;
+  border: 2px solid #dbe3ee;
+  box-shadow: 0 30px 80px rgba(15, 23, 42, .34);
+}
+
+.finance-inactivation-popup [data-audited-popup-shell] { border-radius: inherit; }
+.finance-inactivation-popup .finance-inactivation-body { padding: 0; background: #fff; }
+.finance-inactivation-popup .finance-inactivation-body > .finance-inactivation-intro,
+.finance-inactivation-popup .finance-inactivation-body > .finance-inactivation-password-panel,
+.finance-inactivation-popup .finance-inactivation-body > .finance-inactivation-reason { margin-left: 42px; margin-right: 42px; }
+.finance-inactivation-popup .finance-inactivation-intro { padding: 34px 0 30px; text-align: center; }
+.finance-inactivation-intro p { margin: 0; color: #51627a; font-size: 17px; font-weight: 600; line-height: 1.5; }
+.finance-inactivation-intro strong { display: block; margin-top: 18px; color: #1d4ed8; font-size: 28px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; }
+.finance-inactivation-password-panel { margin-top: 0; padding: 24px 28px 28px; border: 3px solid #e11d48; border-radius: 22px; background: linear-gradient(180deg, #fff7f8, #fff); }
+.finance-inactivation-password-title { display: flex; align-items: center; gap: 14px; color: #be123c; font-size: 17px; font-weight: 950; letter-spacing: .08em; }
+.finance-inactivation-lock { display: inline-grid; width: 34px; height: 34px; place-items: center; border: 3px solid currentColor; border-radius: 10px; font-size: 15px; line-height: 1; }
+.finance-inactivation-lock svg { width: 20px; height: 20px; }
+.finance-inactivation-password-field { display: flex; margin-top: 18px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 14px; background: #fff; }
+.finance-inactivation-password-field input { min-width: 0; flex: 1; border: 0; padding: 15px 18px; color: #be123c; font-size: 16px; font-weight: 800; outline: none; }
+.finance-inactivation-password-field input::placeholder { color: #e11d48; opacity: 1; }
+.finance-inactivation-password-field button { display: grid; width: 62px; place-items: center; border: 0; border-left: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; cursor: pointer; }
+.finance-inactivation-password-field button svg { width: 24px; height: 24px; }
+.finance-inactivation-reason { min-height: 138px; margin-top: 28px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 14px; padding: 18px; color: #334155; font-size: 16px; font-weight: 600; outline: none; }
+.finance-inactivation-reason::placeholder { color: #94a3b8; }
+.finance-inactivation-popup .finance-inactivation-body > .mt-6 { margin: 0; padding: 28px 42px 0; }
+.finance-inactivation-popup .finance-inactivation-body > .mt-4 { margin: 0 42px; padding: 22px 0 28px; border-top: 1px solid #e2e8f0; }
+.finance-inactivation-confirm { min-width: 210px; min-height: 54px; border: 3px solid #059669; border-radius: 999px; background: #fff; color: #047857; font-size: 16px; font-weight: 950; cursor: pointer; }
+.finance-inactivation-confirm:hover:not(:disabled) { background: #ecfdf5; }
+.finance-inactivation-confirm:disabled { cursor: not-allowed; opacity: .45; }
+
+/* Ícone padrão das ações de inativação nos grids. */
+.bi {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+}
+
+.bi-x-octagon::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  content: "";
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns=%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M4.54.54A1.5 1.5 0 0 1 5.5 0h5a1.5 1.5 0 0 1 1.06.44l4 4A1.5 1.5 0 0 1 16 5.5v5a1.5 1.5 0 0 1-.44 1.06l-4 4a1.5 1.5 0 0 1-1.06.44h-5a1.5 1.5 0 0 1-1.06-.44l-4-4A1.5 1.5 0 0 1 0 10.5v-5a1.5 1.5 0 0 1 .44-1.06zM5.5 1a.5.5 0 0 0-.35.15l-4 4a.5.5 0 0 0-.15.35v5a.5.5 0 0 0 .15.35l4 4a.5.5 0 0 0 .35.15h5a.5.5 0 0 0 .35-.15l4-4a.5.5 0 0 0 .15-.35v-5a.5.5 0 0 0-.15-.35l-4-4A.5.5 0 0 0 10.5 1z%22%2F%3E%3Cpath d=%22M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns=%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M4.54.54A1.5 1.5 0 0 1 5.5 0h5a1.5 1.5 0 0 1 1.06.44l4 4A1.5 1.5 0 0 1 16 5.5v5a1.5 1.5 0 0 1-.44 1.06l-4 4a1.5 1.5 0 0 1-1.06.44h-5a1.5 1.5 0 0 1-1.06-.44l-4-4A1.5 1.5 0 0 1 0 10.5v-5a1.5 1.5 0 0 1 .44-1.06zM5.5 1a.5.5 0 0 0-.35.15l-4 4a.5.5 0 0 0-.15.35v5a.5.5 0 0 0 .15.35l4 4a.5.5 0 0 0 .35.15h5a.5.5 0 0 0 .35-.15l4-4a.5.5 0 0 0 .15-.35v-5a.5.5 0 0 0-.15-.35l-4-4A.5.5 0 0 0 10.5 1z%22%2F%3E%3Cpath d=%22M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+}
+
 @theme {
   --color-background: #e7eef6;
   --color-foreground: #0f172a;

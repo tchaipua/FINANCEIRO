@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNumber,
@@ -150,6 +151,59 @@ export class SaleItemDto {
   @IsOptional()
   @IsDateString()
   lotExpirationDate?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  deferInventory?: boolean;
+
+  /**
+   * Adds a paid package component to the stock reservation without creating
+   * another financial line value. The package line carries the sale amount.
+   */
+  @IsOptional()
+  @IsBoolean()
+  reservationOnly?: boolean;
+}
+
+export class ConsumeReservedStockItemDto {
+  @IsString()
+  productId!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.0001)
+  quantity!: number;
+}
+
+export class ConsumeReservedStockDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sourceBranchCode?: number;
+
+  @IsString()
+  sourceUsageId!: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ConsumeReservedStockItemDto)
+  items!: ConsumeReservedStockItemDto[];
 }
 
 export class SalePaymentDto {

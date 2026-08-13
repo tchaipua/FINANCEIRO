@@ -65,4 +65,12 @@ export class ChangeProductClassificationStatusDto {
   @IsString()
   @IsIn(["ACTIVE", "INACTIVE"])
   status!: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }

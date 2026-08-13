@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../../../prisma/prisma.service";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
 import { getFinanceContext, hasAuthenticatedFinanceScope } from "../../../common/finance-context";
 import { normalizeText } from "../../../common/finance-core.utils";
@@ -286,6 +287,7 @@ export class ProductClassificationsService {
     this.assertFinanceAdmin();
     const scope = await this.resolveCompany(payload.sourceSystem, payload.sourceTenantId);
     const status = this.normalizeStatus(payload.status);
+    if (status === "INACTIVE") assertInactivationConfirmation(payload);
     if (type === "GROUP") {
       const current = await this.prisma.productGroup.findFirst({ where: { id, companyId: scope.companyId, branchCode: scope.branchCode, canceledAt: null } });
       if (!current) throw new NotFoundException("Grupo não encontrado nesta filial.");

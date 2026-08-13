@@ -15,6 +15,7 @@ export interface IFinanceContext
   extends Partial<AuthenticatedFinanceRequestContext> {
   authenticated: boolean;
   branchCode: number;
+  companyWideBranchDirectoryRead?: boolean;
 }
 
 export const financeContext = new AsyncLocalStorage<IFinanceContext>();
@@ -57,5 +58,50 @@ export function runWithFinanceBranchScope<T>(
       branchCode,
     },
     () => operation(),
+  );
+}
+
+export function runWithCompanyWideBranchDirectoryRead<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  const currentContext = getFinanceContext();
+  if (!currentContext?.authenticated || !currentContext.companyId) {
+    throw new ForbiddenException(
+      "A consulta das filiais exige uma empresa autenticada.",
+    );
+  }
+
+  return financeContext.run(
+    {
+      ...currentContext,
+      companyWideBranchDirectoryRead: true,
+    },
+    operation,
+  );
+}
+
+export function runWithAdministrativeBranchScope<T>(
+  branchId: string,
+  branchCode: number,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const currentContext = getFinanceContext();
+  if (
+    !currentContext?.authenticated ||
+    !currentContext.companyId ||
+    !hasAuthenticatedFinanceScope("FINANCE_ADMIN")
+  ) {
+    throw new ForbiddenException(
+      "A manutenção de outra filial exige o escopo FINANCE_ADMIN.",
+    );
+  }
+  return financeContext.run(
+    {
+      ...currentContext,
+      branchId,
+      branchCode,
+      sourceBranchCode: branchCode,
+    },
+    operation,
   );
 }

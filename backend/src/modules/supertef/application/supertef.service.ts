@@ -11,6 +11,7 @@ import { PrismaService } from "../../../prisma/prisma.service";
 import { normalizeText, parseJson, serializeJson } from "../../../common/finance-core.utils";
 import { decryptSecret, encryptSecret } from "../../../common/secret-crypto.utils";
 import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import {
   ChangeSuperTefTerminalStatusDto,
   CreateSuperTefPaymentDto,
@@ -1026,6 +1027,7 @@ export class SuperTefService {
       include: this.checkoutInclude(),
     });
     if (!existing) throw new NotFoundException("CHECKOUT NÃO ENCONTRADO.");
+    assertInactivationConfirmation(payload);
 
     const duplicatedCode = await this.prisma.superTefCheckout.findFirst({
       where: {

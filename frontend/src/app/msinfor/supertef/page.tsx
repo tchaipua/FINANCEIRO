@@ -5,6 +5,7 @@ import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import { requestJson } from '@/app/lib/api';
 import {
   buildFinanceApiQueryString,
@@ -313,6 +314,7 @@ export default function SuperTefPage() {
     useState<PaymentForm>(EMPTY_PAYMENT_FORM);
   const [loading, setLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [pendingCheckoutInactivation, setPendingCheckoutInactivation] = useState<SuperTefCheckout | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   const screenId = runtimeContext.embedded ? EMBEDDED_SCREEN_ID : FINANCE_SCREEN_ID;
@@ -667,7 +669,11 @@ export default function SuperTefPage() {
     }
   };
 
-  const inactivateCheckout = async (checkout: SuperTefCheckout) => {
+  const inactivateCheckout = async (
+    checkout: SuperTefCheckout,
+    password = '',
+    reason = '',
+  ) => {
     setBusyAction(`checkout-${checkout.id}`);
     setFeedback(null);
     try {
@@ -675,13 +681,14 @@ export default function SuperTefPage() {
         `/supertef/checkouts/${checkout.id}/inactivate`,
         {
           method: 'POST',
-          body: JSON.stringify(mutationContext),
+          body: JSON.stringify({ ...mutationContext, password, reason }),
         },
       );
       setCheckouts((current) => current.filter((item) => item.id !== checkout.id));
       if (checkoutForm.id === checkout.id) setCheckoutForm(EMPTY_CHECKOUT_FORM);
       await refreshAudit();
       setFeedback({ tone: 'success', text: 'CHECKOUT INATIVADO COM SUCESSO.' });
+      setPendingCheckoutInactivation(null);
     } catch (error) {
       setFeedback({
         tone: 'error',
@@ -1326,7 +1333,7 @@ export default function SuperTefPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void inactivateCheckout(checkout)}
+                  onClick={() => setPendingCheckoutInactivation(checkout)}
                   disabled={Boolean(busyAction)}
                   className="inline-flex h-10 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 text-xs font-black uppercase tracking-[0.1em] text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
                 >
@@ -1913,6 +1920,19 @@ ORDER BY stp.requestedAt DESC;
           />
         </section>
       ) : null}
+
+      <InactivationConfirmationPopup
+        isOpen={Boolean(pendingCheckoutInactivation)}
+        screenId="POPUP_FINANCEIRO_SUPERTEF_CHECKOUT_INATIVAR"
+        title="Inativar checkout"
+        targetName={pendingCheckoutInactivation?.name || pendingCheckoutInactivation?.code || ''}
+        description="Ao inativar o checkout, o histórico das operações será preservado e o roteamento deixará de utilizá-lo."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setPendingCheckoutInactivation(null)}
+        onConfirm={(password, reason) => pendingCheckoutInactivation ? inactivateCheckout(pendingCheckoutInactivation, password, reason) : undefined}
+        isSaving={Boolean(pendingCheckoutInactivation && busyAction === `checkout-${pendingCheckoutInactivation.id}`)}
+      />
     </div>
   );
 }

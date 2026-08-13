@@ -393,6 +393,7 @@ Body resumido:
 Uso:
 
 - listar filiais e seus parametros de estoque e venda
+- retornar nome, CNPJ (`fiscalDocument`) e situação da filial para o grid;
 
 ### POST `/companies/:id/branches`
 
@@ -403,9 +404,11 @@ Uso:
 Uso:
 
 - atualizar somente regras operacionais de estoque, quantidade e parâmetros comerciais da filial;
+- `stockClassificationMode` aceita `NONE` (não controlar por grupo), `GROUP_ONLY` ou `GROUP_AND_SUBGROUP`;
 - código e nome da filial são somente leitura no Financeiro;
-- antes de alterar o espelho local, o Financeiro chama o sistema de origem e exige confirmação;
-- se a origem estiver indisponível ou recusar, nenhuma alteração é persistida no Financeiro.
+- alterações de tipo, quantidade ou modos de estoque controlados pela origem exigem confirmação antes de atualizar o espelho local;
+- `stockClassificationMode` e parâmetros comerciais exclusivos do Financeiro são salvos por filial, com auditoria local, sem chamar o callback legado da origem;
+- se a origem estiver indisponível ou recusar uma alteração sob sua autoridade, nenhuma alteração é persistida no Financeiro.
 
 ## Fiscal Certificates
 

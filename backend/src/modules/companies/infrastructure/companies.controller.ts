@@ -112,4 +112,36 @@ export class CompaniesController {
   ) {
     return this.companiesService.updateBranch(id, branchId, query, payload);
   }
+
+  @Post(":id/branches/:branchId/central-editor-launch")
+  @ApiOperation({
+    summary: "Abre a manutenção única da filial no sistema Central MSINFOR",
+  })
+  createCentralBranchEditorLaunch(
+    @Param("id") id: string,
+    @Param("branchId") branchId: string,
+    @Query() query: ListCompaniesDto,
+  ) {
+    return this.companiesService.createCentralBranchEditorLaunch(
+      id,
+      branchId,
+      query,
+    );
+  }
+
+  @Post(":id/branches/:branchId/central-configuration-refresh")
+  @ApiOperation({
+    summary: "Atualiza o espelho da configuração efetiva salva na Central",
+  })
+  refreshCentralBranchConfiguration(
+    @Param("id") id: string,
+    @Param("branchId") branchId: string,
+    @Query() query: ListCompaniesDto,
+  ) {
+    return this.companiesService.refreshCentralBranchConfiguration(
+      id,
+      branchId,
+      query,
+    );
+  }
 }

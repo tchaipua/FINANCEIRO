@@ -20,6 +20,7 @@ import {
 } from "./dto/companies.dto";
 import {
   ensureDefaultCompanyBranch,
+  hasSourceOwnedBranchStockChanges,
   listCompanyBranches,
   mapCompanyBranchSummary,
 } from "../../../common/company-branches";
@@ -27,11 +28,23 @@ import { DEFAULT_BRANCH_CODE, normalizeBranchCode } from "../../../common/branch
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import { encryptSecret } from "../../../common/secret-crypto.utils";
 import { pushSourceCompanyBranchParameters } from "../../../common/source-system-parameters.client";
-import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
+import {
+  getFinanceContext,
+  hasAuthenticatedFinanceScope,
+  runWithAdministrativeBranchScope,
+  runWithCompanyWideBranchDirectoryRead,
+} from "../../../common/finance-context";
+import {
+  CentralBranchEditorClient,
+  type CentralBranchConfiguration,
+} from "./central-branch-editor.client";
 
 @Injectable()
 export class CompaniesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly centralBranchEditor: CentralBranchEditorClient,
+  ) {}
 
   private readonly salesScreenId = "PRINCIPAL_FINANCEIRO_VENDAS";
 
@@ -198,7 +211,7 @@ export class CompaniesService {
 
   private normalizeStockClassificationMode(value?: string | null) {
     const normalized = normalizeText(value) || "GROUP_ONLY";
-    return ["GROUP_ONLY", "GROUP_AND_SUBGROUP"].includes(normalized)
+    return ["NONE", "GROUP_ONLY", "GROUP_AND_SUBGROUP"].includes(normalized)
       ? normalized
       : "GROUP_ONLY";
   }
@@ -466,6 +479,8 @@ export class CompaniesService {
         inventoryControlType,
         quantityPrecision,
         ...stockModes,
+        notifyMinimumStockOnMovement:
+          payload.notifyMinimumStockOnMovement ?? false,
         allowSaleUnitPriceEdit: payload.allowSaleUnitPriceEdit ?? true,
         allowSaleItemDiscount: payload.allowSaleItemDiscount ?? true,
         allowProductImageEdit: payload.allowProductImageEdit ?? true,
@@ -847,8 +862,297 @@ export class CompaniesService {
       scope.sourceSystem,
       scope.sourceTenantId,
     );
-    const branches = await listCompanyBranches(this.prisma, company.id);
+    const branches = await runWithCompanyWideBranchDirectoryRead(() =>
+      listCompanyBranches(this.prisma, company.id),
+    );
+    if (hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      await Promise.all(
+        branches.map((branch) =>
+          this.synchronizeBranchFromCentral(company, branch).catch(() => null),
+        ),
+      );
+      const synchronized = await runWithCompanyWideBranchDirectoryRead(() =>
+        listCompanyBranches(this.prisma, company.id),
+      );
+      return synchronized.map(mapCompanyBranchSummary);
+    }
     return branches.map(mapCompanyBranchSummary);
+  }
+
+  async createCentralBranchEditorLaunch(
+    id: string,
+    branchId: string,
+    scope: ListCompaniesDto,
+  ) {
+    this.assertFinanceAdmin();
+    const { company, branch } = await runWithCompanyWideBranchDirectoryRead(
+      () => this.findScopedBranch(id, branchId, scope),
+    );
+    const context = getFinanceContext();
+    const requestedBy =
+      String(context?.sourceUserId || "FINANCEIRO_EMPRESAS").trim() ||
+      "FINANCEIRO_EMPRESAS";
+    const launch = await this.centralBranchEditor.createLaunch({
+      tenantId: company.sourceTenantId,
+      branchCode: branch.branchCode,
+      requestedBy,
+    });
+    await runWithAdministrativeBranchScope(
+      branch.id,
+      branch.branchCode,
+      () =>
+        this.prisma.sourceIntegrationAuditEvent.create({
+          data: {
+            companyId: company.id,
+            branchCode: branch.branchCode,
+            action: "CENTRAL_BRANCH_EDITOR_OPENED",
+            summary:
+              "MANUTENÇÃO ÚNICA DA FILIAL ABERTA NO SISTEMA CENTRAL MSINFOR.",
+            metadataJson: JSON.stringify({
+              sourceSystem: company.sourceSystem,
+              sourceTenantId: company.sourceTenantId,
+              branchCode: branch.branchCode,
+            }),
+            performedBy: requestedBy,
+            createdBy: requestedBy,
+          },
+        }),
+    );
+    return launch;
+  }
+
+  async refreshCentralBranchConfiguration(
+    id: string,
+    branchId: string,
+    scope: ListCompaniesDto,
+  ) {
+    this.assertFinanceAdmin();
+    const { company, branch } = await runWithCompanyWideBranchDirectoryRead(
+      () => this.findScopedBranch(id, branchId, scope),
+    );
+    await this.synchronizeBranchFromCentral(company, branch, true);
+    const updated = await runWithCompanyWideBranchDirectoryRead(() =>
+      this.prisma.companyBranch.findFirstOrThrow({
+        where: { id: branch.id, companyId: company.id, canceledAt: null },
+      }),
+    );
+    return mapCompanyBranchSummary(updated);
+  }
+
+  private mergeCentralCompany(configuration: CentralBranchConfiguration) {
+    const tenant = configuration.tenant.company || {};
+    const branch = configuration.branch?.company || {};
+    const value = (branchValue?: string, tenantValue?: string) =>
+      String(branchValue || tenantValue || "").trim() || null;
+    return {
+      legalName: value(branch.legalName, tenant.legalName),
+      tradeName: value(branch.tradeName, tenant.tradeName),
+      documentNumber: value(branch.documentNumber, tenant.documentNumber),
+      stateRegistration: value(branch.stateRegistration, tenant.stateRegistration),
+      municipalRegistration: value(branch.municipalRegistration, tenant.municipalRegistration),
+      address: {
+        postalCode: value(branch.address?.postalCode, tenant.address?.postalCode),
+        street: value(branch.address?.street, tenant.address?.street),
+        number: value(branch.address?.number, tenant.address?.number),
+        complement: value(branch.address?.complement, tenant.address?.complement),
+        district: value(branch.address?.district, tenant.address?.district),
+        city: value(branch.address?.city, tenant.address?.city),
+        state: value(branch.address?.state, tenant.address?.state),
+        country: value(branch.address?.country, tenant.address?.country),
+      },
+      contacts: {
+        phone: value(
+          branch.contacts?.phone || branch.contacts?.mobile || branch.contacts?.whatsapp,
+          tenant.contacts?.phone || tenant.contacts?.mobile || tenant.contacts?.whatsapp,
+        ),
+        email: value(branch.contacts?.email, tenant.contacts?.email),
+      },
+    };
+  }
+
+  private async synchronizeBranchFromCentral(
+    company: any,
+    branch: any,
+    forceAudit = false,
+  ) {
+    const configuration = await this.centralBranchEditor.findConfiguration(
+      company.sourceTenantId,
+      branch.branchCode,
+    );
+    if (!configuration.branch || configuration.branch.branchCode !== branch.branchCode) {
+      throw new BadRequestException("A CENTRAL RETORNOU UMA FILIAL DIFERENTE DA SOLICITADA.");
+    }
+    const commerce = configuration.effective.commerce;
+    const master = this.mergeCentralCompany(configuration);
+    const parameters = {
+      allowSaleUnitPriceEdit: commerce?.allowSaleUnitPriceEdit ?? true,
+      allowSaleItemDiscount: commerce?.allowSaleItemDiscount ?? true,
+      groupSameProduct: commerce?.groupSameProduct ?? true,
+      allowProductImageEdit: commerce?.allowProductImageEdit ?? true,
+      requirePasswordToRemoveSaleItems:
+        commerce?.requirePasswordToRemoveSaleItems ?? false,
+    };
+    const currentScreenParameter = await runWithAdministrativeBranchScope(
+      branch.id,
+      branch.branchCode,
+      () =>
+        this.prisma.screenParameter.findFirst({
+          where: {
+            companyId: company.id,
+            branchId: branch.id,
+            screenId: this.salesScreenId,
+            canceledAt: null,
+          },
+        }),
+    );
+    const currentParameters = this.mapSalesScreenParameters(
+      currentScreenParameter?.parametersJson,
+    );
+    const data = {
+      name: configuration.branch.displayName,
+      isActive: configuration.branch.status === "ACTIVE",
+      stockControlMode: this.normalizeBranchStockParameterMode(commerce?.stockControlMode),
+      stockIntegerQuantityMode: this.normalizeBranchStockParameterMode(commerce?.stockIntegerQuantityMode),
+      stockLotControlMode: this.normalizeBranchStockParameterMode(commerce?.stockLotControlMode),
+      stockExpirationControlMode: this.normalizeBranchStockParameterMode(commerce?.stockExpirationControlMode),
+      stockGridControlMode: this.normalizeBranchStockParameterMode(commerce?.stockGridControlMode),
+      stockNegativeControlMode: this.normalizeBranchStockParameterMode(commerce?.stockNegativeControlMode),
+      notifyMinimumStockOnMovement: commerce?.notifyMinimumStockOnMovement === true,
+      allowSaleUnitPriceEdit: parameters.allowSaleUnitPriceEdit,
+      allowSaleItemDiscount: parameters.allowSaleItemDiscount,
+      allowProductImageEdit: parameters.allowProductImageEdit,
+      requirePasswordToRemoveSaleItems: parameters.requirePasswordToRemoveSaleItems,
+      fiscalLegalName: master.legalName,
+      fiscalTradeName: master.tradeName,
+      fiscalDocument: master.documentNumber,
+      stateRegistration: master.stateRegistration,
+      municipalRegistration: master.municipalRegistration,
+      fiscalStreet: master.address.street,
+      fiscalNumber: master.address.number,
+      fiscalComplement: master.address.complement,
+      fiscalNeighborhood: master.address.district,
+      fiscalCity: master.address.city,
+      fiscalState: master.address.state,
+      fiscalPostalCode: master.address.postalCode,
+      fiscalCountryName: master.address.country,
+      fiscalPhone: master.contacts.phone,
+      fiscalEmail: master.contacts.email,
+      updatedBy: "CENTRAL_API_SYNC",
+    };
+    const before = {
+      name: branch.name,
+      stockControlMode: branch.stockControlMode,
+      stockIntegerQuantityMode: branch.stockIntegerQuantityMode,
+      stockLotControlMode: branch.stockLotControlMode,
+      stockExpirationControlMode: branch.stockExpirationControlMode,
+      stockGridControlMode: branch.stockGridControlMode,
+      stockNegativeControlMode: branch.stockNegativeControlMode,
+      notifyMinimumStockOnMovement: branch.notifyMinimumStockOnMovement,
+      allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit,
+      allowSaleItemDiscount: branch.allowSaleItemDiscount,
+      allowProductImageEdit: branch.allowProductImageEdit,
+      requirePasswordToRemoveSaleItems: branch.requirePasswordToRemoveSaleItems,
+      fiscalLegalName: branch.fiscalLegalName,
+      fiscalTradeName: branch.fiscalTradeName,
+      fiscalDocument: branch.fiscalDocument,
+      stateRegistration: branch.stateRegistration,
+      municipalRegistration: branch.municipalRegistration,
+      fiscalStreet: branch.fiscalStreet,
+      fiscalNumber: branch.fiscalNumber,
+      fiscalComplement: branch.fiscalComplement,
+      fiscalNeighborhood: branch.fiscalNeighborhood,
+      fiscalCity: branch.fiscalCity,
+      fiscalState: branch.fiscalState,
+      fiscalPostalCode: branch.fiscalPostalCode,
+      fiscalCountryName: branch.fiscalCountryName,
+      fiscalPhone: branch.fiscalPhone,
+      fiscalEmail: branch.fiscalEmail,
+      screenParameters: currentParameters,
+    };
+    const after = {
+      name: data.name,
+      stockControlMode: data.stockControlMode,
+      stockIntegerQuantityMode: data.stockIntegerQuantityMode,
+      stockLotControlMode: data.stockLotControlMode,
+      stockExpirationControlMode: data.stockExpirationControlMode,
+      stockGridControlMode: data.stockGridControlMode,
+      stockNegativeControlMode: data.stockNegativeControlMode,
+      notifyMinimumStockOnMovement: data.notifyMinimumStockOnMovement,
+      allowSaleUnitPriceEdit: data.allowSaleUnitPriceEdit,
+      allowSaleItemDiscount: data.allowSaleItemDiscount,
+      allowProductImageEdit: data.allowProductImageEdit,
+      requirePasswordToRemoveSaleItems: data.requirePasswordToRemoveSaleItems,
+      fiscalLegalName: data.fiscalLegalName,
+      fiscalTradeName: data.fiscalTradeName,
+      fiscalDocument: data.fiscalDocument,
+      stateRegistration: data.stateRegistration,
+      municipalRegistration: data.municipalRegistration,
+      fiscalStreet: data.fiscalStreet,
+      fiscalNumber: data.fiscalNumber,
+      fiscalComplement: data.fiscalComplement,
+      fiscalNeighborhood: data.fiscalNeighborhood,
+      fiscalCity: data.fiscalCity,
+      fiscalState: data.fiscalState,
+      fiscalPostalCode: data.fiscalPostalCode,
+      fiscalCountryName: data.fiscalCountryName,
+      fiscalPhone: data.fiscalPhone,
+      fiscalEmail: data.fiscalEmail,
+      screenParameters: parameters,
+    };
+    const changed = JSON.stringify(before) !== JSON.stringify(after);
+    if (!changed && !forceAudit) return branch;
+
+    return runWithAdministrativeBranchScope(branch.id, branch.branchCode, () =>
+      this.prisma.$transaction(async (tx) => {
+        const updated = await tx.companyBranch.update({
+          where: { id: branch.id },
+          data,
+        });
+        await tx.screenParameter.upsert({
+          where: {
+            companyId_branchId_screenId: {
+              companyId: company.id,
+              branchId: branch.id,
+              screenId: this.salesScreenId,
+            },
+          },
+          create: {
+            companyId: company.id,
+            branchId: branch.id,
+            screenId: this.salesScreenId,
+            parametersJson: JSON.stringify(parameters),
+            createdBy: "CENTRAL_API_SYNC",
+            updatedBy: "CENTRAL_API_SYNC",
+          },
+          update: {
+            parametersJson: JSON.stringify(parameters),
+            updatedBy: "CENTRAL_API_SYNC",
+            canceledAt: null,
+            canceledBy: null,
+          },
+        });
+        await tx.sourceIntegrationAuditEvent.create({
+          data: {
+            companyId: company.id,
+            branchCode: branch.branchCode,
+            action: "CENTRAL_BRANCH_CONFIGURATION_SYNCHRONIZED",
+            summary:
+              "CONFIGURAÇÃO EFETIVA DA FILIAL SINCRONIZADA A PARTIR DA API CENTRAL.",
+            metadataJson: JSON.stringify({
+              sourceSystem: company.sourceSystem,
+              sourceTenantId: company.sourceTenantId,
+              branchCode: branch.branchCode,
+              changed,
+              before,
+              after,
+            }),
+            performedBy: "CENTRAL_API_SYNC",
+            createdBy: "CENTRAL_API_SYNC",
+          },
+        });
+        return updated;
+      }),
+    );
   }
 
   async getSalesScreenParameters(
@@ -992,11 +1296,18 @@ export class CompaniesService {
     const quantityPrecision = this.normalizeQuantityPrecision(
       payload.quantityPrecision || branch.quantityPrecision,
     );
-    const stockModes = this.getStockModesFromBranchPayload(payload, {
-      ...branch,
-      inventoryControlType,
-      quantityPrecision,
-    });
+    const sourceStockParametersChanged = hasSourceOwnedBranchStockChanges(
+      payload,
+      branch,
+    );
+    const stockModes = this.getStockModesFromBranchPayload(
+      sourceStockParametersChanged ? payload : {},
+      {
+        ...branch,
+        inventoryControlType,
+        quantityPrecision,
+      },
+    );
     const currentScreenParameters = await this.getSalesScreenParameters(
       id,
       branchId,
@@ -1018,14 +1329,16 @@ export class CompaniesService {
       requirePasswordToRemoveSaleItems: payload.requirePasswordToRemoveSaleItems ?? currentScreenParameters.requirePasswordToRemoveSaleItems,
     };
 
-    await pushSourceCompanyBranchParameters({
-      sourceSystem: company.sourceSystem,
-      sourceTenantId: company.sourceTenantId,
-      sourceBranchCode: branch.branchCode,
-      entityType: "BRANCH",
-      requestedBy: payload.requestedBy,
-      parameters: stockModes,
-    });
+    if (sourceStockParametersChanged) {
+      await pushSourceCompanyBranchParameters({
+        sourceSystem: company.sourceSystem,
+        sourceTenantId: company.sourceTenantId,
+        sourceBranchCode: branch.branchCode,
+        entityType: "BRANCH",
+        requestedBy: payload.requestedBy,
+        parameters: stockModes,
+      });
+    }
 
     const updatedBranch = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.companyBranch.update({
@@ -1071,12 +1384,16 @@ export class CompaniesService {
         data: {
           companyId: company.id,
           branchCode: branch.branchCode,
-          action: "BRANCH_PARAMETERS_UPDATED_AT_SOURCE",
-          summary:
-            "PARÂMETROS DA FILIAL CONFIRMADOS NO SISTEMA DE ORIGEM E ESPELHADOS NO FINANCEIRO.",
+          action: sourceStockParametersChanged
+            ? "BRANCH_PARAMETERS_UPDATED_AT_SOURCE"
+            : "BRANCH_PARAMETERS_UPDATED_IN_FINANCEIRO",
+          summary: sourceStockParametersChanged
+            ? "PARÂMETROS DE ESTOQUE CONFIRMADOS NO SISTEMA DE ORIGEM E ESPELHADOS NO FINANCEIRO."
+            : "PARÂMETROS EXCLUSIVOS DA FILIAL ATUALIZADOS NO FINANCEIRO.",
           metadataJson: JSON.stringify({
             sourceSystem: company.sourceSystem,
             sourceTenantId: company.sourceTenantId,
+            sourceStockParametersChanged,
             parameters,
           }),
           performedBy: payload.requestedBy || null,

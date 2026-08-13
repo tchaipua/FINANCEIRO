@@ -84,6 +84,8 @@ model Company {
   saleReturnItems                 SaleReturnItem[]
   salePayments                    SalePayment[]
   salePixIntents                  SalePixIntent[]
+  saleStockConsumptions           SaleStockConsumption[]
+  saleStockConsumptionItems       SaleStockConsumptionItem[]
   receivablePixIntents            ReceivablePixIntent[]
   screenParameters                ScreenParameter[]
   printTemplates                  PrintTemplate[]
@@ -213,50 +215,51 @@ model SourceIntegrationAuditEvent {
 }
 
 model CompanyBranch {
-  id                         String    @id @default(uuid())
-  companyId                  String
-  branchCode                 Int
-  name                       String
-  isActive                   Boolean   @default(true)
-  isDefault                  Boolean   @default(false)
-  inventoryControlType       String    @default("TRADITIONAL")
-  quantityPrecision          String    @default("INTEGER_ONLY")
-  stockControlMode           String    @default("BY_PRODUCT")
-  stockIntegerQuantityMode   String    @default("BY_PRODUCT")
-  stockLotControlMode        String    @default("BY_PRODUCT")
-  stockExpirationControlMode String    @default("BY_PRODUCT")
-  stockGridControlMode       String    @default("BY_PRODUCT")
-  stockNegativeControlMode   String    @default("BY_PRODUCT")
-  stockClassificationMode    String    @default("GROUP_ONLY")
-  allowSaleUnitPriceEdit     Boolean   @default(true)
-  allowSaleItemDiscount      Boolean   @default(true)
-  allowProductImageEdit      Boolean   @default(true)
-  requirePasswordToRemoveSaleItems Boolean @default(false)
-  fiscalLegalName            String?
-  fiscalTradeName            String?
-  fiscalDocument             String?
-  stateRegistration          String?
-  municipalRegistration      String?
-  taxRegimeCode              String?
-  fiscalStreet               String?
-  fiscalNumber               String?
-  fiscalComplement           String?
-  fiscalNeighborhood         String?
-  fiscalCity                 String?
-  fiscalCityCode             String?
-  fiscalState                String?
-  fiscalStateCode            String?
-  fiscalPostalCode           String?
-  fiscalCountryCode          String?   @default("1058")
-  fiscalCountryName          String?   @default("BRASIL")
-  fiscalPhone                String?
-  fiscalEmail                String?
-  createdAt                  DateTime  @default(now()) @db.Timestamptz(3)
-  createdBy                  String?
-  updatedAt                  DateTime  @updatedAt @db.Timestamptz(3)
-  updatedBy                  String?
-  canceledAt                 DateTime? @db.Timestamptz(3)
-  canceledBy                 String?
+  id                               String    @id @default(uuid())
+  companyId                        String
+  branchCode                       Int
+  name                             String
+  isActive                         Boolean   @default(true)
+  isDefault                        Boolean   @default(false)
+  inventoryControlType             String    @default("TRADITIONAL")
+  quantityPrecision                String    @default("INTEGER_ONLY")
+  stockControlMode                 String    @default("BY_PRODUCT")
+  stockIntegerQuantityMode         String    @default("BY_PRODUCT")
+  stockLotControlMode              String    @default("BY_PRODUCT")
+  stockExpirationControlMode       String    @default("BY_PRODUCT")
+  stockGridControlMode             String    @default("BY_PRODUCT")
+  stockNegativeControlMode         String    @default("BY_PRODUCT")
+  notifyMinimumStockOnMovement     Boolean   @default(false)
+  stockClassificationMode          String    @default("GROUP_ONLY")
+  allowSaleUnitPriceEdit           Boolean   @default(true)
+  allowSaleItemDiscount            Boolean   @default(true)
+  allowProductImageEdit            Boolean   @default(true)
+  requirePasswordToRemoveSaleItems Boolean   @default(false)
+  fiscalLegalName                  String?
+  fiscalTradeName                  String?
+  fiscalDocument                   String?
+  stateRegistration                String?
+  municipalRegistration            String?
+  taxRegimeCode                    String?
+  fiscalStreet                     String?
+  fiscalNumber                     String?
+  fiscalComplement                 String?
+  fiscalNeighborhood               String?
+  fiscalCity                       String?
+  fiscalCityCode                   String?
+  fiscalState                      String?
+  fiscalStateCode                  String?
+  fiscalPostalCode                 String?
+  fiscalCountryCode                String?   @default("1058")
+  fiscalCountryName                String?   @default("BRASIL")
+  fiscalPhone                      String?
+  fiscalEmail                      String?
+  createdAt                        DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                        String?
+  updatedAt                        DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                        String?
+  canceledAt                       DateTime? @db.Timestamptz(3)
+  canceledBy                       String?
 
   company          Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   screenParameters ScreenParameter[]
@@ -682,6 +685,7 @@ model Product {
   allowsNegativeStock     Boolean   @default(false)
   currentStock            Float     @default(0)
   minimumStock            Float     @default(0)
+  maximumStock            Float     @default(0)
   purchasePrice           Float?
   salePrice               Float?
   ncmCode                 String?
@@ -729,10 +733,11 @@ model Product {
   stockBalances             ProductStockBalance[]
   saleItems                 SaleItem[]
   saleReturnItems           SaleReturnItem[]
+  saleStockConsumptionItems SaleStockConsumptionItem[]
   fiscalTaxRules            FiscalTaxRule[]
   fiscalDocumentItems       FiscalDocumentItem[]
-  group                     ProductGroup?               @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  subgroup                  ProductSubgroup?            @relation(fields: [subgroupId], references: [id], onDelete: SetNull)
+  group                     ProductGroup?              @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  subgroup                  ProductSubgroup?           @relation(fields: [subgroupId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, branchCode, internalCode])
   @@unique([companyId, branchCode, sku])
@@ -760,9 +765,9 @@ model ProductGroup {
   canceledAt  DateTime? @db.Timestamptz(3)
   canceledBy  String?
 
-  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  subgroups   ProductSubgroup[]
-  products    Product[]
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subgroups ProductSubgroup[]
+  products  Product[]
 
   @@unique([companyId, branchCode, name])
   @@index([companyId, branchCode, status, name])
@@ -785,9 +790,9 @@ model ProductSubgroup {
   canceledAt  DateTime? @db.Timestamptz(3)
   canceledBy  String?
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  group       ProductGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  products    Product[]
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  group    ProductGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  products Product[]
 
   @@unique([companyId, branchCode, groupId, name])
   @@index([companyId, branchCode, status, name])
@@ -1159,14 +1164,15 @@ model Sale {
   canceledAt               DateTime? @db.Timestamptz(3)
   canceledBy               String?
 
-  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  customerParty   Party?           @relation(fields: [customerPartyId], references: [id], onDelete: SetNull)
-  receivableTitle ReceivableTitle? @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
-  items           SaleItem[]
-  payments        SalePayment[]
-  returns         SaleReturn[]
-  fiscalDocument  FiscalDocument?
-  nfseDocuments   NfseDocument[]
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerParty     Party?                 @relation(fields: [customerPartyId], references: [id], onDelete: SetNull)
+  receivableTitle   ReceivableTitle?       @relation(fields: [receivableTitleId], references: [id], onDelete: SetNull)
+  items             SaleItem[]
+  payments          SalePayment[]
+  returns           SaleReturn[]
+  fiscalDocument    FiscalDocument?
+  nfseDocuments     NfseDocument[]
+  stockConsumptions SaleStockConsumption[]
 
   @@unique([companyId, branchCode, saleNumber])
   @@index([companyId, branchCode, status, confirmedAt])
@@ -1205,6 +1211,9 @@ model SaleItem {
   lotExpirationDate     DateTime? @db.Timestamptz(3)
   previousStock         Float?
   resultingStock        Float?
+  inventoryDisposition  String    @default("IMMEDIATE")
+  reservedQuantity      Float     @default(0)
+  consumedQuantity      Float     @default(0)
   createdAt             DateTime  @default(now()) @db.Timestamptz(3)
   createdBy             String?
   updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
@@ -1212,15 +1221,62 @@ model SaleItem {
   canceledAt            DateTime? @db.Timestamptz(3)
   canceledBy            String?
 
-  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Restrict)
-  product     Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
-  returnItems SaleReturnItem[]
+  company               Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale                  Sale                       @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product               Product                    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  returnItems           SaleReturnItem[]
+  stockConsumptionItems SaleStockConsumptionItem[]
 
   @@unique([saleId, lineNumber])
   @@index([companyId, productId, createdAt])
   @@index([saleId])
   @@map("sale_items")
+}
+
+model SaleStockConsumption {
+  id             String   @id @default(uuid())
+  companyId      String
+  branchCode     Int      @default(1)
+  saleId         String
+  sourceSystem   String
+  sourceTenantId String
+  sourceUsageId  String
+  notes          String?
+  occurredAt     DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+
+  company Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sale    Sale                       @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  items   SaleStockConsumptionItem[]
+
+  @@unique([companyId, sourceSystem, sourceTenantId, sourceUsageId])
+  @@index([companyId, branchCode, saleId, occurredAt])
+  @@map("sale_stock_consumptions")
+}
+
+model SaleStockConsumptionItem {
+  id             String   @id @default(uuid())
+  companyId      String
+  branchCode     Int      @default(1)
+  consumptionId  String
+  saleItemId     String
+  productId      String
+  quantity       Float
+  previousStock  Float
+  resultingStock Float
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  createdBy      String?
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  consumption SaleStockConsumption @relation(fields: [consumptionId], references: [id], onDelete: Cascade)
+  saleItem    SaleItem             @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  product     Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, productId, createdAt])
+  @@index([consumptionId])
+  @@index([saleItemId])
+  @@map("sale_stock_consumption_items")
 }
 
 model SalePayment {

@@ -11,6 +11,7 @@ import {
   normalizeText,
 } from "../../../common/finance-core.utils";
 import { getFinanceContext } from "../../../common/finance-context";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import {
   assertValidBrazilTaxId,
   normalizeTaxId,
@@ -30,7 +31,10 @@ import {
   SyncedCustomerDto,
 } from "./dto/customers.dto";
 
-const INTEGRATED_SOURCE_SYSTEMS = new Set(["ESCOLA", "PROJETO_INICIAL"]);
+// Na vertical Escola, alunos e responsáveis são mantidos no sistema de origem.
+// As demais verticais, incluindo o Projeto Inicial, podem manter clientes no
+// próprio Financeiro.
+const EXTERNALLY_MANAGED_CUSTOMER_SYSTEMS = new Set(["ESCOLA"]);
 const LOCAL_CUSTOMER_TYPE = "FINANCEIRO_CLIENTE";
 
 @Injectable()
@@ -85,7 +89,11 @@ export class CustomersService {
   }
 
   private assertLocalRegistrationAllowed(company: { sourceSystem: string }) {
-    if (INTEGRATED_SOURCE_SYSTEMS.has(normalizeText(company.sourceSystem) || "")) {
+    if (
+      EXTERNALLY_MANAGED_CUSTOMER_SYSTEMS.has(
+        normalizeText(company.sourceSystem) || "",
+      )
+    ) {
       throw new BadRequestException(
         "Clientes integrados devem ser cadastrados e alterados exclusivamente no sistema de origem.",
       );
@@ -127,7 +135,7 @@ export class CustomersService {
     party: any,
     sourceSystem: string,
   ) {
-    const isIntegrated = INTEGRATED_SOURCE_SYSTEMS.has(
+    const isIntegrated = EXTERNALLY_MANAGED_CUSTOMER_SYSTEMS.has(
       normalizeText(sourceSystem) || "",
     );
     const branchCode = this.branchCode();
@@ -247,7 +255,8 @@ export class CustomersService {
   async list(query: ListCustomersDto) {
     const company = await this.findCompany(query.sourceSystem, query.sourceTenantId);
     const sourceSystem = normalizeText(query.sourceSystem) || "FINANCEIRO";
-    const canCreateLocally = !INTEGRATED_SOURCE_SYSTEMS.has(sourceSystem);
+    const canCreateLocally =
+      !EXTERNALLY_MANAGED_CUSTOMER_SYSTEMS.has(sourceSystem);
 
     if (!company) {
       return {
@@ -414,6 +423,26 @@ export class CustomersService {
       payload.sourceTenantId,
     );
     this.assertLocalRegistrationAllowed(company);
+    const openInstallment = await this.prisma.receivableInstallment.findFirst({
+      where: {
+        companyId: company.id,
+        branchCode: this.branchCode(),
+        status: "OPEN",
+        openAmount: { gt: 0 },
+        canceledAt: null,
+        title: {
+          canceledAt: null,
+          payerPartyId: customer.id,
+        },
+      },
+      select: { id: true },
+    });
+    if (openInstallment) {
+      throw new BadRequestException(
+        "Não é possível inativar este cliente enquanto existirem parcelas em aberto. Baixe ou cancele todas as parcelas antes de inativar.",
+      );
+    }
+    assertInactivationConfirmation(payload);
 
     await setPartyRoleActive(this.prisma, {
       companyId: company.id,
@@ -435,7 +464,7 @@ export class CustomersService {
 
   async sync(payload: SyncCustomersDto) {
     const sourceSystem = normalizeText(payload.sourceSystem) || "";
-    if (!INTEGRATED_SOURCE_SYSTEMS.has(sourceSystem || "")) {
+    if (!EXTERNALLY_MANAGED_CUSTOMER_SYSTEMS.has(sourceSystem || "")) {
       throw new BadRequestException(
         "A sincronização externa de clientes não está habilitada para este sistema.",
       );
@@ -498,6 +527,7 @@ export class CustomersService {
           !activeKeys.has(`${item.externalEntityType}|${item.externalEntityId}`),
       );
     const staleIds = staleReferences.map((item) => item.id);
+    let blockedByOpenInstallments = 0;
 
     if (staleIds.length) {
       await this.prisma.partyExternalReference.updateMany({
@@ -520,8 +550,26 @@ export class CustomersService {
               canceledAt: null,
             },
             select: { id: true },
-          });
+        });
         if (!hasAnotherActiveReference) {
+          const openInstallment = await this.prisma.receivableInstallment.findFirst({
+            where: {
+              companyId: company.id,
+              branchCode,
+              status: "OPEN",
+              openAmount: { gt: 0 },
+              canceledAt: null,
+              title: {
+                canceledAt: null,
+                payerPartyId: reference.partyId,
+              },
+            },
+            select: { id: true },
+          });
+          if (openInstallment) {
+            blockedByOpenInstallments += 1;
+            continue;
+          }
           await setPartyRoleActive(this.prisma, {
             companyId: company.id,
             partyId: reference.partyId,
@@ -536,7 +584,8 @@ export class CustomersService {
 
     return {
       synchronizedCustomers: payload.customers.length,
-      inactivatedCustomers: staleIds.length,
+      inactivatedCustomers: staleIds.length - blockedByOpenInstallments,
+      blockedByOpenInstallments,
       message: `${payload.customers.length} cliente(s) sincronizado(s) com o Financeiro.`,
     };
   }

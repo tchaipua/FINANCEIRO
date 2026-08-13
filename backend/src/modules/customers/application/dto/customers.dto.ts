@@ -139,6 +139,14 @@ export class ChangeCustomerStatusDto {
   sourceTenantId!: string;
 
   @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)

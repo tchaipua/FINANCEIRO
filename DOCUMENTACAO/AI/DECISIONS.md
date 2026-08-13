@@ -491,8 +491,9 @@ Decisão:
 - código, nome, documento, endereço e contatos são espelhos somente leitura recebidos da origem;
 - a sincronização da origem informa todas as filiais ativas e desativa logicamente no espelho aquelas removidas da lista;
 - parâmetros financeiros, de estoque e comerciais podem ser editados na interface do Financeiro;
-- toda alteração desses parâmetros é enviada primeiro ao sistema de origem pelo contrato `PATCH /integrations/financeiro/company-branch-parameters`;
-- o Financeiro atualiza seu espelho somente depois da confirmação da origem e grava auditoria append-only nos dois sistemas;
+- alterações de parâmetros sob autoridade da origem são enviadas primeiro pelo contrato `PATCH /integrations/financeiro/company-branch-parameters`;
+- parâmetros exclusivos do Financeiro, incluindo a classificação de estoque por filial, são persistidos localmente sem acionar o callback legado da origem;
+- o Financeiro atualiza os parâmetros da origem somente depois da confirmação dela e grava auditoria append-only; alterações exclusivas recebem auditoria local;
 - cada novo sistema chamador configura sua própria URL e chave técnica por `sourceSystem` e implementa o mesmo contrato.
 
 Motivo:

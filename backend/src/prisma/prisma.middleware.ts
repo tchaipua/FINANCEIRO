@@ -226,11 +226,17 @@ export function branchMiddleware(): Prisma.Middleware {
     const mayWriteSharedBranch =
       ADMIN_SHARED_BRANCH_WRITE_MODELS.has(model) &&
       scope.scopes.includes("FINANCE_ADMIN");
-    const scopeFilter = buildScopeFilter(
-      model,
-      scope,
-      isReadAction || mayWriteSharedBranch,
-    );
+    const isCompanyWideBranchDirectoryRead =
+      model === "CompanyBranch" &&
+      isReadAction &&
+      context.companyWideBranchDirectoryRead === true;
+    const scopeFilter = isCompanyWideBranchDirectoryRead
+      ? { companyId: scope.companyId }
+      : buildScopeFilter(
+          model,
+          scope,
+          isReadAction || mayWriteSharedBranch,
+        );
     if (Object.keys(scopeFilter).length === 0) {
       throw new ForbiddenException(
         `O modelo ${model} não possui uma regra explícita de isolamento.`,

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { decryptSecret, encryptSecret } from "../../../common/secret-crypto.utils";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import { normalizeDigits, normalizeText } from "../../../common/finance-core.utils";
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import { hasAuthenticatedFinanceScope } from "../../../common/finance-context";
@@ -444,6 +445,7 @@ export class FiscalCertificatesService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
+    assertInactivationConfirmation(payload);
 
     const updated = await this.prisma.fiscalCertificate.update({
       where: { id: certificate.id },

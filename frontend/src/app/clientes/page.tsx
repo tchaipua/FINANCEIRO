@@ -4,6 +4,7 @@ import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/tru
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -416,7 +417,7 @@ ORDER BY PA.name ASC;`,
     }
   }
 
-  async function changeStatus() {
+  async function changeStatus(password = '', reason = '') {
     if (!statusCustomer || !runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
     setSaving(true);
     setErrorMessage(null);
@@ -429,6 +430,8 @@ ORDER BY PA.name ASC;`,
           sourceTenantId: runtimeContext.sourceTenantId,
           sourceBranchCode: runtimeContext.sourceBranchCode,
           requestedBy: runtimeContext.cashierUserId || 'OPERADOR_FINANCEIRO',
+          password,
+          reason,
         }),
       });
       setSuccessMessage(
@@ -631,7 +634,7 @@ ORDER BY PA.name ASC;`,
                                 title={customer.status === 'ACTIVE' ? 'Inativar cliente' : 'Reativar cliente'}
                                 aria-label={`${customer.status === 'ACTIVE' ? 'Inativar' : 'Reativar'} cliente ${customer.name}`}
                               >
-                                {customer.status === 'ACTIVE' ? '⊘' : '↺'}
+                                {customer.status === 'ACTIVE' ? <i className="bi bi-x-octagon" aria-hidden="true" /> : '↺'}
                               </button>
                             </>
                           ) : null}
@@ -653,7 +656,7 @@ ORDER BY PA.name ASC;`,
                                 title="Inativação será configurada na próxima etapa"
                                 aria-label={`Inativar cliente ${customer.name} — em preparação`}
                               >
-                                ×
+                                <i className="bi bi-x-octagon" aria-hidden="true" />
                               </button>
                             </>
                           ) : null}
@@ -890,8 +893,24 @@ ORDER BY PA.name ASC;`,
         ) : null}
       </AuditedPopupShell>
 
+      {statusCustomer?.status === 'ACTIVE' ? (
+        <InactivationConfirmationPopup
+          isOpen
+          screenId={CUSTOMER_STATUS_MODAL_ID}
+          title="Inativar cliente"
+          targetName={statusCustomer.name}
+          description="Baixe ou cancele todas as parcelas em aberto antes de inativar o cliente. O histórico financeiro será preservado."
+          brandingName={runtimeContext.companyName}
+          logoUrl={runtimeContext.logoUrl}
+          onClose={() => setStatusCustomer(null)}
+          onConfirm={(password, reason) => changeStatus(password, reason)}
+          isSaving={saving}
+          auditText="Confirmação obrigatória de senha e motivo antes de inativar um cliente no Financeiro."
+        />
+      ) : null}
+
       <AuditedPopupShell
-        isOpen={Boolean(statusCustomer)}
+        isOpen={Boolean(statusCustomer && statusCustomer.status !== 'ACTIVE')}
         screenId={CUSTOMER_STATUS_MODAL_ID}
         title={statusCustomer?.status === 'ACTIVE' ? 'Inativar cliente' : 'Reativar cliente'}
         eyebrow="Confirmação"

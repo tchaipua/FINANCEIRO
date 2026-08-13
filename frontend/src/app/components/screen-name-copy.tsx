@@ -598,13 +598,14 @@ export default function ScreenNameCopy({
   }, []);
 
   const handleCopy = useCallback(async () => {
+    // A abertura da auditoria não deve ficar aguardando uma permissão de
+    // clipboard, que pode ser bloqueada por navegadores embutidos.
+    setIsAuditOpen(true);
     try {
       const copied = await copyTextToClipboard(screenId);
       setStatus(copied ? 'copied' : 'error');
-      setIsAuditOpen(true);
     } catch {
       setStatus('error');
-      setIsAuditOpen(true);
     } finally {
       resetStatus();
     }

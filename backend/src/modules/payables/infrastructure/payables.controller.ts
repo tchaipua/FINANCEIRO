@@ -4,6 +4,7 @@ import { PayablesService } from "../application/payables.service";
 import {
   ApprovePayableInvoiceImportDto,
   CancelPayableInvoiceImportDto,
+  ChangePayableSupplierStatusDto,
   GetPayableInvoiceImportDto,
   ImportInvoiceXmlDto,
   ListPayableInvoiceImportsDto,
@@ -31,6 +32,24 @@ export class PayablesController {
   })
   listSuppliers(@Query() query: ListPayableSuppliersDto) {
     return this.payablesService.listSuppliers(query);
+  }
+
+  @Post("suppliers/:supplierId/activate")
+  @ApiOperation({ summary: "Reativa um fornecedor do contas a pagar" })
+  activateSupplier(
+    @Param("supplierId") supplierId: string,
+    @Body() payload: ChangePayableSupplierStatusDto,
+  ) {
+    return this.payablesService.activateSupplier(supplierId, payload);
+  }
+
+  @Post("suppliers/:supplierId/inactivate")
+  @ApiOperation({ summary: "Inativa logicamente um fornecedor do contas a pagar" })
+  inactivateSupplier(
+    @Param("supplierId") supplierId: string,
+    @Body() payload: ChangePayableSupplierStatusDto,
+  ) {
+    return this.payablesService.inactivateSupplier(supplierId, payload);
   }
 
   @Get("invoice-imports/:importId")

@@ -6,6 +6,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
@@ -988,6 +989,7 @@ export default function FinanceiroBanksPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCertificatePasswordVisible, setIsCertificatePasswordVisible] = useState(false);
   const [actionBankId, setActionBankId] = useState<string | null>(null);
+  const [pendingBankInactivation, setPendingBankInactivation] = useState<BankItem | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [bankUpdateSuccessOpen, setBankUpdateSuccessOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1557,7 +1559,12 @@ export default function FinanceiroBanksPage() {
     }
   }
 
-  async function handleChangeStatus(bank: BankItem, nextStatus: 'ACTIVE' | 'INACTIVE') {
+  async function handleChangeStatus(
+    bank: BankItem,
+    nextStatus: 'ACTIVE' | 'INACTIVE',
+    password = '',
+    reason = '',
+  ) {
     if (!scopeReady) {
       setError('Informe o sistema e o tenant da empresa antes de alterar o status do banco.');
       return;
@@ -1578,6 +1585,8 @@ export default function FinanceiroBanksPage() {
           body: JSON.stringify({
             sourceSystem: normalizeUppercase(scope.sourceSystem),
             sourceTenantId: normalizeUppercase(scope.sourceTenantId),
+            password,
+            reason,
           }),
         },
       );
@@ -1594,6 +1603,7 @@ export default function FinanceiroBanksPage() {
           ? 'Banco reativado com sucesso.'
           : 'Banco inativado com sucesso.',
       );
+      if (nextStatus === 'INACTIVE') setPendingBankInactivation(null);
       await loadBanks();
     } catch (currentError) {
       setError(
@@ -2646,12 +2656,13 @@ export default function FinanceiroBanksPage() {
                           title={bank.status === 'ACTIVE' ? 'Inativar banco' : 'Ativar banco'}
                           aria-label={bank.status === 'ACTIVE' ? 'Inativar banco' : 'Ativar banco'}
                           disabled={actionBankId === bank.id}
-                          onClick={() =>
-                            void handleChangeStatus(
-                              bank,
-                              bank.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-                            )
-                          }
+                          onClick={() => {
+                            if (bank.status === 'ACTIVE') {
+                              setPendingBankInactivation(bank);
+                            } else {
+                              void handleChangeStatus(bank, 'ACTIVE');
+                            }
+                          }}
                           className={`${gridActionButtonClass} ${
                             bank.status === 'ACTIVE'
                               ? gridActionToneClass.rose
@@ -2659,9 +2670,7 @@ export default function FinanceiroBanksPage() {
                           }`}
                         >
                           {bank.status === 'ACTIVE' ? (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-12.728 12.728M6 6l12 12" />
-                            </svg>
+                            <i className="bi bi-x-octagon" aria-hidden="true" />
                           ) : (
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -2772,6 +2781,18 @@ export default function FinanceiroBanksPage() {
               );
             }
           }}
+        />
+        <InactivationConfirmationPopup
+          isOpen={Boolean(pendingBankInactivation)}
+          screenId="POPUP_FINANCEIRO_BANCOS_INATIVAR"
+          title="Inativar banco"
+          targetName={pendingBankInactivation?.bankName || ''}
+          description="Ao inativar o banco, o histórico financeiro será preservado e novos lançamentos deixarão de utilizá-lo."
+          brandingName={companyDisplayName}
+          logoUrl={runtimeContext.logoUrl}
+          onClose={() => setPendingBankInactivation(null)}
+          onConfirm={(password, reason) => pendingBankInactivation ? handleChangeStatus(pendingBankInactivation, 'INACTIVE', password, reason) : undefined}
+          isSaving={Boolean(pendingBankInactivation && actionBankId === pendingBankInactivation.id)}
         />
         </>
       ) : null}

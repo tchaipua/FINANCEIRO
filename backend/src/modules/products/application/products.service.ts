@@ -9,6 +9,7 @@ import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
 import { ensureDefaultCompanyBranch } from "../../../common/company-branches";
 import { getFinanceContext } from "../../../common/finance-context";
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import {
   ChangeProductStatusDto,
   CreateManualStockMovementDto,
@@ -34,6 +35,7 @@ type NormalizedProductPayload = {
   allowsNegativeStock: boolean;
   currentStock: number;
   minimumStock: number;
+  maximumStock: number;
   purchasePrice: number | null;
   salePrice: number | null;
   ncmCode: string | null;
@@ -74,6 +76,7 @@ type BranchInventoryConfig = {
   stockExpirationControlMode: BranchStockParameterMode;
   stockGridControlMode: BranchStockParameterMode;
   stockNegativeControlMode: BranchStockParameterMode;
+  notifyMinimumStockOnMovement: boolean;
 };
 
 type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
@@ -181,6 +184,8 @@ export class ProductsService {
       stockNegativeControlMode: this.normalizeBranchStockMode(
         branch?.stockNegativeControlMode,
       ),
+      notifyMinimumStockOnMovement:
+        branch?.notifyMinimumStockOnMovement === true,
     };
   }
 
@@ -212,6 +217,8 @@ export class ProductsService {
       stockNegativeControlMode: this.normalizeBranchStockMode(
         branch?.stockNegativeControlMode,
       ),
+      notifyMinimumStockOnMovement:
+        branch?.notifyMinimumStockOnMovement === true,
     };
   }
 
@@ -360,6 +367,27 @@ export class ProductsService {
       );
     }
 
+    const currentStock = this.normalizeStockQuantity(
+      payload.currentStock,
+      allowFraction,
+      "O estoque atual",
+    );
+    const minimumStock = this.normalizeStockQuantity(
+      payload.minimumStock,
+      allowFraction,
+      "O estoque mínimo",
+    );
+    const maximumStock = this.normalizeStockQuantity(
+      payload.maximumStock,
+      allowFraction,
+      "O estoque máximo",
+    );
+    if (maximumStock > 0 && maximumStock < minimumStock) {
+      throw new BadRequestException(
+        "O estoque máximo deve ser maior ou igual ao estoque mínimo.",
+      );
+    }
+
     return {
       branchCode: branchConfig.branchCode,
       name: normalizedName,
@@ -374,16 +402,9 @@ export class ProductsService {
       usesLotControl: tracksInventory ? usesLotControl : false,
       usesExpirationControl: tracksInventory ? usesExpirationControl : false,
       allowsNegativeStock: tracksInventory ? allowsNegativeStock : false,
-      currentStock: this.normalizeStockQuantity(
-        payload.currentStock,
-        allowFraction,
-        "O estoque atual",
-      ),
-      minimumStock: this.normalizeStockQuantity(
-        payload.minimumStock,
-        allowFraction,
-        "O estoque mínimo",
-      ),
+      currentStock,
+      minimumStock,
+      maximumStock,
       purchasePrice: this.normalizeOptionalNumber(payload.purchasePrice),
       salePrice: this.normalizeOptionalNumber(payload.salePrice),
       ncmCode: normalizeDigits(payload.ncmCode) || normalizeText(payload.ncmCode),
@@ -441,7 +462,13 @@ export class ProductsService {
     return "OK";
   }
 
-  private mapProduct(product: any, branchConfig?: BranchInventoryConfig) {
+  private mapProduct(
+    product: any,
+    branchConfig?: BranchInventoryConfig,
+    reservedStock = 0,
+  ) {
+    const currentStock = roundMoney(product.currentStock || 0);
+    const committedStock = roundMoney(Math.max(0, reservedStock));
     return {
       id: product.id,
       companyId: product.companyId,
@@ -461,8 +488,11 @@ export class ProductsService {
       usesLotControl: Boolean(product.usesLotControl),
       usesExpirationControl: Boolean(product.usesExpirationControl),
       allowsNegativeStock: Boolean(product.allowsNegativeStock),
-      currentStock: roundMoney(product.currentStock || 0),
+      currentStock,
+      committedStock,
+      availableStock: roundMoney(currentStock - committedStock),
       minimumStock: roundMoney(product.minimumStock || 0),
+      maximumStock: roundMoney(product.maximumStock || 0),
       purchasePrice:
         product.purchasePrice === null || product.purchasePrice === undefined
           ? null
@@ -869,12 +899,38 @@ export class ProductsService {
           stockNegativeControlMode: this.normalizeBranchStockMode(
             branch.stockNegativeControlMode,
           ),
+          notifyMinimumStockOnMovement:
+            branch.notifyMinimumStockOnMovement === true,
         },
       ]),
     );
 
+    const requestedBranchCode =
+      Number.isInteger(query.sourceBranchCode) && Number(query.sourceBranchCode) >= 0
+        ? Number(query.sourceBranchCode)
+        : this.currentBranchCode();
+    const balances = await this.prisma.productStockBalance.findMany({
+      where: {
+        companyId: company.id,
+        branchCode: requestedBranchCode,
+        canceledAt: null,
+      },
+      select: { productId: true, reservedQuantity: true },
+    });
+    const reservedByProduct = balances.reduce((totals, balance) => {
+      totals.set(
+        balance.productId,
+        roundMoney((totals.get(balance.productId) || 0) + Number(balance.reservedQuantity || 0)),
+      );
+      return totals;
+    }, new Map<string, number>());
+
     return products.map((product) =>
-      this.mapProduct(product, branchConfigs.get(product.branchCode)),
+      this.mapProduct(
+        product,
+        branchConfigs.get(product.branchCode),
+        reservedByProduct.get(product.id) || 0,
+      ),
     );
   }
 
@@ -991,6 +1047,10 @@ export class ProductsService {
       payload.sourceTenantId,
     );
     const branchCode = this.currentBranchCode() || DEFAULT_BRANCH_CODE;
+    const branchConfig = await this.loadBranchConfigByCode(
+      company.id,
+      branchCode,
+    );
 
     if (product.status !== "ACTIVE" || product.canceledAt) {
       throw new BadRequestException("O produto precisa estar ativo para movimentar o estoque.");
@@ -1163,9 +1223,19 @@ export class ProductsService {
       });
     });
 
+    const minimumStockReached =
+      branchConfig.notifyMinimumStockOnMovement &&
+      Number(createdMovement.resultingStock || 0) <=
+        Number(product.minimumStock || 0);
+    const minimumStockWarning = minimumStockReached
+      ? `Atenção: o produto ${product.name} atingiu o estoque mínimo. Saldo atual: ${roundMoney(createdMovement.resultingStock || 0)}; mínimo: ${roundMoney(product.minimumStock || 0)}.`
+      : null;
+
     return {
       ...this.mapStockMovement(createdMovement),
-      message: `${movementType === "ENTRY" ? "Entrada" : "Saída"} manual registrada com sucesso.`,
+      minimumStockReached,
+      minimumStockWarning,
+      message: `${movementType === "ENTRY" ? "Entrada" : "Saída"} manual registrada com sucesso.${minimumStockWarning ? ` ${minimumStockWarning}` : ""}`,
     };
   }
 
@@ -1276,6 +1346,7 @@ export class ProductsService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
+    assertInactivationConfirmation(payload);
 
     const updatedProduct = await this.prisma.product.update({
       where: { id: product.id },

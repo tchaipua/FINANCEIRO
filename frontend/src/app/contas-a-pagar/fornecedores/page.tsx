@@ -7,8 +7,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { getJson } from '@/app/lib/api';
+import { getJson, requestJson } from '@/app/lib/api';
 import {
   formatDateLabel,
   getFriendlyRequestErrorMessage,
@@ -96,7 +97,7 @@ FILTROS APLICADOS AGORA:
 
 OBSERVACAO SOBRE O FILTRO DA EMPRESA:
 - CO.sourceSystem e CO.sourceTenantId isolam os dados da empresa/sistema de origem
-- fornecedores cancelados logicamente nao aparecem no grid`;
+- fornecedores ativos e inativos sao exibidos conforme o filtro selecionado`;
 }
 
 type ExportColumnKey =
@@ -179,6 +180,8 @@ export default function FinanceiroFornecedoresPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingSupplierInactivation, setPendingSupplierInactivation] = useState<PayableSupplierSummary | null>(null);
+  const [supplierActionId, setSupplierActionId] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
   const [exportColumns, setExportColumns] = useState<Record<ExportColumnKey, boolean>>(
@@ -319,6 +322,40 @@ export default function FinanceiroFornecedoresPage() {
     setAppliedSearch(searchInput.trim());
     setPage(1);
   }, [searchInput]);
+
+  const handleSupplierStatus = useCallback(async (
+    supplier: PayableSupplierSummary,
+    action: 'activate' | 'inactivate',
+    password = '',
+    reason = '',
+  ) => {
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
+    setSupplierActionId(supplier.id);
+    setErrorMessage(null);
+    try {
+      await requestJson(`/payables/suppliers/${supplier.id}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          sourceSystem: runtimeContext.sourceSystem,
+          sourceTenantId: runtimeContext.sourceTenantId,
+          requestedBy: runtimeContext.cashierDisplayName || runtimeContext.userRole || 'FINANCEIRO',
+          password,
+          reason,
+        }),
+        fallbackMessage: action === 'inactivate'
+          ? 'Não foi possível inativar o fornecedor.'
+          : 'Não foi possível reativar o fornecedor.',
+      });
+      setPendingSupplierInactivation(null);
+      await loadItems();
+    } catch (error) {
+      setErrorMessage(getFriendlyRequestErrorMessage(error, action === 'inactivate'
+        ? 'Não foi possível inativar o fornecedor.'
+        : 'Não foi possível reativar o fornecedor.'));
+    } finally {
+      setSupplierActionId(null);
+    }
+  }, [loadItems, runtimeContext]);
 
   function openColumnFilter(columnKey: SupplierColumnFilterKey) {
     setColumnFilterDrafts((current) => ({
@@ -492,17 +529,18 @@ export default function FinanceiroFornecedoresPage() {
                         {renderColumnHeader(column, index)}
                       </th>
                     ))}
+                    <th className="sticky top-0 z-20 bg-slate-50 px-4 py-3 text-right">Ações</th>
                   </tr>
                   {activeFilterColumn ? (
                     <tr aria-hidden="true">
-                      <th colSpan={EXPORT_COLUMNS.length} className="h-56 bg-white p-0" />
+                      <th colSpan={EXPORT_COLUMNS.length + 1} className="h-56 bg-white p-0" />
                     </tr>
                   ) : null}
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {loading ? (
                     <tr>
-                      <td colSpan={EXPORT_COLUMNS.length} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                      <td colSpan={EXPORT_COLUMNS.length + 1} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                         Carregando fornecedores...
                       </td>
                     </tr>
@@ -535,11 +573,36 @@ export default function FinanceiroFornecedoresPage() {
                         <td className="px-4 py-4 align-top text-sm font-black text-slate-900">{item.invoiceImportsCount}</td>
                         <td className="px-4 py-4 align-top text-sm font-black text-slate-900">{item.payableTitlesCount}</td>
                         <td className="px-4 py-4 align-top text-sm font-semibold text-slate-700">{formatDateLabel(item.updatedAt)}</td>
+                        <td className="px-4 py-4 text-right align-top">
+                          {item.status === 'ACTIVE' ? (
+                            <button
+                              type="button"
+                              title="Inativar fornecedor"
+                              aria-label={`Inativar fornecedor ${item.legalName}`}
+                              disabled={supplierActionId === item.id}
+                              onClick={() => setPendingSupplierInactivation(item)}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <i className="bi bi-x-octagon" aria-hidden="true" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              title="Reativar fornecedor"
+                              aria-label={`Reativar fornecedor ${item.legalName}`}
+                              disabled={supplierActionId === item.id}
+                              onClick={() => void handleSupplierStatus(item, 'activate')}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              ↺
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={EXPORT_COLUMNS.length} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
+                      <td colSpan={EXPORT_COLUMNS.length + 1} className="px-4 py-8 text-center text-sm font-semibold text-slate-500">
                         Nenhum fornecedor encontrado com os filtros atuais.
                       </td>
                     </tr>
@@ -619,6 +682,21 @@ export default function FinanceiroFornecedoresPage() {
           setExportColumns(config.selectedColumns);
           setIsExportModalOpen(false);
         }}
+      />
+
+      <InactivationConfirmationPopup
+        isOpen={Boolean(pendingSupplierInactivation)}
+        screenId="POPUP_FINANCEIRO_CONTAS_A_PAGAR_FORNECEDORES_INATIVAR"
+        title="Inativar fornecedor"
+        targetName={pendingSupplierInactivation?.legalName || ''}
+        description="O fornecedor só poderá ser inativado depois que todas as parcelas forem baixadas ou canceladas."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setPendingSupplierInactivation(null)}
+        onConfirm={(password, reason) => pendingSupplierInactivation
+          ? handleSupplierStatus(pendingSupplierInactivation, 'inactivate', password, reason)
+          : undefined}
+        isSaving={Boolean(pendingSupplierInactivation && supplierActionId === pendingSupplierInactivation.id)}
       />
     </div>
   );

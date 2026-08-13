@@ -2,7 +2,7 @@
 
 import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
@@ -16,6 +16,7 @@ import {
   type GridExportFormat,
 } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { formatBrazilTaxId } from '@/app/lib/brazil-tax-id';
 import { withFinanceBasePath } from '@/app/lib/public-path';
 import { buildFinanceApiQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
@@ -46,15 +47,18 @@ type CompanyFinancialFormState = {
   penaltyGracePeriod: string;
 };
 
+type StockClassificationMode = 'NONE' | 'GROUP_ONLY' | 'GROUP_AND_SUBGROUP';
+
 type CompanyBranchItem = {
   id: string;
   branchCode: number;
   name: string;
+  fiscalDocument?: string | null;
   isActive: boolean;
   isDefault: boolean;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
-  stockClassificationMode?: 'GROUP_ONLY' | 'GROUP_AND_SUBGROUP';
+  stockClassificationMode?: StockClassificationMode;
   allowSaleUnitPriceEdit?: boolean;
   allowSaleItemDiscount?: boolean;
 };
@@ -65,7 +69,7 @@ type CompanyBranchFormState = {
   name: string;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
-  stockClassificationMode: 'GROUP_ONLY' | 'GROUP_AND_SUBGROUP';
+  stockClassificationMode: StockClassificationMode;
   allowSaleUnitPriceEdit: boolean;
   allowSaleItemDiscount: boolean;
 };
@@ -73,11 +77,7 @@ type CompanyBranchFormState = {
 type BranchGridColumnKey =
   | 'branchCode'
   | 'name'
-  | 'status'
-  | 'inventoryControlType'
-  | 'quantityPrecision'
-  | 'stockClassificationMode'
-  | 'isDefault';
+  ;
 
 type BranchGridSort = {
   key: BranchGridColumnKey | null;
@@ -101,6 +101,10 @@ type CompanyGridConfig = {
 
 const EMBEDDED_COMPANY_SUCCESS_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_EMPRESA_SALVO_SUCESSO';
 const EMBEDDED_PARENT_COMPANY_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_EMPRESA';
+const COMPANY_BRANCH_SETTINGS_SCREEN_ID =
+  'POPUP_PRINCIPAL_FINANCEIRO_EMPRESA_PARAMETROS_FILIAL';
+const COMPANY_BRANCH_DETAILS_SCREEN_ID =
+  'POPUP_PRINCIPAL_FINANCEIRO_EMPRESA_FILIAL_DADOS';
 const EMPRESAS_ORIGIN_TEXT =
   'Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\empresas\\page.tsx';
 
@@ -233,16 +237,11 @@ const emptyBranchForm: CompanyBranchFormState = {
 
 const BRANCH_GRID_COLUMNS: GridColumnDefinition<CompanyBranchItem, BranchGridColumnKey>[] = [
   { key: 'branchCode', label: 'Código', getValue: (item) => String(item.branchCode) },
-  { key: 'name', label: 'Filial', getValue: (item) => item.name },
-  { key: 'status', label: 'Status', getValue: (item) => (item.isActive !== false ? 'ATIVO' : 'INATIVO') },
-  { key: 'inventoryControlType', label: 'Tipo estoque', getValue: (item) => getInventoryControlTypeLabel(item.inventoryControlType) },
-  { key: 'quantityPrecision', label: 'Quantidade', getValue: (item) => getQuantityPrecisionLabel(item.quantityPrecision) },
   {
-    key: 'stockClassificationMode',
-    label: 'Classificação',
-    getValue: (item) => item.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? 'GRUPO + SUBGRUPO' : 'GRUPO',
+    key: 'name',
+    label: 'Filial',
+    getValue: (item) => `${item.name} ${formatBrazilTaxId(item.fiscalDocument)}`,
   },
-  { key: 'isDefault', label: 'Padrão', getValue: (item) => (item.isDefault ? 'SIM' : 'NÃO') },
 ];
 
 const EMPTY_BRANCH_GRID_FILTERS = BRANCH_GRID_COLUMNS.reduce((filters, column) => {
@@ -257,7 +256,12 @@ function buildBranchForm(branch: CompanyBranchItem): CompanyBranchFormState {
     name: branch.name,
     inventoryControlType: branch.inventoryControlType || 'TRADITIONAL',
     quantityPrecision: branch.quantityPrecision || 'INTEGER_ONLY',
-    stockClassificationMode: branch.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? 'GROUP_AND_SUBGROUP' : 'GROUP_ONLY',
+    stockClassificationMode:
+      branch.stockClassificationMode === 'NONE'
+        ? 'NONE'
+        : branch.stockClassificationMode === 'GROUP_AND_SUBGROUP'
+          ? 'GROUP_AND_SUBGROUP'
+          : 'GROUP_ONLY',
     allowSaleUnitPriceEdit: branch.allowSaleUnitPriceEdit !== false,
     allowSaleItemDiscount: branch.allowSaleItemDiscount !== false,
   };
@@ -271,6 +275,17 @@ function getInventoryControlTypeLabel(value: CompanyBranchItem['inventoryControl
       return 'LOTE';
     default:
       return 'TRADICIONAL';
+  }
+}
+
+function getStockClassificationModeLabel(value?: StockClassificationMode) {
+  switch (value) {
+    case 'NONE':
+      return 'NÃO CONTROLAR POR GRUPO';
+    case 'GROUP_AND_SUBGROUP':
+      return 'GRUPO + SUBGRUPO';
+    default:
+      return 'GRUPO';
   }
 }
 
@@ -799,34 +814,43 @@ function CompanyFinancialSettingsModal({
 
 function CompanyBranchSettingsModal({
   company,
+  brandingLogoUrl,
   branches,
   form,
   isOpen,
   isLoading,
   isSaving,
+  readOnly,
   error,
   onClose,
   onEdit,
+  onOpenCentral,
   onChange,
   onSave,
 }: {
   company: CompanyItem | null;
+  brandingLogoUrl: string | null;
   branches: CompanyBranchItem[];
   form: CompanyBranchFormState;
   isOpen: boolean;
   isLoading: boolean;
   isSaving: boolean;
+  readOnly?: boolean;
   error: string | null;
   onClose: () => void;
   onEdit: (branch: CompanyBranchItem) => void;
+  onOpenCentral: (branch: CompanyBranchItem) => void;
   onChange: (field: keyof CompanyBranchFormState, value: string | boolean) => void;
   onSave: () => void;
 }) {
+  const isReadOnly = readOnly === true;
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'STOCK' | 'SALES'>('OVERVIEW');
 
   useEffect(() => {
     if (!isOpen) {
       setIsConfirmationOpen(false);
+      setActiveTab('OVERVIEW');
     }
   }, [isOpen]);
 
@@ -834,18 +858,67 @@ function CompanyBranchSettingsModal({
     return null;
   }
 
+  const selectedBranchCode = Number(form.branchCode) || 0;
+  const selectedBranch = branches.find((branch) => branch.id === form.id) || null;
+  const branchSettingsAuditText = `--- LOGICA DA TELA ---
+${isReadOnly ? 'Popup de consulta dos dados da filial sincronizada pelo sistema de origem.' : 'Popup para selecionar uma filial herdada do sistema de origem e manter seus parâmetros operacionais de estoque e venda.'}
+
+TABELAS PRINCIPAIS:
+- companies (CO) - empresa financeira vinculada ao sistema de origem
+- company_branches (CB) - filiais espelhadas e seus parâmetros operacionais
+
+RELACIONAMENTOS:
+- company_branches.companyId = companies.id
+
+FILTROS APLICADOS AGORA:
+- companyId = ${formatAuditValue(company.id)} (${formatAuditValue(company.name)})
+- branchCode = ${formatAuditValue(selectedBranchCode)} (${formatAuditValue(form.name)})
+- somente empresa e filial sem cancelamento lógico
+- filiais exibidas em ordem recebida da integração de origem`;
+  const branchSettingsSqlText = `SELECT
+  CB.id,
+  CB.branchCode,
+  CB.name,
+  CB.fiscalDocument,
+  CB.inventoryControlType,
+  CB.quantityPrecision,
+  CB.stockClassificationMode,
+  CB.allowSaleUnitPriceEdit,
+  CB.allowSaleItemDiscount,
+  CB.isDefault,
+  CB.isActive
+FROM company_branches CB
+INNER JOIN companies CO
+  ON CO.id = CB.companyId
+ AND CO.canceledAt IS NULL
+WHERE CB.companyId = ${toSqlLiteral(company.id)}
+  AND CB.branchCode = ${selectedBranchCode}
+  AND CB.canceledAt IS NULL
+ORDER BY CB.branchCode ASC;`;
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-blue-900/30 bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-5 text-white">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.28em] text-cyan-200">
-              Parâmetros da filial
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white p-1 shadow-lg">
+              <img
+                src={brandingLogoUrl || withFinanceBasePath('/logo-msinfor.jpg')}
+                alt={`Logotipo de ${company.name}`}
+                className="h-full w-full object-contain"
+              />
             </div>
-            <h2 className="mt-1 text-2xl font-black text-white">{company.name}</h2>
-            <p className="mt-2 text-sm font-medium text-blue-100">
-              Configure estoque e regras comerciais. As alterações serão confirmadas no sistema de origem.
-            </p>
+            <div className="min-w-0">
+              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-cyan-200">
+                {isReadOnly ? 'Dados da filial' : 'Parâmetros da filial'}
+              </div>
+              <h2 className="mt-1 truncate text-2xl font-black text-white">
+                {form.name || company.name}
+              </h2>
+              <p className="mt-1 text-sm font-medium text-blue-100">
+                CNPJ: {formatBrazilTaxId(selectedBranch?.fiscalDocument, 'NÃO INFORMADO')}
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -858,66 +931,66 @@ function CompanyBranchSettingsModal({
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-6 lg:grid-cols-[1fr_1fr]">
-          <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-                  Filiais herdadas da origem
-                </div>
-                <div className="mt-1 text-xs font-medium text-slate-500">
-                  {isLoading ? 'Carregando...' : `${branches.length} filial(is)`}
-                </div>
-              </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-6 py-3" role="tablist" aria-label="Abas das configurações da filial">
+          {([
+            ['OVERVIEW', 'Dados da filial'],
+            ['STOCK', 'Estoque'],
+            ['SALES', 'Regras comerciais'],
+          ] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-xl px-4 py-2 text-xs font-black uppercase tracking-[0.14em] transition ${
+                activeTab === tab
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+              Carregando dados da filial...
             </div>
+          ) : null}
 
-            {!isLoading && branches.length === 0 ? (
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
-                Cadastre a filial no sistema de origem para que ela seja sincronizada automaticamente.
-              </div>
-            ) : null}
-
-            <div className="mt-4 space-y-3">
-              {branches.map((branch) => (
-                <button
-                  key={branch.id}
-                  type="button"
-                  onClick={() => onEdit(branch)}
-                  className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                    form.id === branch.id
-                      ? 'border-blue-300 bg-blue-50 text-blue-900'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-black uppercase tracking-[0.12em]">
-                      {branch.branchCode} - {branch.name}
-                    </div>
-                    {branch.isDefault ? (
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
-                        Padrão
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    {getInventoryControlTypeLabel(branch.inventoryControlType)} ·{' '}
-                    {getQuantityPrecisionLabel(branch.quantityPrecision)} ·{' '}
-                    {branch.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? 'GRUPO + SUBGRUPO' : 'GRUPO'} · PREÇO{' '}
-                    {branch.allowSaleUnitPriceEdit === false ? 'BLOQUEADO' : 'EDITÁVEL'} ·
-                    DESCONTO{' '}
-                    {branch.allowSaleItemDiscount === false ? 'BLOQUEADO' : 'LIBERADO'}
-                  </div>
-                </button>
-              ))}
+          {!isLoading && branches.length === 0 ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+              Cadastre a filial no sistema de origem para que ela seja sincronizada automaticamente.
             </div>
-          </section>
+          ) : null}
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5">
-            <div className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-slate-600">
-              Configuração da filial
-            </div>
+          {!isLoading && branches.length > 1 ? (
+            <label className="mb-5 block">
+              <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                Filial selecionada
+              </span>
+              <select
+                value={form.id || ''}
+                onChange={(event) => {
+                  const nextBranch = branches.find((branch) => branch.id === event.target.value);
+                  if (nextBranch) onEdit(nextBranch);
+                }}
+                className={FINANCE_GRID_PAGE_LAYOUT.input}
+              >
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.branchCode} - {branch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
-            <div className="grid gap-4">
+          {activeTab === 'OVERVIEW' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Código da filial
@@ -929,7 +1002,6 @@ function CompanyBranchSettingsModal({
                   inputMode="numeric"
                 />
               </label>
-
               <label className="block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Nome da filial
@@ -940,7 +1012,32 @@ function CompanyBranchSettingsModal({
                   className={`${FINANCE_GRID_PAGE_LAYOUT.input} cursor-not-allowed bg-slate-100 text-slate-500`}
                 />
               </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                  CNPJ
+                </span>
+                <input
+                  value={formatBrazilTaxId(selectedBranch?.fiscalDocument, 'NÃO INFORMADO')}
+                  readOnly
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} cursor-not-allowed bg-slate-100 text-slate-500`}
+                />
+              </label>
+              <div className="flex items-end gap-2 pb-1">
+                <span className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-black uppercase tracking-[0.14em] ${selectedBranch?.isActive !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                  <span className={`h-2.5 w-2.5 rounded-full ${selectedBranch?.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  {selectedBranch?.isActive !== false ? 'ATIVA' : 'INATIVA'}
+                </span>
+                {selectedBranch?.isDefault ? (
+                  <span className="rounded-full bg-blue-100 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-blue-700">
+                    FILIAL PADRÃO
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
+          {activeTab === 'STOCK' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Tipo controle estoque
@@ -948,14 +1045,14 @@ function CompanyBranchSettingsModal({
                 <select
                   value={form.inventoryControlType}
                   onChange={(event) => onChange('inventoryControlType', event.target.value)}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  disabled={isReadOnly}
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} disabled:cursor-not-allowed disabled:bg-slate-100`}
                 >
                   <option value="TRADITIONAL">TRADICIONAL</option>
                   <option value="COLOR_SIZE">COR E NÚMERO</option>
                   <option value="LOT">TRATAR POR LOTE</option>
                 </select>
               </label>
-
               <label className="block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Quantidade do estoque
@@ -963,23 +1060,25 @@ function CompanyBranchSettingsModal({
                 <select
                   value={form.quantityPrecision}
                   onChange={(event) => onChange('quantityPrecision', event.target.value)}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  disabled={isReadOnly}
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} disabled:cursor-not-allowed disabled:bg-slate-100`}
                 >
                   <option value="INTEGER_ONLY">SOMENTE NÚMERO INTEIRO</option>
                   <option value="DECIMAL_ALLOWED">ACEITA QUANTIDADE DECIMAL</option>
                   <option value="PRODUCT_DEFINED">AMBOS, DEFINIR NO PRODUTO</option>
                 </select>
               </label>
-
-              <label className="block">
+              <label className="block sm:col-span-2">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Classificação do estoque
                 </span>
                 <select
                   value={form.stockClassificationMode}
                   onChange={(event) => onChange('stockClassificationMode', event.target.value)}
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  disabled={isReadOnly}
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} disabled:cursor-not-allowed disabled:bg-slate-100`}
                 >
+                  <option value="NONE">NÃO CONTROLAR POR GRUPO</option>
                   <option value="GROUP_ONLY">CONTROLAR SOMENTE POR GRUPO</option>
                   <option value="GROUP_AND_SUBGROUP">CONTROLAR POR GRUPO E SUBGRUPO</option>
                 </select>
@@ -987,58 +1086,84 @@ function CompanyBranchSettingsModal({
                   Parâmetro exclusivo do Financeiro e salvo por filial.
                 </span>
               </label>
+            </div>
+          ) : null}
 
+          {activeTab === 'SALES' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Preço na venda
                 </span>
                 <select
                   value={form.allowSaleUnitPriceEdit ? 'YES' : 'NO'}
-                  onChange={(event) =>
-                    onChange('allowSaleUnitPriceEdit', event.target.value === 'YES')
-                  }
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  onChange={(event) => onChange('allowSaleUnitPriceEdit', event.target.value === 'YES')}
+                  disabled={isReadOnly}
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} disabled:cursor-not-allowed disabled:bg-slate-100`}
                 >
                   <option value="YES">PERMITE ALTERAR O PREÇO</option>
                   <option value="NO">BLOQUEIA PREÇO DO PRODUTO</option>
                 </select>
               </label>
-
               <label className="block">
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                   Desconto por produto
                 </span>
                 <select
                   value={form.allowSaleItemDiscount ? 'YES' : 'NO'}
-                  onChange={(event) =>
-                    onChange('allowSaleItemDiscount', event.target.value === 'YES')
-                  }
-                  className={FINANCE_GRID_PAGE_LAYOUT.input}
+                  onChange={(event) => onChange('allowSaleItemDiscount', event.target.value === 'YES')}
+                  disabled={isReadOnly}
+                  className={`${FINANCE_GRID_PAGE_LAYOUT.input} disabled:cursor-not-allowed disabled:bg-slate-100`}
                 >
                   <option value="YES">PERMITE INFORMAR DESCONTO</option>
                   <option value="NO">NÃO EXIBE DESCONTO NO GRID</option>
                 </select>
               </label>
             </div>
+          ) : null}
 
-            {error ? (
-              <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-                {error}
-              </div>
-            ) : null}
-          </section>
+          {error ? (
+            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              {error}
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <button
+        <footer className="flex shrink-0 items-center gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          {!isReadOnly ? <button
             type="button"
             onClick={() => setIsConfirmationOpen(true)}
             disabled={isSaving}
-            className="rounded-2xl bg-emerald-600 px-5 py-2 text-sm font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-[18px] border-2 border-emerald-500 bg-white px-8 py-2.5 text-sm font-black uppercase text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSaving ? 'Salvando...' : 'Salvar filial'}
-          </button>
-        </div>
+            <svg
+              className="h-[18px] w-[18px]"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 3h12l2 2v16H5z" />
+              <path d="M8 3v6h8V3M8 21v-7h8v7" />
+            </svg>
+            {isSaving ? 'Salvando...' : 'Salvar'}
+          </button> : <>{selectedBranch ? <button
+            type="button"
+            onClick={() => onOpenCentral(selectedBranch)}
+            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-[18px] border-2 border-blue-600 bg-white px-7 py-2.5 text-sm font-black uppercase text-blue-700 shadow-sm transition hover:bg-blue-50"
+          >ALTERAR NA CENTRAL MSINFOR</button> : null}<span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Consulta local somente leitura</span></>}
+          <ScreenNameCopy
+            screenId={isReadOnly ? COMPANY_BRANCH_DETAILS_SCREEN_ID : COMPANY_BRANCH_SETTINGS_SCREEN_ID}
+            compact
+            className="ml-auto min-w-0 flex-1 justify-end"
+            originText={EMPRESAS_ORIGIN_TEXT}
+            auditText={branchSettingsAuditText}
+            sqlText={branchSettingsSqlText}
+          />
+        </footer>
       </div>
 
       {isConfirmationOpen ? (
@@ -1047,29 +1172,40 @@ function CompanyBranchSettingsModal({
           className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-5 backdrop-blur-sm"
         >
           <section className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-5 text-white">
-              <div className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-100">
-                Confirmação
+            <header className="flex items-center gap-4 border-b border-blue-800 bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-6 py-5 text-white">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white p-1 shadow-lg">
+                <img
+                  src={brandingLogoUrl || withFinanceBasePath('/logo-msinfor.jpg')}
+                  alt={`Logotipo de ${company.name}`}
+                  className="h-full w-full object-contain"
+                />
               </div>
-              <h3 className="mt-1 text-2xl font-black">Salvar parâmetros da filial?</h3>
-            </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-200">
+                  Confirmação
+                </div>
+                <h3 className="mt-1 text-2xl font-black">Salvar parâmetros da filial?</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfirmationOpen(false)}
+                aria-label="Fechar confirmação"
+                title="Fechar"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-600 text-xl font-black text-white shadow-lg shadow-rose-900/20 transition hover:bg-rose-700"
+              >
+                ×
+              </button>
+            </header>
             <div className="px-6 py-5">
               <p className="text-sm font-semibold leading-6 text-slate-600">
                 Confirme a gravação das configurações de estoque e regras comerciais da filial{' '}
                 <span className="font-black text-slate-900">{form.branchCode} - {form.name}</span>.
               </p>
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
-                A alteração será enviada ao sistema de origem e aplicada para esta filial.
+                A configuração será aplicada a esta filial e registrada na auditoria.
               </div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setIsConfirmationOpen(false)}
-                className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-100"
-              >
-                Cancelar
-              </button>
+            <div className="flex justify-center border-t border-slate-100 bg-slate-50 px-6 py-4">
               <button
                 type="button"
                 onClick={() => {
@@ -1095,6 +1231,7 @@ function EmbeddedBranchesGrid({
   error,
   brandingName,
   brandingLogoUrl,
+  onView,
   onEdit,
 }: {
   company: CompanyItem | null;
@@ -1103,6 +1240,7 @@ function EmbeddedBranchesGrid({
   error: string | null;
   brandingName: string;
   brandingLogoUrl: string | null;
+  onView: (branch: CompanyBranchItem) => void;
   onEdit: (branch: CompanyBranchItem) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<GridStatusFilterValue>('ACTIVE');
@@ -1232,19 +1370,7 @@ function EmbeddedBranchesGrid({
 
   return (
     <>
-      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex min-h-[520px] flex-col overflow-hidden`}>
-        <div className="border-b border-slate-100 px-6 py-5">
-          <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
-            Filiais da empresa
-          </div>
-          <h2 className="mt-1 text-xl font-black text-slate-900">
-            {company?.name || brandingName} · {isLoading ? 'Carregando...' : `${displayedBranches.length} filial(is)`}
-          </h2>
-          <p className="mt-1 text-xs font-semibold text-slate-500">
-            Use Alterar para configurar o estoque e a classificação da filial.
-          </p>
-        </div>
-
+      <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} flex min-h-0 flex-1 flex-col overflow-hidden`}>
         {error ? (
           <div className="m-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
             {error}
@@ -1278,33 +1404,47 @@ function EmbeddedBranchesGrid({
                 return (
                   <tr key={branch.id} className={`border-t border-slate-100 transition hover:bg-blue-50 ${zebraClass}`}>
                     <td className="px-4 py-4 font-black text-slate-900">{branch.branchCode}</td>
-                    <td className="px-4 py-4 font-black text-slate-900">{branch.name}</td>
-                    <td className="px-4 py-4">
-                      <span className="inline-flex items-center gap-2 font-bold">
+                    <td className="px-4 py-4 font-black text-slate-900">
+                      <span className="inline-flex items-center gap-2">
                         <span
                           className={`h-3 w-3 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}
                           title={isActive ? 'ATIVO' : 'INATIVO'}
                           aria-label={isActive ? 'ATIVO' : 'INATIVO'}
                         />
-                        {isActive ? 'ATIVO' : 'INATIVO'}
+                        <span>
+                          <span className="block">{branch.name}</span>
+                          <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            CNPJ: {formatBrazilTaxId(branch.fiscalDocument)}
+                          </span>
+                        </span>
                       </span>
                     </td>
-                    <td className="px-4 py-4">{getInventoryControlTypeLabel(branch.inventoryControlType)}</td>
-                    <td className="px-4 py-4">{getQuantityPrecisionLabel(branch.quantityPrecision)}</td>
-                    <td className="px-4 py-4 font-black text-slate-800">
-                      {branch.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? 'GRUPO + SUBGRUPO' : 'GRUPO'}
-                    </td>
-                    <td className="px-4 py-4">{branch.isDefault ? 'SIM' : 'NÃO'}</td>
                     <td className="px-4 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onEdit(branch)}
-                        title={`Alterar filial ${branch.name}`}
-                        aria-label={`Alterar filial ${branch.name}`}
-                        className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-blue-700"
-                      >
-                        Alterar
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onView(branch)}
+                          title={`Visualizar dados da filial ${branch.name}`}
+                          aria-label={`Visualizar dados da filial ${branch.name}`}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-slate-800 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(branch)}
+                          title={`Editar parâmetros da filial ${branch.name}`}
+                          aria-label={`Editar parâmetros da filial ${branch.name}`}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-slate-800 bg-blue-50 text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-800"
+                        >
+                          <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.4-9.4a2 2 0 1 1 2.8 2.8L11.8 15H9v-2.8l8.6-8.6z" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1319,26 +1459,19 @@ function EmbeddedBranchesGrid({
             </tbody>
           </table>
         </div>
+        <GridStandardFooter
+          statusFilter={statusFilter}
+          totalRecords={displayedBranches.length}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onExport={() => setIsExportOpen(true)}
+          onStatusFilterChange={setStatusFilter}
+          onPageSizeChange={setPageSize}
+          onPageChange={setPage}
+        >
+        </GridStandardFooter>
       </section>
-
-      <GridStandardFooter
-        statusFilter={statusFilter}
-        totalRecords={displayedBranches.length}
-        pageSize={pageSize}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onExport={() => setIsExportOpen(true)}
-        onStatusFilterChange={setStatusFilter}
-        onPageSizeChange={setPageSize}
-        onPageChange={setPage}
-      >
-        <ScreenNameCopy
-          screenId="PRINCIPAL_FINANCEIRO_EMPRESA_FILIAIS"
-          className="justify-end"
-          auditText={`Grid de filiais da empresa ${company?.name || brandingName}. Os filtros e a ordenação são aplicados localmente sobre as filiais sincronizadas da empresa logada.`}
-          sqlText="SELECT * FROM company_branches WHERE companyId = :companyId ORDER BY branchCode;"
-        />
-      </GridStandardFooter>
 
       <GridExportModal
         isOpen={isExportOpen}
@@ -1419,6 +1552,13 @@ export default function FinanceiroEmpresasPage() {
   const [branchFormError, setBranchFormError] = useState<string | null>(null);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isSavingBranch, setIsSavingBranch] = useState(false);
+  const [branchModalMode, setBranchModalMode] = useState<'VIEW' | 'EDIT'>('EDIT');
+  const centralEditorWindowRef = useRef<Window | null>(null);
+  const centralEditorOriginRef = useRef('');
+  const centralEditorContextRef = useRef<{
+    company: CompanyItem;
+    branch: CompanyBranchItem;
+  } | null>(null);
   const [columnOrder, setColumnOrder] = useState<CompanyGridColumnKey[]>(
     DEFAULT_COMPANY_GRID_CONFIG.order,
   );
@@ -1709,14 +1849,106 @@ export default function FinanceiroEmpresasPage() {
   }
 
   function openBranchSettings(company: CompanyItem) {
+    setBranchModalMode('VIEW');
     setBranchCompany(company);
     setBranchForm(emptyBranchForm);
     setBranchFormError(null);
     void loadBranches(company);
   }
 
+  async function openCentralBranchEditor(
+    company: CompanyItem,
+    branch: CompanyBranchItem,
+  ) {
+    const popup = window.open(
+      'about:blank',
+      'msinfor-central-branch-editor',
+      'popup=yes,width=1180,height=920,resizable=yes,scrollbars=yes',
+    );
+    if (!popup) {
+      setBranchFormError(
+        'O navegador bloqueou a janela da Central. Permita pop-ups para este endereço e tente novamente.',
+      );
+      return;
+    }
+    try {
+      setBranchFormError(null);
+      setStatusMessage('Solicitando acesso seguro à manutenção da filial na Central...');
+      const launch = await requestJson<{ editorUrl: string; expiresAt: string }>(
+        `/companies/${company.id}/branches/${branch.id}/central-editor-launch${buildFinanceApiQueryString(runtimeContext)}`,
+        {
+          method: 'POST',
+          fallbackMessage: 'Não foi possível abrir a manutenção da filial na Central.',
+        },
+      );
+      const editorUrl = new URL(launch.editorUrl);
+      centralEditorWindowRef.current = popup;
+      centralEditorOriginRef.current = editorUrl.origin;
+      centralEditorContextRef.current = { company, branch };
+      popup.location.replace(editorUrl.toString());
+      popup.focus();
+      setStatusMessage(
+        'A manutenção única da filial foi aberta na Central MSINFOR.',
+      );
+      closeBranchSettings();
+    } catch (currentError) {
+      popup.close();
+      setBranchFormError(
+        getFriendlyRequestErrorMessage(
+          currentError,
+          'Não foi possível abrir a manutenção da filial na Central.',
+        ),
+      );
+      setStatusMessage(null);
+    }
+  }
+
+  useEffect(() => {
+    async function handleCentralMessage(event: MessageEvent) {
+      const popup = centralEditorWindowRef.current;
+      const context = centralEditorContextRef.current;
+      if (
+        !popup ||
+        !context ||
+        event.source !== popup ||
+        event.origin !== centralEditorOriginRef.current ||
+        event.data?.type !== 'MSINFOR_CENTRAL_BRANCH_SAVED'
+      ) {
+        return;
+      }
+      try {
+        setIsLoadingBranches(true);
+        await requestJson(
+          `/companies/${context.company.id}/branches/${context.branch.id}/central-configuration-refresh${buildFinanceApiQueryString(runtimeContext)}`,
+          {
+            method: 'POST',
+            fallbackMessage:
+              'A Central salvou, mas o Financeiro não atualizou o espelho da filial.',
+          },
+        );
+        await loadBranches(context.company);
+        setStatusMessage(
+          'Filial salva na Central e configuração atualizada no Financeiro.',
+        );
+        setBranchFormError(null);
+      } catch (currentError) {
+        setBranchFormError(
+          getFriendlyRequestErrorMessage(
+            currentError,
+            'A Central salvou, mas o Financeiro não atualizou o espelho da filial.',
+          ),
+        );
+      } finally {
+        setIsLoadingBranches(false);
+      }
+    }
+    window.addEventListener('message', handleCentralMessage);
+    return () => window.removeEventListener('message', handleCentralMessage);
+  }, [runtimeContext]);
+
   function closeBranchSettings() {
     setBranchCompany(null);
+    setBranchModalMode('EDIT');
     setBranchForm(emptyBranchForm);
     setBranchFormError(null);
     setIsSavingBranch(false);
@@ -1760,6 +1992,7 @@ export default function FinanceiroEmpresasPage() {
       await loadBranches(branchCompany);
       setBranchForm(buildBranchForm(savedBranch));
       setStatusMessage('Parâmetros de estoque da filial atualizados com sucesso.');
+      closeBranchSettings();
     } catch (currentError) {
       setBranchFormError(
         getFriendlyRequestErrorMessage(
@@ -1937,7 +2170,13 @@ export default function FinanceiroEmpresasPage() {
 
   return (
     <>
-    <div className={`space-y-6 ${runtimeContext.embedded ? 'relative' : ''}`}>
+    <div
+      className={
+        runtimeContext.embedded
+          ? 'relative flex h-screen min-h-0 flex-col gap-3 overflow-hidden'
+          : 'space-y-6'
+      }
+    >
       {!runtimeContext.embedded ? (
         <section className={`${FINANCE_GRID_PAGE_LAYOUT.card} overflow-hidden`}>
           <div className="bg-gradient-to-r from-[#153a6a] via-[#1d4f91] to-[#2563eb] px-4 py-5 text-white">
@@ -2025,11 +2264,16 @@ export default function FinanceiroEmpresasPage() {
           error={branchFormError}
           brandingName={runtimeContext.companyName || embeddedCompany?.name || 'FINANCEIRO'}
           brandingLogoUrl={runtimeContext.logoUrl}
-          onEdit={(branch) => {
+          onView={(branch) => {
             if (!embeddedCompany) return;
+            setBranchModalMode('VIEW');
             setBranchCompany(embeddedCompany);
             setBranchForm(buildBranchForm(branch));
             setBranchFormError(null);
+          }}
+          onEdit={(branch) => {
+            if (!embeddedCompany) return;
+            void openCentralBranchEditor(embeddedCompany, branch);
           }}
         />
       ) : null}
@@ -2219,13 +2463,18 @@ export default function FinanceiroEmpresasPage() {
       <CompanyBranchSettingsModal
         isOpen={Boolean(branchCompany)}
         company={branchCompany}
+        brandingLogoUrl={runtimeContext.logoUrl}
         branches={branches}
         form={branchForm}
         isLoading={isLoadingBranches}
         isSaving={isSavingBranch}
+        readOnly={branchModalMode === 'VIEW'}
         error={branchFormError}
         onClose={closeBranchSettings}
         onEdit={(branch) => setBranchForm(buildBranchForm(branch))}
+        onOpenCentral={(branch) => {
+          if (branchCompany) void openCentralBranchEditor(branchCompany, branch);
+        }}
         onChange={(field, value) => {
           setBranchForm((current) => ({
             ...current,

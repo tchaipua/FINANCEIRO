@@ -54,6 +54,7 @@ export type PayableSupplierSummary = {
   notes?: string | null;
   invoiceImportsCount: number;
   payableTitlesCount: number;
+  openPayableInstallmentsCount?: number;
   createdAt: string;
   createdBy?: string | null;
   updatedAt: string;

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "crypto";
 import { PrismaService } from "../../../prisma/prisma.service";
+import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import {
   dateToDateOnly,
   normalizeDigits,
@@ -2534,6 +2535,7 @@ export class BanksService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
+    assertInactivationConfirmation(payload);
 
     const updatedBank = await this.prisma.bankAccount.update({
       where: { id: bank.id },

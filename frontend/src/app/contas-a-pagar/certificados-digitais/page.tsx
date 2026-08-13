@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
+import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson, requestJson } from '@/app/lib/api';
 import {
@@ -855,6 +856,7 @@ export default function FinanceiroCertificadosDigitaisPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [savingCertificate, setSavingCertificate] = useState(false);
   const [actionCertificateId, setActionCertificateId] = useState<string | null>(null);
+  const [pendingCertificateInactivation, setPendingCertificateInactivation] = useState<FiscalCertificateItem | null>(null);
   const [showCertificatePassword, setShowCertificatePassword] = useState(false);
   const [saveSuccessState, setSaveSuccessState] = useState<SaveSuccessState | null>(null);
   const [certificateForm, setCertificateForm] = useState<CertificateFormState>(
@@ -1389,7 +1391,12 @@ export default function FinanceiroCertificadosDigitaisPage() {
   );
 
   const handleStatusChange = useCallback(
-    async (certificate: FiscalCertificateItem, action: 'activate' | 'inactivate') => {
+    async (
+      certificate: FiscalCertificateItem,
+      action: 'activate' | 'inactivate',
+      password = '',
+      reason = '',
+    ) => {
       if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
         setErrorMessage(
           'Abra esta tela a partir do sistema de origem para informar o tenant do Financeiro.',
@@ -1413,6 +1420,8 @@ export default function FinanceiroCertificadosDigitaisPage() {
                 runtimeContext.cashierDisplayName ||
                 runtimeContext.userRole ||
                 'OPERADOR',
+              password,
+              reason,
             }),
             fallbackMessage:
               action === 'activate'
@@ -1426,6 +1435,7 @@ export default function FinanceiroCertificadosDigitaisPage() {
             ? 'Certificado ativado com sucesso.'
             : 'Certificado excluído com sucesso.',
         );
+        if (action === 'inactivate') setPendingCertificateInactivation(null);
         void loadCertificates();
       } catch (error) {
         setErrorMessage(
@@ -2125,27 +2135,13 @@ export default function FinanceiroCertificadosDigitaisPage() {
                             {item.status === 'ACTIVE' ? (
                               <button
                                 type="button"
-                                onClick={() => void handleStatusChange(item, 'inactivate')}
+                                onClick={() => setPendingCertificateInactivation(item)}
                                 disabled={actionCertificateId === item.id}
                                 aria-label="Excluir certificado"
                                 title="Excluir certificado"
                                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  className="h-4 w-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.9"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                >
-                                  <path d="M3 6h18" />
-                                  <path d="M8 6V4h8v2" />
-                                  <path d="M10 11v6" />
-                                  <path d="M14 11v6" />
-                                  <path d="M6 6l1 14h10l1-14" />
-                                </svg>
+                                <i className="bi bi-x-octagon" aria-hidden="true" />
                               </button>
                             ) : (
                               <button
@@ -2413,6 +2409,19 @@ export default function FinanceiroCertificadosDigitaisPage() {
         }
         onFileSelected={handleFileSelected}
         onSubmit={handleSave}
+      />
+
+      <InactivationConfirmationPopup
+        isOpen={Boolean(pendingCertificateInactivation)}
+        screenId="POPUP_FINANCEIRO_CERTIFICADOS_DIGITAIS_INATIVAR"
+        title="Inativar certificado digital"
+        targetName={pendingCertificateInactivation?.aliasName || pendingCertificateInactivation?.holderName || pendingCertificateInactivation?.id || ''}
+        description="Ao inativar o certificado, o histórico dos títulos será preservado e ele deixará de ser utilizado em novas emissões."
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setPendingCertificateInactivation(null)}
+        onConfirm={(password, reason) => pendingCertificateInactivation ? handleStatusChange(pendingCertificateInactivation, 'inactivate', password, reason) : undefined}
+        isSaving={Boolean(pendingCertificateInactivation && actionCertificateId === pendingCertificateInactivation.id)}
       />
 
       {saveSuccessState ? (

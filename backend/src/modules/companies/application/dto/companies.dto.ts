@@ -324,6 +324,10 @@ export class SyncSourceIntegrationSettingsDto {
 
   @IsOptional()
   @IsBoolean()
+  notifyMinimumStockOnMovement?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   allowSaleUnitPriceEdit?: boolean;
 
   @IsOptional()
@@ -444,7 +448,7 @@ export class SaveCompanyBranchDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(["GROUP_ONLY", "GROUP_AND_SUBGROUP"])
+  @IsIn(["NONE", "GROUP_ONLY", "GROUP_AND_SUBGROUP"])
   stockClassificationMode?: string;
 
   @IsOptional()

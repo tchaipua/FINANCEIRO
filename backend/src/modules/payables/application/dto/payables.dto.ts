@@ -74,6 +74,26 @@ export class ListPayableSuppliersDto {
   search?: string;
 }
 
+export class ChangePayableSupplierStatusDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
 export class GetPayableInvoiceImportDto {
   @IsString()
   sourceSystem!: string;

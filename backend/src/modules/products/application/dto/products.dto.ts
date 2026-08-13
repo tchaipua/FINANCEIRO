@@ -172,6 +172,14 @@ export class ChangeProductStatusDto {
 
   @IsString()
   sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class SaveProductDto {
@@ -257,6 +265,12 @@ export class SaveProductDto {
   @IsNumber()
   @Min(0)
   minimumStock?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maximumStock?: number;
 
   @IsOptional()
   @Type(() => Number)
