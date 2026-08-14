@@ -89,6 +89,8 @@ Uso:
 
 Campos de estoque aceitos no produto:
 
+- `groupId`
+- `subgroupId`
 - `tracksInventory`
 - `allowFraction`
 - `usesColorSize`
@@ -108,6 +110,9 @@ Regras:
 - filial `INTEGER_ONLY` rejeita quantidade decimal
 - filial `DECIMAL_ALLOWED` grava produto com quantidade fracionada permitida
 - filial `PRODUCT_DEFINED` usa `allowFraction` do produto
+- `GROUP_ONLY` exige grupo ativo da filial no cadastro e na alteração do produto
+- `GROUP_AND_SUBGROUP` exige grupo e subgrupo ativos e pertencentes à mesma filial
+- ao ativar `GROUP_ONLY` ou `GROUP_AND_SUBGROUP`, produtos legados sem classificação recebem automaticamente o grupo `PADRÃO` e, quando aplicável, o subgrupo `PADRÃO`; a rotina é idempotente e auditada
 
 ### GET `/products/stock-movements`
 
@@ -403,12 +408,18 @@ Uso:
 
 Uso:
 
-- atualizar somente regras operacionais de estoque, quantidade e parâmetros comerciais da filial;
-- `stockClassificationMode` aceita `NONE` (não controlar por grupo), `GROUP_ONLY` ou `GROUP_AND_SUBGROUP`;
+- compatibilidade interna para campos operacionais não cadastrais;
 - código e nome da filial são somente leitura no Financeiro;
-- alterações de tipo, quantidade ou modos de estoque controlados pela origem exigem confirmação antes de atualizar o espelho local;
-- `stockClassificationMode` e parâmetros comerciais exclusivos do Financeiro são salvos por filial, com auditoria local, sem chamar o callback legado da origem;
-- se a origem estiver indisponível ou recusar uma alteração sob sua autoridade, nenhuma alteração é persistida no Financeiro.
+- parâmetros financeiros, comerciais e de estoque da empresa/filial, incluindo `stockClassificationMode`, pertencem exclusivamente ao MSINFOR Central;
+- `stockClassificationMode` aceita `NONE` (não controlar por grupo), `GROUP_ONLY` ou `GROUP_AND_SUBGROUP` na Central;
+- o Financeiro apenas atualiza o espelho após consultar a Central pelo UUID global e registra auditoria append-only;
+- se a Central estiver indisponível ou retornar dados divergentes, a falha é exibida e nenhuma alteração parcial é tratada como sincronizada.
+
+### POST `/companies/:id/branches/:branchId/central-configuration-refresh`
+
+- Atualiza imediatamente o espelho da filial após uma gravação na tela incorporada da Central;
+- o UUID global da Central é inserido pelo BFF autenticado e nunca aceito como autoridade do navegador;
+- falhas são devolvidas à interface e não podem ser ignoradas silenciosamente.
 
 ## Fiscal Certificates
 

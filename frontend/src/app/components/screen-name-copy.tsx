@@ -28,6 +28,27 @@ function buildFinanceOriginText(path: string) {
   return `Origem: Sistema Financeiro - caminho fisico: C:/Sistemas/IA/Financeiro/frontend/src/app/${path}`;
 }
 
+function extractSourcePath(originText?: string) {
+  return originText?.match(/caminho\s+f[ií]sico\s*:\s*(.+)$/i)?.[1]?.trim();
+}
+
+function toLogicalTooltipPath(path: string) {
+  return path
+    .replace(/\\/g, "/")
+    .replace(/^[A-Za-z]:\/Sistemas\/IA\//i, "");
+}
+
+function useRuntimeTooltipPath(path?: string) {
+  const [isVps, setIsVps] = useState(false);
+
+  useEffect(() => {
+    const hostname = window.location.hostname.toLowerCase();
+    setIsVps(!["localhost", "127.0.0.1", "::1"].includes(hostname));
+  }, []);
+
+  return path ? (isVps ? toLogicalTooltipPath(path) : path) : undefined;
+}
+
 const FINANCEIRO_AUDIT_METADATA: Record<string, ScreenAuditMetadata> = {
   FINANCEIRO_DASHBOARD_RESUMO_GERAL: {
     originText: buildFinanceOriginText('components/financeiro-resumo-page.tsx'),
@@ -581,6 +602,7 @@ export default function ScreenNameCopy({
   const effectiveOriginText = originText || auditMetadata?.originText;
   const effectiveAuditText = auditText || auditMetadata?.auditText;
   const effectiveSqlText = sqlText || auditMetadata?.sqlText;
+  const tooltipPath = useRuntimeTooltipPath(extractSourcePath(effectiveOriginText));
 
   const resetStatus = useCallback(() => {
     if (timerRef.current) {
@@ -623,7 +645,7 @@ export default function ScreenNameCopy({
           onClick={handleCopy}
           aria-label={`Copiar o identificador ${screenId}`}
           className="flex h-7 w-7 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-          title="Copiar nome da tela e abrir lógica usada"
+          title={tooltipPath || 'Copiar nome da tela e abrir lógica usada'}
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M8 6h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />

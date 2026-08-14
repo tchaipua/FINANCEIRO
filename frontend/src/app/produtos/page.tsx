@@ -38,6 +38,10 @@ type ProductItem = {
   sourceTenantId?: string | null;
   status: string;
   name: string;
+  groupId?: string | null;
+  groupName?: string | null;
+  subgroupId?: string | null;
+  subgroupName?: string | null;
   internalCode?: string | null;
   sku?: string | null;
   barcode?: string | null;
@@ -93,12 +97,21 @@ type CompanyItem = {
   name: string;
 };
 
+type ProductClassificationItem = {
+  id: string;
+  type: 'GROUP' | 'SUBGROUP';
+  groupId?: string;
+  name: string;
+  status: 'ACTIVE' | 'INACTIVE';
+};
+
 type BranchInventoryConfig = {
   id?: string;
   branchCode: number;
   name?: string;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+  stockClassificationMode: 'NONE' | 'GROUP_ONLY' | 'GROUP_AND_SUBGROUP';
   stockControlMode: BranchStockParameterMode;
   stockIntegerQuantityMode: BranchStockParameterMode;
   stockLotControlMode: BranchStockParameterMode;
@@ -110,6 +123,8 @@ type BranchInventoryConfig = {
 type ProductFormState = {
   id: string | null;
   name: string;
+  groupId: string;
+  subgroupId: string;
   internalCode: string;
   sku: string;
   barcode: string;
@@ -403,6 +418,8 @@ const DEFAULT_PRODUCT_GRID_CONFIG: ProductGridConfig = {
 const emptyFormState: ProductFormState = {
   id: null,
   name: '',
+  groupId: '',
+  subgroupId: '',
   internalCode: '',
   sku: '',
   barcode: '',
@@ -658,6 +675,7 @@ const DEFAULT_BRANCH_INVENTORY_CONFIG: BranchInventoryConfig = {
   branchCode: 1,
   inventoryControlType: 'TRADITIONAL',
   quantityPrecision: 'PRODUCT_DEFINED',
+  stockClassificationMode: 'GROUP_ONLY',
   stockControlMode: 'BY_PRODUCT',
   stockIntegerQuantityMode: 'BY_PRODUCT',
   stockLotControlMode: 'BY_PRODUCT',
@@ -807,6 +825,8 @@ function buildProductForm(product: ProductItem): ProductFormState {
   return {
     id: product.id,
     name: product.name,
+    groupId: product.groupId || '',
+    subgroupId: product.subgroupId || '',
     internalCode: product.internalCode || '',
     sku: product.sku || '',
     barcode: product.barcode || '',
@@ -1282,6 +1302,8 @@ export default function FinanceiroProdutosPage() {
   const [branchInventoryConfig, setBranchInventoryConfig] = useState<BranchInventoryConfig>(
     DEFAULT_BRANCH_INVENTORY_CONFIG,
   );
+  const [productGroups, setProductGroups] = useState<ProductClassificationItem[]>([]);
+  const [productSubgroups, setProductSubgroups] = useState<ProductClassificationItem[]>([]);
   const displayedProducts = useMemo(() => {
     const normalizedQuickSearch = quickSearch.trim().toUpperCase();
     const filteredProducts = normalizedQuickSearch
@@ -1408,6 +1430,30 @@ export default function FinanceiroProdutosPage() {
     }
   }, [runtimeContext]);
 
+  const loadProductClassifications = useCallback(async () => {
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setProductGroups([]);
+      setProductSubgroups([]);
+      return;
+    }
+
+    try {
+      const response = await getJson<{
+        groups?: ProductClassificationItem[];
+        subgroups?: ProductClassificationItem[];
+      }>(
+        `/product-classifications${buildFinanceApiQueryString(runtimeContext, {
+          status: 'ACTIVE',
+        })}`,
+      );
+      setProductGroups(response.groups || []);
+      setProductSubgroups(response.subgroups || []);
+    } catch {
+      setProductGroups([]);
+      setProductSubgroups([]);
+    }
+  }, [runtimeContext]);
+
   useEffect(() => {
     const storedConfig = readStoredProductGridConfig(runtimeContext.sourceTenantId);
     setColumnOrder(storedConfig.order);
@@ -1422,6 +1468,10 @@ export default function FinanceiroProdutosPage() {
   useEffect(() => {
     void loadBranchInventoryConfig();
   }, [loadBranchInventoryConfig]);
+
+  useEffect(() => {
+    void loadProductClassifications();
+  }, [loadProductClassifications]);
 
   useEffect(() => {
     if (!requestedEditProductId || handledEditProductId.current === requestedEditProductId) {
@@ -1654,6 +1704,23 @@ export default function FinanceiroProdutosPage() {
       return;
     }
 
+    if (
+      branchInventoryConfig.stockClassificationMode !== 'NONE' &&
+      !formState.groupId
+    ) {
+      setProductFormTab('CLASSIFICATION');
+      setErrorMessage('Informe o grupo do produto para esta filial.');
+      return;
+    }
+    if (
+      branchInventoryConfig.stockClassificationMode === 'GROUP_AND_SUBGROUP' &&
+      !formState.subgroupId
+    ) {
+      setProductFormTab('CLASSIFICATION');
+      setErrorMessage('Informe o subgrupo do produto para esta filial.');
+      return;
+    }
+
     setSaving(true);
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -1677,6 +1744,8 @@ export default function FinanceiroProdutosPage() {
         sourceTenantId: runtimeContext.sourceTenantId,
         companyName: runtimeContext.companyName || undefined,
         name: formState.name,
+        groupId: formState.groupId || null,
+        subgroupId: formState.subgroupId || null,
         internalCode: formState.internalCode || undefined,
         sku: formState.sku || undefined,
         barcode: formState.barcode || undefined,
@@ -2323,6 +2392,55 @@ export default function FinanceiroProdutosPage() {
                     Classificação
                   </div>
                   <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Grupo {branchInventoryConfig.stockClassificationMode !== 'NONE' ? '*' : '(opcional)'}
+                      </span>
+                      <select
+                        value={formState.groupId}
+                        required={branchInventoryConfig.stockClassificationMode !== 'NONE'}
+                        onChange={(event) =>
+                          setFormState((current) => ({
+                            ...current,
+                            groupId: event.target.value,
+                            subgroupId: '',
+                          }))
+                        }
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                      >
+                        <option value="">Selecione o grupo</option>
+                        {productGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                        Subgrupo {branchInventoryConfig.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? '*' : '(opcional)'}
+                      </span>
+                      <select
+                        value={formState.subgroupId}
+                        required={branchInventoryConfig.stockClassificationMode === 'GROUP_AND_SUBGROUP'}
+                        disabled={!formState.groupId}
+                        onChange={(event) =>
+                          setFormState((current) => ({ ...current, subgroupId: event.target.value }))
+                        }
+                        className={FINANCE_GRID_PAGE_LAYOUT.input}
+                      >
+                        <option value="">Selecione o subgrupo</option>
+                        {productSubgroups
+                          .filter((subgroup) => subgroup.groupId === formState.groupId)
+                          .map((subgroup) => (
+                            <option key={subgroup.id} value={subgroup.id}>
+                              {subgroup.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                         Unidade

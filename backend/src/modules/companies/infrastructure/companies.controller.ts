@@ -11,6 +11,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CompaniesService } from "../application/companies.service";
 import {
   ListCompaniesDto,
+  CentralBranchEditorLaunchDto,
   ProvisionSourceTenantDto,
   SaveCompanyBranchDto,
   SaveSalesScreenParametersDto,
@@ -121,11 +122,13 @@ export class CompaniesController {
     @Param("id") id: string,
     @Param("branchId") branchId: string,
     @Query() query: ListCompaniesDto,
+    @Body() payload: CentralBranchEditorLaunchDto,
   ) {
     return this.companiesService.createCentralBranchEditorLaunch(
       id,
       branchId,
       query,
+      payload,
     );
   }
 

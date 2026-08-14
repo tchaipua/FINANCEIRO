@@ -44,6 +44,26 @@ async function main() {
         updatedBy: "TEST",
       },
     });
+    const legacyProducts = await Promise.all([
+      prisma.product.create({
+        data: {
+          companyId: company.id,
+          branchCode: 1,
+          name: "PRODUTO LEGADO 1",
+          createdBy: "TEST",
+          updatedBy: "TEST",
+        },
+      }),
+      prisma.product.create({
+        data: {
+          companyId: company.id,
+          branchCode: 1,
+          name: "PRODUTO LEGADO 2",
+          createdBy: "TEST",
+          updatedBy: "TEST",
+        },
+      }),
+    ]);
     await prisma.companyBranch.create({
       data: {
         companyId: company.id,
@@ -110,6 +130,125 @@ async function main() {
     assert.equal(
       directory.some((branch) => branch.name === "FILIAL DE OUTRA EMPRESA"),
       false,
+    );
+
+    let centralLaunchRequest;
+    const companiesWithCentralEditor = new CompaniesService(prisma, {
+      createLaunch: async (request) => {
+        centralLaunchRequest = request;
+        return { editorUrl: "https://central.test/branch-editor" };
+      },
+    });
+    await financeContext.run(context, async () =>
+      companiesWithCentralEditor.createCentralBranchEditorLaunch(
+        company.id,
+        firstBranch.id,
+        { sourceSystem: "TEST", sourceTenantId },
+        { centralTenantId: "A0115F07-4562-4363-9D7D-AF749FA79BED" },
+      ),
+    );
+    assert.equal(
+      centralLaunchRequest.tenantId,
+      "a0115f07-4562-4363-9d7d-af749fa79bed",
+    );
+    assert.equal(centralLaunchRequest.branchCode, 1);
+
+    let centralConfigurationRequest;
+    const companiesWithCentralSynchronization = new CompaniesService(prisma, {
+      findConfiguration: async (tenantId, branchCode) => {
+        centralConfigurationRequest = { tenantId, branchCode };
+        return {
+          tenant: {
+            id: tenantId,
+            displayName: "EMPRESA CENTRAL",
+            company: {
+              legalName: "EMPRESA CENTRAL LTDA",
+              tradeName: "EMPRESA CENTRAL",
+              documentNumber: "11222333000144",
+            },
+          },
+          branch: {
+            id: "central-branch-1",
+            tenantId,
+            branchCode,
+            displayName: "MATRIZ CENTRAL",
+            status: "ACTIVE",
+            company: {},
+          },
+          effective: {
+            commerce: {
+              stockControlMode: "BY_PRODUCT",
+              stockIntegerQuantityMode: "YES",
+              stockLotControlMode: "NO",
+              stockExpirationControlMode: "NO",
+              stockGridControlMode: "NO",
+              stockNegativeControlMode: "NO",
+              stockClassificationMode: "GROUP_AND_SUBGROUP",
+              notifyMinimumStockOnMovement: true,
+              allowSaleUnitPriceEdit: false,
+              allowSaleItemDiscount: false,
+              groupSameProduct: true,
+              allowProductImageEdit: true,
+              requirePasswordToRemoveSaleItems: true,
+              businessType: "ESCOLA",
+            },
+          },
+        };
+      },
+    });
+    const centralTenantId = "a0115f07-4562-4363-9d7d-af749fa79bed";
+    const refreshedBranch = await financeContext.run(context, async () =>
+      companiesWithCentralSynchronization.refreshCentralBranchConfiguration(
+        company.id,
+        firstBranch.id,
+        { sourceSystem: "TEST", sourceTenantId, centralTenantId },
+      ),
+    );
+    assert.deepEqual(centralConfigurationRequest, {
+      tenantId: centralTenantId,
+      branchCode: 1,
+    });
+    assert.equal(refreshedBranch.name, "MATRIZ CENTRAL");
+    assert.equal(
+      refreshedBranch.stockClassificationMode,
+      "GROUP_AND_SUBGROUP",
+    );
+    const defaultGroup = await prisma.productGroup.findFirst({
+      where: {
+        companyId: company.id,
+        branchCode: 1,
+        name: "PADRÃO",
+        canceledAt: null,
+      },
+    });
+    assert.ok(defaultGroup);
+    const defaultSubgroup = await prisma.productSubgroup.findFirst({
+      where: {
+        companyId: company.id,
+        branchCode: 1,
+        groupId: defaultGroup.id,
+        name: "PADRÃO",
+        canceledAt: null,
+      },
+    });
+    assert.ok(defaultSubgroup);
+    const backfilledProducts = await prisma.product.findMany({
+      where: { id: { in: legacyProducts.map((product) => product.id) } },
+    });
+    assert.equal(backfilledProducts.every((product) => product.groupId === defaultGroup.id), true);
+    assert.equal(backfilledProducts.every((product) => product.subgroupId === defaultSubgroup.id), true);
+    const synchronizationAudit = await prisma.sourceIntegrationAuditEvent.findFirst({
+      where: {
+        companyId: company.id,
+        branchCode: 1,
+        action: "CENTRAL_BRANCH_CONFIGURATION_SYNCHRONIZED",
+      },
+      orderBy: { occurredAt: "desc" },
+    });
+    assert.ok(synchronizationAudit);
+    assert.match(
+      synchronizationAudit.metadataJson || "",
+      /"centralTenantId":"a0115f07-4562-4363-9d7d-af749fa79bed"/,
     );
     console.log("Financeiro: diretório de filiais da empresa aprovado.");
   } finally {

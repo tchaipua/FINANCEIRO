@@ -21,20 +21,20 @@ export class CustomersController {
 
   @Post("sync")
   @ApiOperation({
-    summary: "Sincroniza clientes pagadores vindos do sistema Escola",
+    summary: "Sincroniza clientes pagadores vindos do sistema de origem",
   })
   sync(@Body() payload: SyncCustomersDto) {
     return this.customersService.sync(payload);
   }
 
   @Post()
-  @ApiOperation({ summary: "Cadastra um cliente diretamente no Financeiro" })
+  @ApiOperation({ summary: "Rota legada bloqueada: cliente pertence à origem" })
   create(@Body() payload: SaveCustomerDto) {
     return this.customersService.create(payload);
   }
 
   @Patch(":customerId")
-  @ApiOperation({ summary: "Atualiza um cliente cadastrado no Financeiro" })
+  @ApiOperation({ summary: "Rota legada bloqueada: cliente pertence à origem" })
   update(
     @Param("customerId") customerId: string,
     @Body() payload: SaveCustomerDto,
@@ -43,7 +43,7 @@ export class CustomersController {
   }
 
   @Post(":customerId/activate")
-  @ApiOperation({ summary: "Reativa um cliente cadastrado no Financeiro" })
+  @ApiOperation({ summary: "Rota legada bloqueada: cliente pertence à origem" })
   activate(
     @Param("customerId") customerId: string,
     @Body() payload: ChangeCustomerStatusDto,
@@ -52,7 +52,7 @@ export class CustomersController {
   }
 
   @Post(":customerId/inactivate")
-  @ApiOperation({ summary: "Inativa logicamente um cliente" })
+  @ApiOperation({ summary: "Rota legada bloqueada: cliente pertence à origem" })
   inactivate(
     @Param("customerId") customerId: string,
     @Body() payload: ChangeCustomerStatusDto,

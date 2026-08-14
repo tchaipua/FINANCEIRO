@@ -38,6 +38,7 @@ const SOURCE_OWNED_STOCK_MODE_FIELDS = [
   "stockExpirationControlMode",
   "stockGridControlMode",
   "stockNegativeControlMode",
+  "stockClassificationMode",
 ] as const;
 
 function normalizeInventoryControlType(value?: string | null) {
@@ -54,6 +55,13 @@ function normalizeQuantityPrecision(value?: string | null) {
   )
     ? normalized
     : "INTEGER_ONLY";
+}
+
+function normalizeStockClassificationMode(value?: string | null) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ["NONE", "GROUP_ONLY", "GROUP_AND_SUBGROUP"].includes(normalized)
+    ? normalized
+    : "GROUP_ONLY";
 }
 
 export function hasSourceOwnedBranchStockChanges(
@@ -79,8 +87,11 @@ export function hasSourceOwnedBranchStockChanges(
   return SOURCE_OWNED_STOCK_MODE_FIELDS.some(
     (field) =>
       requested[field] !== undefined &&
-      normalizeStockParameterMode(requested[field]) !==
-        normalizeStockParameterMode(current[field]),
+      (field === "stockClassificationMode"
+        ? normalizeStockClassificationMode(requested[field]) !==
+          normalizeStockClassificationMode(current[field])
+        : normalizeStockParameterMode(requested[field]) !==
+          normalizeStockParameterMode(current[field])),
   );
 }
 

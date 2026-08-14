@@ -10,6 +10,7 @@ const current = {
   stockExpirationControlMode: "NO",
   stockGridControlMode: "BY_PRODUCT",
   stockNegativeControlMode: "NO",
+  stockClassificationMode: "GROUP_ONLY",
 };
 
 assert.equal(
@@ -17,11 +18,11 @@ assert.equal(
     {
       inventoryControlType: "COLOR_SIZE",
       quantityPrecision: "INTEGER_ONLY",
-      stockClassificationMode: "NONE",
+      stockClassificationMode: "GROUP_AND_SUBGROUP",
     },
     current,
   ),
-  false,
+  true,
 );
 
 assert.equal(

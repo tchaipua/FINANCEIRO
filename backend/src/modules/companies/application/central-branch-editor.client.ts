@@ -15,6 +15,7 @@ export type CentralCommerceConfiguration = {
   stockExpirationControlMode: string;
   stockGridControlMode: string;
   stockNegativeControlMode: string;
+  stockClassificationMode: string;
   notifyMinimumStockOnMovement: boolean;
   allowSaleUnitPriceEdit: boolean;
   allowSaleItemDiscount: boolean;

@@ -225,6 +225,14 @@ export class SaveProductDto {
   productType?: string;
 
   @IsOptional()
+  @IsString()
+  groupId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  subgroupId?: string | null;
+
+  @IsOptional()
   @Transform(({ value }) => transformBooleanInput(value))
   @IsBoolean()
   tracksInventory?: boolean;

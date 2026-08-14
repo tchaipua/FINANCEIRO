@@ -156,7 +156,7 @@ function requestSchoolCustomersSync() {
         : `clientes-${Date.now()}-${Math.random()}`;
     const timeout = window.setTimeout(() => {
       window.removeEventListener('message', handleResult);
-      reject(new Error('A sincronização dos clientes da Escola demorou mais que o esperado.'));
+      reject(new Error('A sincronização dos clientes do sistema de origem demorou mais que o esperado.'));
     }, 30000);
 
     function handleResult(event: MessageEvent) {
@@ -175,7 +175,7 @@ function requestSchoolCustomersSync() {
       if (payload.ok) {
         resolve(payload);
       } else {
-        reject(new Error(payload.message || 'Não foi possível sincronizar os clientes da Escola.'));
+        reject(new Error(payload.message || 'Não foi possível sincronizar os clientes do sistema de origem.'));
       }
     }
 
@@ -213,9 +213,8 @@ export default function CustomersPage() {
   );
   const syncedScopeRef = useRef<string | null>(null);
 
-  const isIntegratedSource =
-    runtimeContext.sourceSystem === 'ESCOLA' ||
-    runtimeContext.sourceSystem === 'PROJETO_INICIAL';
+  // O Financeiro sempre e consumido por outro sistema; cliente local nao existe.
+  const isIntegratedSource = Boolean(runtimeContext.sourceSystem);
   const scopeReady = Boolean(runtimeContext.sourceSystem && runtimeContext.sourceTenantId);
   const visibleGridColumns = useMemo(
     () => CUSTOMER_GRID_COLUMNS.filter((column) => !hiddenColumns.includes(column.key)),
@@ -305,17 +304,17 @@ export default function CustomersPage() {
     const search = appliedSearch.trim().toUpperCase();
     return {
       auditText: `--- LOGICA DA TELA ---
-Tela híbrida de clientes do sistema Financeiro.
+Tela de consulta de clientes integrados do sistema Financeiro.
 
 REGRAS:
 - empresa/tenant: ${formatTenantAuditValue(runtimeContext.sourceTenantId, runtimeContext.companyName)}
 - sistema origem: ${formatAuditValue(runtimeContext.sourceSystem)}
 - filial: ${runtimeContext.sourceBranchCode}
-- modo de cadastro: ${isIntegratedSource ? 'ORIGEM INTEGRADA E LEGADOS VINCULADOS A TITULOS' : 'CADASTRO LOCAL NO FINANCEIRO'}
+- modo de cadastro: ORIGEM INTEGRADA E LEGADOS VINCULADOS A TITULOS
 - status selecionado: ${status}
 - busca aplicada: ${formatAuditValue(search)}
 - registros exibidos: ${items.length}
-- clientes da Escola e clientes legados vinculados a títulos não podem ser cadastrados ou alterados diretamente no Financeiro
+- nenhum cliente pode ser cadastrado, alterado ou inativado diretamente no Financeiro
 - toda inativação é lógica e preserva os títulos e snapshots históricos`,
       sqlText: `SELECT PA.*
 FROM parties PA
@@ -466,9 +465,7 @@ ORDER BY PA.name ASC;`,
               <div className="text-[11px] font-black uppercase tracking-[0.28em] text-blue-600">Contas a receber</div>
               <h1 className="mt-1 text-2xl font-black text-slate-900">Clientes</h1>
               <p className="mt-1 text-sm font-medium text-slate-500">
-                {isIntegratedSource
-                  ? 'Clientes sincronizados automaticamente do sistema de origem e vinculados aos títulos a receber.'
-                  : 'Cadastre e mantenha os clientes utilizados nas vendas e contas a receber.'}
+                Clientes sincronizados automaticamente do sistema de origem e vinculados aos títulos a receber.
               </p>
             </div>
           </div>

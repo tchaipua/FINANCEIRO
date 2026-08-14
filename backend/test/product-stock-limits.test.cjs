@@ -43,6 +43,7 @@ async function main() {
         stockControlMode: "BY_PRODUCT",
         stockIntegerQuantityMode: "BY_PRODUCT",
         stockNegativeControlMode: "BY_PRODUCT",
+        stockClassificationMode: "NONE",
         notifyMinimumStockOnMovement: true,
         createdBy: "TEST",
         updatedBy: "TEST",

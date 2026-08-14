@@ -74,6 +74,12 @@ export function postMessageToTrustedParent(message: unknown) {
   return true;
 }
 
-export function isTrustedMessageEvent(event: MessageEvent) {
+export function isTrustedMessageEvent(
+  event: MessageEvent,
+  expected?: { origin: string; source: MessageEventSource | null },
+) {
+  if (expected) {
+    return event.origin === expected.origin && event.source === expected.source;
+  }
   return getTrustedMessageOrigins().has(event.origin);
 }

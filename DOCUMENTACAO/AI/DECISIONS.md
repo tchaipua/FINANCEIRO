@@ -490,16 +490,16 @@ Decisão:
 - empresas e filiais não podem ser incluídas manualmente no Financeiro;
 - código, nome, documento, endereço e contatos são espelhos somente leitura recebidos da origem;
 - a sincronização da origem informa todas as filiais ativas e desativa logicamente no espelho aquelas removidas da lista;
-- parâmetros financeiros, de estoque e comerciais podem ser editados na interface do Financeiro;
-- alterações de parâmetros sob autoridade da origem são enviadas primeiro pelo contrato `PATCH /integrations/financeiro/company-branch-parameters`;
-- parâmetros exclusivos do Financeiro, incluindo a classificação de estoque por filial, são persistidos localmente sem acionar o callback legado da origem;
-- o Financeiro atualiza os parâmetros da origem somente depois da confirmação dela e grava auditoria append-only; alterações exclusivas recebem auditoria local;
+- parâmetros financeiros, de estoque e comerciais de empresa/filial são editados exclusivamente na tela única do MSINFOR Central;
+- a classificação de estoque por filial (`NONE`, `GROUP_ONLY` ou `GROUP_AND_SUBGROUP`) também pertence à configuração comercial da Central;
+- após cada gravação, o Financeiro consulta a Central pelo UUID global, atualiza imediatamente seu espelho técnico e grava auditoria append-only;
+- falhas nessa atualização não podem ser ocultadas: a interface informa o erro e permite tentar a sincronização novamente;
 - cada novo sistema chamador configura sua própria URL e chave técnica por `sourceSystem` e implementa o mesmo contrato.
 
 Motivo:
 
 - impedir duplicidade e divergência cadastral entre sistemas;
-- manter uma única autoridade para empresa e filial sem retirar do Financeiro as parametrizações operacionais necessárias.
+- manter uma única autoridade para empresa, filial e seus parâmetros, deixando no Financeiro apenas a projeção operacional necessária.
 
 ## D031 - Herança bidirecional da preferência visual
 
@@ -551,3 +551,38 @@ Motivo:
 - permitir um modelo separado por cliente sem custo de IA em tempo de execução;
 - evitar vazamento cross-tenant e impedir que um arquivo substitua histórico silenciosamente;
 - manter o mesmo motor de recibos, etiquetas, impressoras e auditoria já centralizado no Financeiro.
+
+## D034 - Cliente sempre pertence ao sistema de origem
+
+Decisão:
+
+- o Financeiro sempre é consumido por outro sistema e não possui modo autônomo;
+- cadastro, alteração, ativação e inativação de clientes são proibidos no Financeiro;
+- todo cliente ou pagador chega exclusivamente pela API autenticada de sincronização do sistema de origem;
+- o Financeiro conserva o vínculo idempotente `sourceSystem + sourceTenantId + externalEntityType + externalEntityId` e a identidade estável `registeredPersonId`;
+- no Projeto Inicial/Petshop, o tutor é uma pessoa com papel de cliente e pagador; o animal nunca é cliente financeiro;
+- na Escola, aluno ou responsável definido como pagador continua sendo sincronizado pela origem;
+- dados históricos eventualmente criados localmente permanecem somente para consulta e integridade contábil, sem reabrir manutenção local.
+
+Motivo:
+
+- impedir duplicidade, divergência cadastral e perda da autoridade do sistema que conhece a pessoa;
+- garantir que todas as verticais usem o mesmo contrato e que uma futura alteração não reintroduza cadastro local.
+
+## D035 - Tela única de empresas e filiais na Central
+
+Decisão:
+
+- cadastro, listagem e manutenção de empresas/filiais são implementados uma única vez no MSINFOR Central;
+- o card `EMPRESA` de `PRINCIPAL_FINANCEIRO_MSINFOR` abre essa tela central e não uma grade financeira paralela;
+- a abertura acontece incorporada na própria área do Financeiro, sem nova
+  janela, nova aba ou pop-up;
+- na sessão administrativa da Central, a tela lista todas as empresas autorizadas;
+- quando chamada pelo Financeiro, a mesma tela recebe sessão temporária e o backend restringe consultas e mutações ao tenant autenticado;
+- Escola e Projeto Inicial/Petshop apenas hospedam o Financeiro e não implementam outra tela de empresa/filial;
+- o espelho do Financeiro permanece técnico e não constitui cadastro mestre nem interface de manutenção.
+
+Motivo:
+
+- evitar duas implementações visuais e regras divergentes;
+- assegurar que qualquer evolução da tela central seja imediatamente utilizada por todos os sistemas consumidores.

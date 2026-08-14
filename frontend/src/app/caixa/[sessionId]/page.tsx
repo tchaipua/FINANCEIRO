@@ -99,6 +99,19 @@ const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const SCREEN_ORIGIN_TEXT =
   'Origem: Sistema Financeiro - C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\caixa\\[sessionId]\\page.tsx';
 
+function useRuntimeTooltipPath(path: string) {
+  const [isVps, setIsVps] = useState(false);
+
+  useEffect(() => {
+    const hostname = window.location.hostname.toLowerCase();
+    setIsVps(!['localhost', '127.0.0.1', '::1'].includes(hostname));
+  }, []);
+
+  return isVps
+    ? path.replace(/\\/g, '/').replace(/^[A-Za-z]:\/Sistemas\/IA\//i, '')
+    : path;
+}
+
 type CashAuditTextInput = {
   sessionId?: string | null;
   sourceTenantId?: string | null;
@@ -443,6 +456,9 @@ export default function FinanceiroCashDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [autoCloseCashSessionPopupOpened, setAutoCloseCashSessionPopupOpened] = useState(false);
   const [autoCashMovementPopupOpened, setAutoCashMovementPopupOpened] = useState(false);
+  const tooltipPath = useRuntimeTooltipPath(
+    SCREEN_ORIGIN_TEXT.replace(/^Origem:\s*Sistema\s+Financeiro\s*-\s*/i, ''),
+  );
   const cashierDisplayName = useMemo(
     () =>
       normalizeFinanceDisplayText(session?.cashierDisplayName) ||
@@ -1208,7 +1224,7 @@ export default function FinanceiroCashDetailPage() {
                 type="button"
                 onClick={() => void handleOpenAuditModal()}
                 className="flex h-7 w-7 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-700"
-                title="Copiar nome da tela e abrir auditoria SQL"
+                title={tooltipPath}
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M8 6h8a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
@@ -1870,7 +1886,7 @@ export default function FinanceiroCashDetailPage() {
                     } : current);
                   }}
                   className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100"
-                  title="Copiar nome da tela"
+                  title={tooltipPath}
                 >
                   Copiar
                 </button>
@@ -2059,7 +2075,7 @@ export default function FinanceiroCashDetailPage() {
                     } : current);
                   }}
                   className="shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 transition hover:bg-slate-100"
-                  title="Copiar nome da tela"
+                  title={tooltipPath}
                 >
                   Copiar
                 </button>

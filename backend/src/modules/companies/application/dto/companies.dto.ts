@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -27,6 +28,10 @@ export class ListCompaniesDto {
   @IsOptional()
   @IsString()
   sourceTenantId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  centralTenantId?: string;
 
   @IsOptional()
   @IsString()
@@ -323,6 +328,11 @@ export class SyncSourceIntegrationSettingsDto {
   stockNegativeControlMode?: string;
 
   @IsOptional()
+  @IsString()
+  @IsIn(["NONE", "GROUP_ONLY", "GROUP_AND_SUBGROUP"])
+  stockClassificationMode?: string;
+
+  @IsOptional()
   @IsBoolean()
   notifyMinimumStockOnMovement?: boolean;
 
@@ -349,6 +359,11 @@ export class SyncSourceIntegrationSettingsDto {
   @IsOptional()
   @IsString()
   businessType?: string;
+}
+
+export class CentralBranchEditorLaunchDto {
+  @IsUUID()
+  centralTenantId!: string;
 }
 
 export class ProvisionSourceTenantBranchDto {

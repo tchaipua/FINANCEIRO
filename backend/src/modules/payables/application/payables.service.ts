@@ -45,6 +45,7 @@ import {
 } from "../../../common/party-registry";
 import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import { ChangePayableSupplierStatusDto } from "./dto/payables.dto";
+import { ensureDefaultProductClassification } from "../../../common/product-classification";
 
 type ResolvedCompany = {
   id: string;
@@ -65,6 +66,7 @@ type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
 
 type BranchStockParameterConfig = {
   branchCode: number;
+  stockClassificationMode: "NONE" | "GROUP_ONLY" | "GROUP_AND_SUBGROUP";
   stockControlMode: BranchStockParameterMode;
   stockIntegerQuantityMode: BranchStockParameterMode;
   stockLotControlMode: BranchStockParameterMode;
@@ -256,6 +258,12 @@ export class PayablesService {
 
     const config: BranchStockParameterConfig = {
       branchCode,
+      stockClassificationMode:
+        existingBranch.stockClassificationMode === "GROUP_AND_SUBGROUP"
+          ? "GROUP_AND_SUBGROUP"
+          : existingBranch.stockClassificationMode === "NONE"
+            ? "NONE"
+            : "GROUP_ONLY",
       stockControlMode: this.normalizeBranchStockParameterMode(
         existingBranch.stockControlMode,
         "BY_PRODUCT",
@@ -1175,6 +1183,13 @@ export class PayablesService {
       },
     });
 
+    await ensureDefaultProductClassification(tx, {
+      companyId,
+      branchCode: branchConfig.branchCode,
+      mode: branchConfig.stockClassificationMode,
+      requestedBy,
+    });
+
     if (createdProductsCache) {
       createdProductsCache.set(cacheKey, createdProduct);
     }
@@ -1979,6 +1994,12 @@ export class PayablesService {
         invoiceImport.companyId,
         payload,
       );
+      await ensureDefaultProductClassification(tx, {
+        companyId: invoiceImport.companyId,
+        branchCode: branchStockConfig.branchCode,
+        mode: branchStockConfig.stockClassificationMode,
+        requestedBy: payload.requestedBy,
+      });
 
       const titleTotalAmount = roundMoney(
         normalizedInstallments.reduce(

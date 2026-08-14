@@ -414,37 +414,78 @@ async function main() {
       /exclusivamente no sistema de origem/i,
     );
 
-    const localCustomer = await customersService.create({
+    await assert.rejects(
+      () =>
+        customersService.create({
+          requestedBy: "CODEX",
+          sourceSystem: "PROJETO_INICIAL",
+          sourceTenantId: "TENANT_PROJETO_CLIENTES",
+          companyName: "PETSHOP CLIENTES",
+          name: "CLIENTE LOCAL INDEVIDO",
+          document: "04252011000110",
+        }),
+      /exclusivamente no sistema de origem/i,
+    );
+
+    const petshopCustomerSync = await customersService.sync({
       requestedBy: "CODEX",
       sourceSystem: "PROJETO_INICIAL",
       sourceTenantId: "TENANT_PROJETO_CLIENTES",
+      sourceBranchCode: 1,
       companyName: "PETSHOP CLIENTES",
-      name: "CLIENTE LOCAL",
-      document: "04252011000110",
+      customers: [
+        {
+          externalEntityType: "CLIENTE",
+          externalEntityId: "TUTOR_001",
+          registeredPersonId: "PERSON:TUTOR_001",
+          registeredPersonSourceType: "PROJETO_INICIAL",
+          name: "TUTOR DO PET",
+          document: "04252011000110",
+        },
+      ],
     });
-    assert.equal(localCustomer.origin, "FINANCEIRO");
-    assert.equal(localCustomer.canManageLocally, true);
+    assert.equal(petshopCustomerSync.synchronizedCustomers, 1);
 
-    const inactivatedLocalCustomer = await customersService.inactivate(
-      localCustomer.id,
-      {
-        requestedBy: "CODEX",
-        sourceSystem: "PROJETO_INICIAL",
-        sourceTenantId: "TENANT_PROJETO_CLIENTES",
-        password: "TEST_PASSWORD",
-        reason: "TEST_INATIVACAO",
-      },
-    );
-    assert.equal(inactivatedLocalCustomer.status, "INACTIVE");
-    assert.equal(inactivatedLocalCustomer.canceledAt, null);
-    const inactivatedCustomerRole = await prisma.partyRole.findFirst({
-      where: {
-        partyId: localCustomer.id,
-        branchCode: 1,
-        roleType: "CUSTOMER",
-      },
+    const petshopCustomers = await customersService.list({
+      sourceSystem: "PROJETO_INICIAL",
+      sourceTenantId: "TENANT_PROJETO_CLIENTES",
+      sourceBranchCode: 1,
+      status: "ACTIVE",
     });
-    assert.ok(inactivatedCustomerRole.canceledAt);
+    assert.equal(petshopCustomers.registrationMode, "INTEGRATED_ONLY");
+    assert.equal(petshopCustomers.canCreateLocally, false);
+    assert.equal(petshopCustomers.items.length, 1);
+    assert.equal(petshopCustomers.items[0].name, "TUTOR DO PET");
+    assert.equal(petshopCustomers.items[0].origin, "PROJETO_INICIAL");
+    assert.equal(petshopCustomers.items[0].canManageLocally, false);
+    await assert.rejects(
+      () =>
+        customersService.inactivate(petshopCustomers.items[0].id, {
+          requestedBy: "CODEX",
+          sourceSystem: "PROJETO_INICIAL",
+          sourceTenantId: "TENANT_PROJETO_CLIENTES",
+          password: "TEST_PASSWORD",
+          reason: "TEST_INATIVACAO",
+        }),
+      /exclusivamente no sistema de origem/i,
+    );
+
+    const petshopCustomerRemovalSync = await customersService.sync({
+      requestedBy: "CODEX",
+      sourceSystem: "PROJETO_INICIAL",
+      sourceTenantId: "TENANT_PROJETO_CLIENTES",
+      sourceBranchCode: 1,
+      companyName: "PETSHOP CLIENTES",
+      customers: [],
+    });
+    assert.equal(petshopCustomerRemovalSync.inactivatedCustomers, 1);
+    const activePetshopCustomersAfterRemoval = await customersService.list({
+      sourceSystem: "PROJETO_INICIAL",
+      sourceTenantId: "TENANT_PROJETO_CLIENTES",
+      sourceBranchCode: 1,
+      status: "ACTIVE",
+    });
+    assert.equal(activePetshopCustomersAfterRemoval.items.length, 0);
 
     const createdBank = await runAsFinanceAdmin(
       prisma,
@@ -1113,6 +1154,7 @@ async function main() {
         stockExpirationControlMode: "BY_PRODUCT",
         stockGridControlMode: "BY_PRODUCT",
         stockNegativeControlMode: "BY_PRODUCT",
+        stockClassificationMode: "NONE",
         createdBy: "CODEX",
         updatedBy: "CODEX",
       },
@@ -1121,6 +1163,7 @@ async function main() {
         stockControlMode: "BY_PRODUCT",
         stockGridControlMode: "BY_PRODUCT",
         stockNegativeControlMode: "BY_PRODUCT",
+        stockClassificationMode: "NONE",
         updatedBy: "CODEX",
       },
     });

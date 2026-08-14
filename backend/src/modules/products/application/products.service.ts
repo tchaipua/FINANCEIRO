@@ -11,6 +11,10 @@ import { getFinanceContext } from "../../../common/finance-context";
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import {
+  normalizeStockClassificationMode,
+  type StockClassificationMode,
+} from "../../../common/product-classification";
+import {
   ChangeProductStatusDto,
   CreateManualStockMovementDto,
   GetProductDto,
@@ -22,6 +26,8 @@ import {
 type NormalizedProductPayload = {
   branchCode: number;
   name: string;
+  groupId: string | null;
+  subgroupId: string | null;
   internalCode: string | null;
   sku: string | null;
   barcode: string | null;
@@ -70,6 +76,7 @@ type BranchInventoryConfig = {
   branchCode: number;
   inventoryControlType: string;
   quantityPrecision: string;
+  stockClassificationMode: StockClassificationMode;
   stockControlMode: BranchStockParameterMode;
   stockIntegerQuantityMode: BranchStockParameterMode;
   stockLotControlMode: BranchStockParameterMode;
@@ -80,6 +87,11 @@ type BranchInventoryConfig = {
 };
 
 type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
+
+function normalizeIdentifier(value?: string | null) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
 
 const PRODUCT_CODE_LABELS = {
   internalCode: "código interno",
@@ -184,6 +196,9 @@ export class ProductsService {
       stockNegativeControlMode: this.normalizeBranchStockMode(
         branch?.stockNegativeControlMode,
       ),
+      stockClassificationMode: normalizeStockClassificationMode(
+        branch?.stockClassificationMode,
+      ),
       notifyMinimumStockOnMovement:
         branch?.notifyMinimumStockOnMovement === true,
     };
@@ -216,6 +231,9 @@ export class ProductsService {
       stockGridControlMode: this.normalizeBranchStockMode(branch?.stockGridControlMode),
       stockNegativeControlMode: this.normalizeBranchStockMode(
         branch?.stockNegativeControlMode,
+      ),
+      stockClassificationMode: normalizeStockClassificationMode(
+        branch?.stockClassificationMode,
       ),
       notifyMinimumStockOnMovement:
         branch?.notifyMinimumStockOnMovement === true,
@@ -316,6 +334,8 @@ export class ProductsService {
       stockGridControlMode: branchConfig?.stockGridControlMode || "BY_PRODUCT",
       stockNegativeControlMode:
         branchConfig?.stockNegativeControlMode || "BY_PRODUCT",
+      stockClassificationMode:
+        branchConfig?.stockClassificationMode || "GROUP_ONLY",
     };
   }
 
@@ -323,6 +343,7 @@ export class ProductsService {
     payload: SaveProductDto,
     branchConfig: BranchInventoryConfig,
     allowsNegativeStockFallback = false,
+    currentProduct?: { groupId?: string | null; subgroupId?: string | null },
   ): NormalizedProductPayload {
     const normalizedName = normalizeText(payload.name);
     if (!normalizedName) {
@@ -391,6 +412,14 @@ export class ProductsService {
     return {
       branchCode: branchConfig.branchCode,
       name: normalizedName,
+      groupId:
+        payload.groupId !== undefined
+          ? normalizeIdentifier(payload.groupId)
+          : normalizeIdentifier(currentProduct?.groupId),
+      subgroupId:
+        payload.subgroupId !== undefined
+          ? normalizeIdentifier(payload.subgroupId)
+          : normalizeIdentifier(currentProduct?.subgroupId),
       internalCode: this.normalizeInternalCode(payload.internalCode),
       sku: normalizeText(payload.sku),
       barcode: normalizeDigits(payload.barcode) || normalizeText(payload.barcode),
@@ -442,6 +471,64 @@ export class ProductsService {
     };
   }
 
+  private async validateProductClassification(
+    companyId: string,
+    branchConfig: BranchInventoryConfig,
+    payload: Pick<NormalizedProductPayload, "groupId" | "subgroupId">,
+  ) {
+    if (branchConfig.stockClassificationMode === "NONE") {
+      return;
+    }
+
+    if (!payload.groupId) {
+      throw new BadRequestException(
+        "Informe o grupo do produto para esta filial.",
+      );
+    }
+
+    const group = await this.prisma.productGroup.findFirst({
+      where: {
+        id: payload.groupId,
+        companyId,
+        branchCode: branchConfig.branchCode,
+        status: "ACTIVE",
+        canceledAt: null,
+      },
+      select: { id: true },
+    });
+    if (!group) {
+      throw new BadRequestException(
+        "Selecione um grupo ativo da filial para o produto.",
+      );
+    }
+
+    if (!payload.subgroupId) {
+      if (branchConfig.stockClassificationMode === "GROUP_AND_SUBGROUP") {
+        throw new BadRequestException(
+          "Informe o subgrupo do produto para esta filial.",
+        );
+      }
+      return;
+    }
+
+    const subgroup = await this.prisma.productSubgroup.findFirst({
+      where: {
+        id: payload.subgroupId,
+        companyId,
+        branchCode: branchConfig.branchCode,
+        groupId: payload.groupId,
+        status: "ACTIVE",
+        canceledAt: null,
+      },
+      select: { id: true },
+    });
+    if (!subgroup) {
+      throw new BadRequestException(
+        "Selecione um subgrupo ativo pertencente ao grupo informado.",
+      );
+    }
+  }
+
   private getInventorySituation(product: {
     tracksInventory: boolean;
     currentStock: number;
@@ -477,6 +564,10 @@ export class ProductsService {
       sourceTenantId: product.company?.sourceTenantId || null,
       status: product.status,
       name: product.name,
+      groupId: product.groupId || null,
+      groupName: product.group?.name || null,
+      subgroupId: product.subgroupId || null,
+      subgroupName: product.subgroup?.name || null,
       internalCode: product.internalCode || null,
       sku: product.sku || null,
       barcode: product.barcode || null,
@@ -701,6 +792,8 @@ export class ProductsService {
       },
       include: {
         company: true,
+        group: true,
+        subgroup: true,
       },
     });
 
@@ -870,6 +963,8 @@ export class ProductsService {
       },
       include: {
         company: true,
+        group: true,
+        subgroup: true,
       },
       orderBy: [{ name: "asc" }],
     });
@@ -898,6 +993,9 @@ export class ProductsService {
           stockGridControlMode: this.normalizeBranchStockMode(branch.stockGridControlMode),
           stockNegativeControlMode: this.normalizeBranchStockMode(
             branch.stockNegativeControlMode,
+          ),
+          stockClassificationMode: normalizeStockClassificationMode(
+            branch.stockClassificationMode,
           ),
           notifyMinimumStockOnMovement:
             branch.notifyMinimumStockOnMovement === true,
@@ -1244,6 +1342,12 @@ export class ProductsService {
     const branchConfig = await this.loadCurrentBranchConfig(company.id);
     const normalizedPayload = this.buildNormalizedPayload(payload, branchConfig, true);
 
+    await this.validateProductClassification(
+      company.id,
+      branchConfig,
+      normalizedPayload,
+    );
+
     await this.ensureNoDuplicateProduct(company.id, normalizedPayload);
 
     const product = await this.prisma.product.create({
@@ -1256,6 +1360,8 @@ export class ProductsService {
       },
       include: {
         company: true,
+        group: true,
+        subgroup: true,
       },
     });
 
@@ -1281,6 +1387,13 @@ export class ProductsService {
       payload,
       branchConfig,
       Boolean(product.allowsNegativeStock),
+      product,
+    );
+
+    await this.validateProductClassification(
+      product.companyId,
+      branchConfig,
+      normalizedPayload,
     );
 
     await this.ensureNoDuplicateProduct(
@@ -1297,6 +1410,8 @@ export class ProductsService {
       },
       include: {
         company: true,
+        group: true,
+        subgroup: true,
       },
     });
 
@@ -1318,6 +1433,15 @@ export class ProductsService {
       payload.sourceTenantId,
     );
 
+    const branchConfig = await this.loadBranchConfigByCode(
+      product.companyId,
+      product.branchCode,
+    );
+    await this.validateProductClassification(product.companyId, branchConfig, {
+      groupId: product.groupId,
+      subgroupId: product.subgroupId,
+    });
+
     const updatedProduct = await this.prisma.product.update({
       where: { id: product.id },
       data: {
@@ -1328,15 +1452,14 @@ export class ProductsService {
       },
       include: {
         company: true,
+        group: true,
+        subgroup: true,
       },
     });
 
     return this.mapProduct(
       updatedProduct,
-      await this.loadBranchConfigByCode(
-        updatedProduct.companyId,
-        updatedProduct.branchCode,
-      ),
+      branchConfig,
     );
   }
 
@@ -1358,6 +1481,8 @@ export class ProductsService {
       },
       include: {
         company: true,
+        group: true,
+        subgroup: true,
       },
     });
 

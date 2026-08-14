@@ -20,6 +20,7 @@
     "test:core": "npm run build && node test/finance-core.test.cjs",
     "test:stock-limits": "npm run build && node test/product-stock-limits.test.cjs",
     "test:company-branches-directory": "npm run build && node test/company-branches-directory.test.cjs",
+    "test:product-classification": "npm run build && node test/product-classification-flow.test.cjs",
     "test:package-stock": "npm run build && node test/package-stock-reservation.test.cjs",
     "test:nfce": "npm run build && ts-node test/nfce-core.test.ts && node test/nfce-flow.test.cjs",
     "test:nfe": "npm run build && ts-node test/brazil-tax-id.test.ts && ts-node test/nfe-core.test.ts",

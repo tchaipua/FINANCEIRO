@@ -66,7 +66,7 @@ for (const filePath of listSourceFiles(appRoot)) {
         assert.equal(
           node.body
             .getText(source)
-            .includes(`isTrustedMessageEvent(${parameterName})`),
+            .includes(`isTrustedMessageEvent(${parameterName}`),
           true,
           `Listener sem validação de origem em ${filePath}.`,
         );
@@ -145,10 +145,10 @@ assert.match(apiSource, /credentials:\s*"include"/);
 const s3ControlPageSource = fs.readFileSync(s3ControlPagePath, 'utf8');
 const uploadMultipartSource =
   s3ControlPageSource.match(
-    /const formData = new FormData\(\);([\s\S]*?)financeApiFetch\('\/s3-control\/upload'/,
+    /const formData = new FormData\(\);([\s\S]*?)financeApiFetch\(["']\/s3-control\/upload["']/,
   )?.[1] || '';
-assert.match(uploadMultipartSource, /formData\.append\('prefix'/);
-assert.match(uploadMultipartSource, /formData\.append\('file', file\)/);
+assert.match(uploadMultipartSource, /formData\.append\(["']prefix["']/);
+assert.match(uploadMultipartSource, /formData\.append\(["']file["'], file\)/);
 for (const forbiddenUploadField of [
   'contextPayload',
   'sourceSystem',
@@ -164,6 +164,40 @@ for (const forbiddenUploadField of [
     `O multipart S3 ainda envia autoridade do navegador: ${forbiddenUploadField}.`,
   );
 }
+
+const companiesPageSource = fs.readFileSync(
+  path.join(appRoot, 'empresas', 'page.tsx'),
+  'utf8',
+);
+const msinforPageSource = fs.readFileSync(
+  path.join(appRoot, 'msinfor', 'page.tsx'),
+  'utf8',
+);
+assert.doesNotMatch(
+  msinforPageSource,
+  /window\.open\s*\(/,
+  'O card EMPRESA não pode abrir pop-up.',
+);
+assert.match(
+  companiesPageSource,
+  /<iframe[\s\S]*src=\{centralUrl\}/,
+  'A tela da Central deve abrir dentro da própria área financeira.',
+);
+assert.match(
+  companiesPageSource,
+  /isTrustedMessageEvent\(event,[\s\S]*source:/,
+  'Mensagens da Central devem validar origem e janela exata do iframe.',
+);
+assert.match(
+  companiesPageSource,
+  /CENTRAL_SAVED_MESSAGE[\s\S]*refreshFinanceMirror\(editorScope\)/,
+  'Salvar na Central deve atualizar imediatamente o espelho do Financeiro.',
+);
+assert.match(
+  companiesPageSource,
+  /central-configuration-refresh[\s\S]*setSyncError/,
+  'Falhas ao atualizar o espelho financeiro devem ser exibidas ao usuário.',
+);
 
 for (const filePath of listSourceFiles(appRoot)) {
   if (filePath === apiPath) continue;

@@ -28,6 +28,7 @@ export type SourceBranchParameters = {
   stockExpirationControlMode?: string;
   stockGridControlMode?: string;
   stockNegativeControlMode?: string;
+  stockClassificationMode?: string;
   allowSaleUnitPriceEdit?: boolean;
   allowSaleItemDiscount?: boolean;
   groupSameProduct?: boolean;
