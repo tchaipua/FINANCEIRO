@@ -32,7 +32,26 @@ const ORIGIN_CSRF_COOKIE_NAMES = [
   "__Host-msinfor_financeiro_csrf",
   "msinfor_financeiro_csrf",
 ] as const;
+const CSRF_COOKIE_NAMES_BY_SOURCE_SYSTEM = {
+  ESCOLA: [
+    "__Host-msinfor_escola_csrf",
+    "msinfor_escola_csrf",
+  ],
+  PROJETO_INICIAL: [
+    "__Host-msinfor_projeto_csrf",
+    "msinfor_projeto_csrf",
+  ],
+} as const;
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+let activeSourceSystem: "ESCOLA" | "PROJETO_INICIAL" | null = null;
+
+export function setFinanceSourceSystem(sourceSystem: string | null | undefined) {
+  const normalized = String(sourceSystem || "").trim().toUpperCase();
+  activeSourceSystem =
+    normalized === "ESCOLA" || normalized === "PROJETO_INICIAL"
+      ? normalized
+      : null;
+}
 
 function readCookie(name: string) {
   if (typeof document === "undefined") return null;
@@ -51,7 +70,16 @@ function readCookie(name: string) {
 }
 
 function readFinanceCsrfToken() {
-  for (const cookieName of ORIGIN_CSRF_COOKIE_NAMES) {
+  const sourceSpecificNames = activeSourceSystem
+    ? CSRF_COOKIE_NAMES_BY_SOURCE_SYSTEM[activeSourceSystem]
+    : [];
+  const cookieNames = [
+    ...sourceSpecificNames,
+    ...ORIGIN_CSRF_COOKIE_NAMES.filter(
+      (cookieName) => !sourceSpecificNames.includes(cookieName as never),
+    ),
+  ];
+  for (const cookieName of cookieNames) {
     const token = readCookie(cookieName);
     if (token && /^[A-Za-z0-9._~-]{20,512}$/.test(token)) {
       return token;

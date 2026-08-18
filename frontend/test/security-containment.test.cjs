@@ -268,6 +268,7 @@ async function testCsrfContract() {
   const escola = loadApiModule(
     'msinfor_escola_csrf=escola-dev-token-1234567890; __Host-msinfor_escola_csrf=escola-production-token-1234567890; __Host-msinfor_projeto_csrf=projeto-token-1234567890; __Host-msinfor_financeiro_csrf=legacy-token-1234567890',
   );
+  escola.api.setFinanceSourceSystem('ESCOLA');
   await escola.api.financeApiFetch('/resource', { method: 'POST' });
   assert.equal(escola.calls.length, 1);
   assert.equal(escola.calls[0].url, '/api/financeiro/resource');
@@ -282,6 +283,7 @@ async function testCsrfContract() {
   const projeto = loadApiModule(
     'msinfor_projeto_csrf=projeto-dev-token-1234567890; __Host-msinfor_projeto_csrf=projeto-production-token-1234567890; __Host-msinfor_financeiro_csrf=legacy-token-1234567890',
   );
+  projeto.api.setFinanceSourceSystem('PROJETO_INICIAL');
   await projeto.api.financeApiFetch('/resource', { method: 'PATCH' });
   assert.equal(
     projeto.calls[0].init.headers.get('x-msinfor-csrf'),
@@ -291,6 +293,7 @@ async function testCsrfContract() {
   const escolaDevelopment = loadApiModule(
     'msinfor_escola_csrf=escola-dev-token-1234567890',
   );
+  escolaDevelopment.api.setFinanceSourceSystem('ESCOLA');
   await escolaDevelopment.api.financeApiFetch('/resource', {
     method: 'PUT',
   });
@@ -302,6 +305,7 @@ async function testCsrfContract() {
   const projetoDevelopment = loadApiModule(
     'msinfor_projeto_csrf=projeto-dev-token-1234567890',
   );
+  projetoDevelopment.api.setFinanceSourceSystem('PROJETO_INICIAL');
   await projetoDevelopment.api.financeApiFetch('/resource', {
     method: 'DELETE',
   });
@@ -313,6 +317,7 @@ async function testCsrfContract() {
   const legacy = loadApiModule(
     'msinfor_financeiro_csrf=legacy-dev-token-1234567890; __Host-msinfor_financeiro_csrf=legacy-production-token-1234567890',
   );
+  legacy.api.setFinanceSourceSystem(null);
   await legacy.api.financeApiFetch('/resource', { method: 'PATCH' });
   assert.equal(
     legacy.calls[0].init.headers.get('x-msinfor-csrf'),

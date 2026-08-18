@@ -5,6 +5,7 @@ import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
+import { financeApiFetch } from '@/app/lib/api';
 import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
@@ -20,12 +21,34 @@ const ORIGIN_TEXT =
 export default function MsinforPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [isMounted, setIsMounted] = useState(false);
+  const [hasFinanceAdmin, setHasFinanceAdmin] = useState<boolean | null>(null);
   const screenId = runtimeContext.embedded ? EMBEDDED_SCREEN_ID : FINANCE_SCREEN_ID;
   const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
+      setHasFinanceAdmin(false);
+      return () => controller.abort();
+    }
+    setHasFinanceAdmin(null);
+    void financeApiFetch('/finance-access/profiles', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!controller.signal.aborted) setHasFinanceAdmin(response.ok);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHasFinanceAdmin(false);
+      });
+    return () => controller.abort();
+  }, [runtimeContext.sourceSystem, runtimeContext.sourceTenantId, runtimeContext.sourceBranchCode, runtimeContext.cashierUserId]);
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
@@ -35,7 +58,7 @@ export default function MsinforPage() {
       });
   }, [runtimeContext.embedded]);
 
-  if (!isMounted) {
+  if (!isMounted || hasFinanceAdmin === null) {
     return (
       <div className="flex min-h-[45vh] items-center justify-center">
         <div className={`${cardClass} px-8 py-6 text-center text-sm font-bold text-slate-600`}>
@@ -45,7 +68,7 @@ export default function MsinforPage() {
     );
   }
 
-  if (runtimeContext.userRole !== 'ADMIN') {
+  if (!hasFinanceAdmin) {
     return (
       <div className="space-y-6">
         <section className={`${cardClass} border-amber-200 p-8 text-center`}>
@@ -54,7 +77,7 @@ export default function MsinforPage() {
           </div>
           <h1 className="mt-2 text-2xl font-black text-slate-900">Central MSINFOR</h1>
           <p className="mt-2 text-sm font-semibold text-slate-600">
-            Esta área está disponível somente para usuários com perfil ADMIN.
+            Esta área exige o perfil ADMINISTRADOR FINANCEIRO.
           </p>
         </section>
 
@@ -63,7 +86,7 @@ export default function MsinforPage() {
             screenId={screenId}
             className="justify-end"
             originText={ORIGIN_TEXT}
-            auditText="Acesso negado porque o contexto atual não possui perfil ADMIN."
+            auditText="Acesso negado porque o contexto atual não possui FINANCE_ADMIN."
             sqlText="-- ESTA TELA NÃO CONSULTA DADOS QUANDO O ACESSO É NEGADO."
           />
         </section>
@@ -77,7 +100,7 @@ Contexto operacional:
 - sistema de origem: ${runtimeContext.sourceSystem || 'NÃO INFORMADO'}
 - tenant de origem: ${runtimeContext.sourceTenantId || 'NÃO INFORMADO'}
 - filial: ${runtimeContext.sourceBranchCode}
-- perfil exigido: ADMIN
+- perfil exigido: ADMINISTRADOR FINANCEIRO (FINANCE_ADMIN)
 
 Estrutura atual:
 - card EMPRESA abre, dentro da própria área financeira, a tela única de empresas/filiais do MSINFOR Central, limitada à empresa logada

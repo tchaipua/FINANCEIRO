@@ -602,6 +602,10 @@ export default function ScreenNameCopy({
   const effectiveOriginText = originText || auditMetadata?.originText;
   const effectiveAuditText = auditText || auditMetadata?.auditText;
   const effectiveSqlText = sqlText || auditMetadata?.sqlText;
+  const displayScreenId =
+    compact && screenId.length > 38
+      ? `${screenId.slice(0, 35)}...`
+      : screenId;
   const tooltipPath = useRuntimeTooltipPath(extractSourcePath(effectiveOriginText));
 
   const resetStatus = useCallback(() => {
@@ -635,10 +639,12 @@ export default function ScreenNameCopy({
 
   return (
     <>
-      <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 ${compact ? 'justify-end' : ''} ${className}`}>
-        <span className={compact ? 'max-w-[calc(100%-42px)] truncate' : 'flex-1 truncate'}>
+      <div className={`flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 ${compact ? 'justify-end' : ''} ${className}`}>
+        <span className={compact ? 'min-w-0 max-w-[calc(100%-42px)] truncate' : 'min-w-0 flex-1 truncate'}>
           {label}:{' '}
-          <span className="font-normal text-[10px] tracking-[0.35em] text-slate-500">{screenId}</span>
+          <span className="font-normal text-[10px] tracking-[0.35em] text-slate-500" title={screenId}>
+            {displayScreenId}
+          </span>
         </span>
         <button
           type="button"

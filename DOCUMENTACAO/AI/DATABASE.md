@@ -667,3 +667,11 @@ Trilha append-only de cada sincronização das configurações de origem. Regist
 Todas as tabelas carregam `companyId` e `branchCode`. Modelos de negócio respeitam cancelamento lógico; auditoria e histórico de impressão não são apagados.
 
 Pacotes `.msreport.json` não criam uma tabela paralela. A importação validada reutiliza `print_templates` e sempre acrescenta uma nova linha em `print_template_versions`; importação, publicação e exportação são registradas em `print_audit_events`. O pacote não persiste nem transporta `companyId`, `sourceTenantId`, `branchCode`, credenciais ou IDs internos do banco.
+
+## Acessos financeiros por usuário
+
+- `finance_access_subjects`: projeção sem credencial do usuário administrativo da origem, isolada por `companyId`, sistema e tenant, incluindo as filiais autorizadas na origem;
+- `finance_access_assignments`: perfil e permissões efetivas por usuário e `branchCode`, com ativação e soft delete;
+- `finance_access_audit_events`: trilha append-only de sincronizações e alterações de acesso.
+
+Pessoa, cliente e funcionário continuam pertencendo ao sistema de origem. O cadastro operacional do usuário do sistema é iniciado no Financeiro, que persiste somente a referência estável e seus perfis por empresa/filial. A origem mantém uma projeção técnica local para login e regras próprias, a identidade/credencial é vinculada à Central e a senha nunca é armazenada no Financeiro.

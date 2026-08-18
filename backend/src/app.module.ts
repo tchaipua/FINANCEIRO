@@ -23,6 +23,7 @@ import { InternalApiAuthGuard } from "./common/internal-api-auth.guard";
 import { InternalReplayCacheService } from "./common/internal-replay-cache.service";
 import { HealthController } from "./common/health.controller";
 import { MultipartBodyMiddleware } from "./common/multipart-body.middleware";
+import { FinanceAccessModule } from "./modules/finance-access/finance-access.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { MultipartBodyMiddleware } from "./common/multipart-body.middleware";
     SuperTefModule,
     S3ControlModule,
     PrintingModule,
+    FinanceAccessModule,
   ],
   controllers: [HealthController],
   providers: [

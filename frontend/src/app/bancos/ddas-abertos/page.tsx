@@ -311,7 +311,7 @@ export default function FinanceiroOpenDdasPage() {
     try {
       setIsConsulting(true); setError(null); setStatusMessage(null);
       const response = await getJson<OpenDdaResponse>(`/banks/${selectedBankId}/dda/open${buildFinanceApiQueryString(runtimeContext, { sourceBranchCode: runtimeContext.sourceBranchCode, requestedBy: runtimeContext.cashierDisplayName || runtimeContext.cashierUserId || 'SISTEMA' })}`);
-      setDdaItems(response.items || []); setPulledAt(response.pulledAt || null); setStatusMessage(null);
+      setDdaItems(response.items || []); setPulledAt(response.pulledAt || null); setStatusMessage(response.message || null);
     } catch (currentError) { clearDdas(); setError(getFriendlyRequestErrorMessage(currentError, 'Não foi possível consultar os DDAs em aberto no banco.')); }
     finally { setIsConsulting(false); }
   }, [clearDdas, runtimeContext, scopeReady, selectedBankId]);

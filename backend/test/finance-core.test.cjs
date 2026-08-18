@@ -181,6 +181,12 @@ async function resetDatabase(prisma) {
   await prisma.sourceIntegrationAuditEvent.deleteMany();
   await prisma.sourceIntegrationConfiguration.deleteMany();
   await prisma.screenParameter.deleteMany();
+  await prisma.cashOperatorPolicy.deleteMany();
+  await prisma.financeAccessAuditEvent.deleteMany();
+  await prisma.financeAccessAssignment.deleteMany();
+  await prisma.financeAccessSubject.deleteMany();
+  await prisma.productSubgroup.deleteMany();
+  await prisma.productGroup.deleteMany();
   await prisma.companyBranch.deleteMany();
   await prisma.company.deleteMany();
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -24,16 +25,31 @@ import {
   CreateCashMovementDto,
   CreateReceivablePixIntentDto,
   CurrentCashSessionQueryDto,
+  EnsureLoginCashSessionDto,
+  ListCashOperatorPoliciesDto,
   ListInstallmentSettlementHistoryDto,
   ListCustomerCreditsDto,
   ListCashSessionsDto,
   OpenCashSessionDto,
   ReverseSettlementGroupDto,
   ReverseManualSettlementDto,
+  SaveCashOperatorPolicyDto,
   ReceivablePixIntentContextDto,
   SettleCashInstallmentDto,
   SettleManualInstallmentDto,
 } from "./dto/cash-sessions.dto";
+import { DEFAULT_BRANCH_CODE } from "../../../common/branch.constants";
+import {
+  getFinanceContext,
+  hasAuthenticatedFinanceScope,
+} from "../../../common/finance-context";
+import {
+  DEFAULT_CASH_SESSION_TIMEZONE,
+  ensureOpenCashSessionReady,
+  getCashOperatorPolicy,
+  getCashBusinessDate,
+  normalizeCashSessionClosingMode,
+} from "../../../common/cash-session-policy";
 import { SicoobPixService } from "../../sales/application/sicoob-pix.service";
 import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
 
@@ -133,10 +149,35 @@ function isValidBrazilDocument(value: string | null | undefined) {
 
 @Injectable()
 export class CashSessionsService {
+  private readonly loginCashSessionLocks = new Map<string, Promise<void>>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sicoobPixService: SicoobPixService,
   ) {}
+
+  private async withLoginCashSessionLock<T>(
+    key: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.loginCashSessionLocks.get(key) ?? Promise.resolve();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const chain = previous.then(() => gate);
+    this.loginCashSessionLocks.set(key, chain);
+
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.loginCashSessionLocks.get(key) === chain) {
+        this.loginCashSessionLocks.delete(key);
+      }
+    }
+  }
 
   private buildInstallmentFinancialSettingsSnapshot(installment: any) {
     return resolveFinancialRuleSettings({
@@ -260,37 +301,179 @@ export class CashSessionsService {
     return company;
   }
 
-  private async loadOpenSession(
-    companyId: string,
-    cashierUserId: string,
-    includeRelations = true,
-  ) {
-    const normalizedCashierUserId =
-      normalizeText(cashierUserId) || String(cashierUserId || "").trim();
+  private getOperationalBranchCode() {
+    return getFinanceContext()?.branchCode || DEFAULT_BRANCH_CODE;
+  }
 
-    return this.prisma.cashSession.findFirst({
+  private assertFinanceAdmin() {
+    if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
+      throw new ForbiddenException(
+        "A configuração do fechamento de caixa exige o escopo FINANCE_ADMIN.",
+      );
+    }
+  }
+
+  private mapCashOperatorPolicy(policy: any) {
+    return {
+      id: policy.id,
+      companyId: policy.companyId,
+      branchCode: policy.branchCode,
+      cashierUserId: policy.cashierUserId,
+      cashierDisplayName: policy.cashierDisplayName,
+      closingMode: normalizeCashSessionClosingMode(policy.closingMode),
+      timezone: DEFAULT_CASH_SESSION_TIMEZONE,
+      createdAt: policy.createdAt?.toISOString?.() || null,
+      updatedAt: policy.updatedAt?.toISOString?.() || null,
+    };
+  }
+
+  async listOperatorPolicies(query: ListCashOperatorPoliciesDto) {
+    this.assertFinanceAdmin();
+
+    const context = getFinanceContext();
+    const sourceSystem =
+      normalizeText(query.sourceSystem) || normalizeText(context?.sourceSystem);
+    const sourceTenantId =
+      normalizeText(query.sourceTenantId) || normalizeText(context?.sourceTenantId);
+
+    if (!sourceSystem || !sourceTenantId) {
+      throw new BadRequestException(
+        "Informe o sistema e o tenant de origem para consultar as configurações do caixa.",
+      );
+    }
+
+    const company = await this.resolveCompany(sourceSystem, sourceTenantId);
+    const policies = await this.prisma.cashOperatorPolicy.findMany({
       where: {
-        companyId,
-        cashierUserId: normalizedCashierUserId,
-        status: "OPEN",
+        companyId: company.id,
+        branchCode: this.getOperationalBranchCode(),
         canceledAt: null,
       },
-      include: includeRelations
-        ? {
-            movements: {
-              where: { canceledAt: null },
-              orderBy: [{ occurredAt: "asc" }],
-            },
-            settlements: {
-              where: { canceledAt: null },
-            },
-          }
-        : undefined,
-      orderBy: { openedAt: "desc" },
+      orderBy: [{ cashierDisplayName: "asc" }, { cashierUserId: "asc" }],
+    });
+
+    return policies.map((policy: any) => this.mapCashOperatorPolicy(policy));
+  }
+
+  async saveOperatorPolicy(payload: SaveCashOperatorPolicyDto) {
+    this.assertFinanceAdmin();
+
+    const sourceSystem = normalizeText(payload.sourceSystem);
+    const sourceTenantId = normalizeText(payload.sourceTenantId);
+    const cashierUserId = normalizeText(payload.targetCashierUserId);
+    const cashierDisplayName = normalizeText(payload.targetCashierDisplayName);
+
+    if (!sourceSystem || !sourceTenantId || !cashierUserId || !cashierDisplayName) {
+      throw new BadRequestException(
+        "Informe o sistema, o tenant, o operador e o nome do operador.",
+      );
+    }
+
+    const company = await this.resolveCompany(sourceSystem, sourceTenantId);
+    const branchCode = this.getOperationalBranchCode();
+    const closingMode = normalizeCashSessionClosingMode(payload.closingMode);
+    const actor =
+      normalizeText(getFinanceContext()?.sourceUserId) ||
+      normalizeText(payload.requestedBy) ||
+      "FINANCEIRO_ADMIN";
+
+    const policy = await this.prisma.$transaction(async (tx: any) => {
+      const saved = await tx.cashOperatorPolicy.upsert({
+        where: {
+          companyId_branchCode_cashierUserId: {
+            companyId: company.id,
+            branchCode,
+            cashierUserId,
+          },
+        },
+        create: {
+          companyId: company.id,
+          branchCode,
+          cashierUserId,
+          cashierDisplayName,
+          closingMode,
+          createdBy: actor,
+          updatedBy: actor,
+        },
+        update: {
+          cashierDisplayName,
+          closingMode,
+          canceledAt: null,
+          canceledBy: null,
+          updatedBy: actor,
+        },
+      });
+
+      await tx.sourceIntegrationAuditEvent.create({
+        data: {
+          companyId: company.id,
+          branchCode,
+          action: "CASH_OPERATOR_POLICY_UPDATED",
+          summary: "CONFIGURAÇÃO DE FECHAMENTO DO OPERADOR DE CAIXA ALTERADA.",
+          metadataJson: JSON.stringify({
+            sourceSystem,
+            sourceTenantId,
+            cashierUserId,
+            cashierDisplayName,
+            closingMode,
+          }),
+          performedBy: actor,
+          createdBy: actor,
+        },
+      });
+
+      return saved;
+    });
+
+    return this.mapCashOperatorPolicy(policy);
+  }
+
+  private async loadOpenSessionState(
+    companyId: string,
+    branchCode: number,
+    sourceSystem: string,
+    sourceTenantId: string,
+    cashierUserId: string,
+    includeRelations = true,
+    allowDailyRequiredClose = false,
+  ) {
+    return ensureOpenCashSessionReady(this.prisma, {
+      companyId,
+      branchCode,
+      sourceSystem,
+      sourceTenantId,
+      cashierUserId,
+      includeRelations,
+      allowDailyRequiredClose,
     });
   }
 
-  private mapCashSession(session: any) {
+  private async loadOpenSession(
+    companyId: string,
+    branchCode: number,
+    sourceSystem: string,
+    sourceTenantId: string,
+    cashierUserId: string,
+    includeRelations = true,
+    allowDailyRequiredClose = false,
+  ) {
+    const state = await this.loadOpenSessionState(
+      companyId,
+      branchCode,
+      sourceSystem,
+      sourceTenantId,
+      cashierUserId,
+      includeRelations,
+      allowDailyRequiredClose,
+    );
+    return state.session;
+  }
+
+  private mapCashSession(
+    session: any,
+    policy?: { closingMode?: string | null } | null,
+    closeRequired = false,
+  ) {
     if (!session) return null;
 
     const receivedByPaymentMethod = this.buildReceivedByPaymentMethod(session);
@@ -307,6 +490,10 @@ export class CashSessionsService {
       totalReceivedAmount: session.totalReceivedAmount,
       expectedClosingAmount: session.expectedClosingAmount,
       declaredClosingAmount: session.declaredClosingAmount,
+      closeReason: session.closeReason || null,
+      closedBy: session.closedBy || null,
+      cashClosingMode: normalizeCashSessionClosingMode(policy?.closingMode),
+      closeRequired,
       openedAt: session.openedAt.toISOString(),
       closedAt: session.closedAt?.toISOString() || null,
       notes: session.notes || null,
@@ -341,8 +528,131 @@ export class CashSessionsService {
       query.sourceTenantId,
     );
 
-    const session = await this.loadOpenSession(company.id, query.cashierUserId);
-    return this.mapCashSession(session);
+    const state = await this.loadOpenSessionState(
+      company.id,
+      this.getOperationalBranchCode(),
+      query.sourceSystem,
+      query.sourceTenantId,
+      query.cashierUserId,
+      true,
+      true,
+    );
+    return this.mapCashSession(state.session, state.policy, state.closeRequired);
+  }
+
+  async ensureLoginCashSession(payload: EnsureLoginCashSessionDto) {
+    const lockKey = [
+      normalizeText(payload.sourceSystem),
+      normalizeText(payload.sourceTenantId),
+      this.getOperationalBranchCode(),
+      normalizeText(payload.cashierUserId),
+    ].join("|");
+
+    return this.withLoginCashSessionLock(lockKey, () =>
+      this.ensureLoginCashSessionUnlocked(payload),
+    );
+  }
+
+  private async ensureLoginCashSessionUnlocked(
+    payload: EnsureLoginCashSessionDto,
+  ) {
+    const company = await this.resolveCompany(
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const branchCode = this.getOperationalBranchCode();
+    const state = await this.loadOpenSessionState(
+      company.id,
+      branchCode,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+      payload.cashierUserId,
+      false,
+      true,
+    );
+
+    if (state.session) {
+      if (state.closeRequired) {
+        throw new BadRequestException({
+          code: "CASH_SESSION_CLOSE_REQUIRED",
+          message: "O caixa do dia anterior precisa ser fechado antes de continuar.",
+          cashierUserId: payload.cashierUserId,
+          cashSessionId: state.session.id,
+        });
+      }
+      return {
+        ...this.mapCashSession(state.session, state.policy, false),
+        openedAutomatically: Boolean(state.rolledOver),
+      };
+    }
+
+    const currentBusinessDate = getCashBusinessDate(
+      new Date(),
+      state.policy.timezone,
+    );
+    if (state.policy.closingMode === "DAILY_REQUIRED") {
+      const closedSessions = await this.prisma.cashSession.findMany({
+        where: {
+          companyId: company.id,
+          branchCode,
+          cashierUserId: payload.cashierUserId,
+          status: "CLOSED",
+          canceledAt: null,
+          closedAt: { not: null },
+        },
+        orderBy: { closedAt: "desc" },
+        take: 50,
+      });
+      const closedToday = closedSessions.some(
+        (session: any) =>
+          session.closedAt &&
+          getCashBusinessDate(session.closedAt, state.policy.timezone) ===
+            currentBusinessDate,
+      );
+      if (closedToday) {
+        throw new BadRequestException({
+          code: "CASH_SESSION_ALREADY_CLOSED",
+          message:
+            "Não é possível acessar o sistema na data de hoje: o caixa deste operador já foi fechado.",
+          cashierUserId: payload.cashierUserId,
+          businessDate: currentBusinessDate,
+        });
+      }
+    }
+
+    const lastClosedSession = await this.prisma.cashSession.findFirst({
+      where: {
+        companyId: company.id,
+        branchCode,
+        cashierUserId: payload.cashierUserId,
+        status: "CLOSED",
+        canceledAt: null,
+        closedAt: { not: null },
+      },
+      orderBy: [{ closedAt: "desc" }, { openedAt: "desc" }],
+      select: {
+        declaredClosingAmount: true,
+        expectedClosingAmount: true,
+      },
+    });
+    const openingAmount =
+      lastClosedSession?.declaredClosingAmount ??
+      lastClosedSession?.expectedClosingAmount ??
+      0;
+
+    const opened = await this.open({
+      requestedBy: payload.requestedBy || payload.cashierUserId,
+      sourceSystem: payload.sourceSystem,
+      sourceTenantId: payload.sourceTenantId,
+      cashierUserId: payload.cashierUserId,
+      cashierDisplayName: payload.cashierDisplayName,
+      openingAmount: roundMoney(Number(openingAmount)),
+      notes: payload.notes || "ABERTURA AUTOMÁTICA NA AUTENTICAÇÃO DO OPERADOR.",
+    });
+    return {
+      ...opened,
+      openedAutomatically: true,
+    };
   }
 
   async getById(sessionId: string, query: ListCashSessionsDto) {
@@ -358,6 +668,7 @@ export class CashSessionsService {
       where: {
         id: normalizedSessionId,
         canceledAt: null,
+        branchCode: this.getOperationalBranchCode(),
         ...(normalizedSourceSystem
           ? { sourceSystem: normalizedSourceSystem }
           : {}),
@@ -383,8 +694,19 @@ export class CashSessionsService {
       throw new NotFoundException("CAIXA NÃO ENCONTRADO.");
     }
 
+    const policy = await getCashOperatorPolicy(this.prisma, {
+      companyId: session.companyId,
+      branchCode: session.branchCode || this.getOperationalBranchCode(),
+      cashierUserId: session.cashierUserId,
+    });
+    const closeRequired =
+      session.status === "OPEN" &&
+      policy.closingMode === "DAILY_REQUIRED" &&
+      getCashBusinessDate(session.openedAt, policy.timezone) <
+        getCashBusinessDate(new Date(), policy.timezone);
+
     return {
-      ...this.mapCashSession(session),
+      ...this.mapCashSession(session, policy, closeRequired),
       companyName: session.company.name,
     };
   }
@@ -710,9 +1032,26 @@ export class CashSessionsService {
       return [];
     }
 
+    if (normalizedCashierUserId && normalizedSourceSystem) {
+      const company = await this.resolveCompany(
+        normalizedSourceSystem,
+        normalizedSourceTenantId,
+      );
+      await this.loadOpenSessionState(
+        company.id,
+        this.getOperationalBranchCode(),
+        normalizedSourceSystem,
+        normalizedSourceTenantId,
+        normalizedCashierUserId,
+        false,
+        true,
+      );
+    }
+
     const sessions = await this.prisma.cashSession.findMany({
       where: {
         canceledAt: null,
+        branchCode: this.getOperationalBranchCode(),
         ...(normalizedSourceSystem
           ? { sourceSystem: normalizedSourceSystem }
           : {}),
@@ -749,10 +1088,25 @@ export class CashSessionsService {
       orderBy: [{ openedAt: "desc" }],
     });
 
-    return sessions.map((session: any) => ({
-      ...this.mapCashSession(session),
-      companyName: session.company.name,
-    }));
+    return Promise.all(
+      sessions.map(async (session: any) => {
+        const policy = await getCashOperatorPolicy(this.prisma, {
+          companyId: session.companyId,
+          branchCode: session.branchCode || this.getOperationalBranchCode(),
+          cashierUserId: session.cashierUserId,
+        });
+        const closeRequired =
+          session.status === "OPEN" &&
+          policy.closingMode === "DAILY_REQUIRED" &&
+          getCashBusinessDate(session.openedAt, policy.timezone) <
+            getCashBusinessDate(new Date(), policy.timezone);
+
+        return {
+          ...this.mapCashSession(session, policy, closeRequired),
+          companyName: session.company.name,
+        };
+      }),
+    );
   }
 
   async open(payload: OpenCashSessionDto) {
@@ -761,13 +1115,20 @@ export class CashSessionsService {
       payload.sourceTenantId,
     );
 
-    const existingOpenSession = await this.loadOpenSession(
+    const openState = await this.loadOpenSessionState(
       company.id,
+      this.getOperationalBranchCode(),
+      payload.sourceSystem,
+      payload.sourceTenantId,
       payload.cashierUserId,
       false,
     );
+    const existingOpenSession = openState.session;
 
     if (existingOpenSession) {
+      if (openState.rolledOver) {
+        return this.mapCashSession(existingOpenSession, openState.policy);
+      }
       throw new BadRequestException(
         "Já existe um caixa aberto para este usuário nesta empresa.",
       );
@@ -781,6 +1142,7 @@ export class CashSessionsService {
       const createdSession = await tx.cashSession.create({
         data: {
           companyId: company.id,
+          branchCode: this.getOperationalBranchCode(),
           sourceSystem: normalizeText(payload.sourceSystem)!,
           sourceTenantId: normalizeText(payload.sourceTenantId)!,
           cashierUserId: normalizeText(payload.cashierUserId)!,
@@ -798,6 +1160,7 @@ export class CashSessionsService {
         await tx.cashMovement.create({
           data: {
             companyId: company.id,
+            branchCode: this.getOperationalBranchCode(),
             cashSessionId: createdSession.id,
             movementType: "OPENING",
             direction: "IN",
@@ -834,7 +1197,16 @@ export class CashSessionsService {
       payload.sourceTenantId,
     );
 
-    const openSession = await this.loadOpenSession(company.id, payload.cashierUserId);
+    const state = await this.loadOpenSessionState(
+      company.id,
+      this.getOperationalBranchCode(),
+      payload.sourceSystem,
+      payload.sourceTenantId,
+      payload.cashierUserId,
+      true,
+      true,
+    );
+    const openSession = state.session;
 
     if (!openSession) {
       throw new BadRequestException(
@@ -858,6 +1230,11 @@ export class CashSessionsService {
           status: "CLOSED",
           declaredClosingAmount,
           closedAt,
+          closeReason:
+            state.policy.closingMode === "DAILY_REQUIRED"
+              ? "OPERATOR_AFTER_DAILY_REQUIRED"
+              : "OPERATOR",
+          closedBy: normalizeText(payload.requestedBy) || payload.cashierUserId,
           notes: normalizeText(payload.notes) || openSession.notes || null,
           updatedBy: payload.requestedBy || null,
         },
@@ -874,6 +1251,7 @@ export class CashSessionsService {
         await tx.cashMovement.create({
           data: {
             companyId: company.id,
+            branchCode: this.getOperationalBranchCode(),
             cashSessionId: openSession.id,
             movementType: "CLOSING_ADJUSTMENT",
             direction: difference >= 0 ? "IN" : "OUT",
@@ -892,21 +1270,24 @@ export class CashSessionsService {
           ? declaredClosingAmount
           : openSession.expectedClosingAmount;
 
-      await tx.cashSession.create({
-        data: {
-          companyId: company.id,
-          sourceSystem: normalizeText(payload.sourceSystem)!,
-          sourceTenantId: normalizeText(payload.sourceTenantId)!,
-          cashierUserId: normalizeText(payload.cashierUserId)!,
-          cashierDisplayName: openSession.cashierDisplayName,
-          openingAmount: nextOpeningAmount,
-          totalReceivedAmount: 0,
-          expectedClosingAmount: nextOpeningAmount,
-          notes: null,
-          createdBy: payload.requestedBy || null,
-          updatedBy: payload.requestedBy || null,
-        },
-      });
+      if (state.policy.closingMode !== "DAILY_REQUIRED") {
+        await tx.cashSession.create({
+          data: {
+            companyId: company.id,
+            branchCode: this.getOperationalBranchCode(),
+            sourceSystem: normalizeText(payload.sourceSystem)!,
+            sourceTenantId: normalizeText(payload.sourceTenantId)!,
+            cashierUserId: normalizeText(payload.cashierUserId)!,
+            cashierDisplayName: openSession.cashierDisplayName,
+            openingAmount: nextOpeningAmount,
+            totalReceivedAmount: 0,
+            expectedClosingAmount: nextOpeningAmount,
+            notes: null,
+            createdBy: payload.requestedBy || null,
+            updatedBy: payload.requestedBy || null,
+          },
+        });
+      }
 
       return tx.cashSession.findUnique({
         where: { id: openSession.id },
@@ -1006,7 +1387,14 @@ export class CashSessionsService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
-    const openSession = await this.loadOpenSession(company.id, payload.cashierUserId);
+    const openSession = await this.loadOpenSession(
+      company.id,
+      this.getOperationalBranchCode(),
+      payload.sourceSystem,
+      payload.sourceTenantId,
+      payload.cashierUserId,
+      true,
+    );
 
     if (!openSession) {
       throw new BadRequestException(
@@ -1074,6 +1462,7 @@ export class CashSessionsService {
       await tx.cashMovement.create({
         data: {
           companyId: company.id,
+          branchCode: this.getOperationalBranchCode(),
           cashSessionId: openSession.id,
           movementType: "CUSTOMER_CREDIT_GENERATED",
           direction: "IN",
@@ -1120,7 +1509,14 @@ export class CashSessionsService {
       payload.sourceTenantId,
     );
 
-    const openSession = await this.loadOpenSession(company.id, payload.cashierUserId);
+    const openSession = await this.loadOpenSession(
+      company.id,
+      this.getOperationalBranchCode(),
+      payload.sourceSystem,
+      payload.sourceTenantId,
+      payload.cashierUserId,
+      true,
+    );
 
     if (!openSession) {
       throw new BadRequestException(
@@ -1168,6 +1564,7 @@ export class CashSessionsService {
       await tx.cashMovement.create({
         data: {
           companyId: company.id,
+          branchCode: this.getOperationalBranchCode(),
           cashSessionId: openSession.id,
           movementType,
           direction,
@@ -1341,6 +1738,7 @@ export class CashSessionsService {
         await tx.cashMovement.create({
           data: {
             companyId: company.id,
+            branchCode: this.getOperationalBranchCode(),
             cashSessionId: movement.cashSessionId,
             movementType: manualReverseConfig.movementType,
             direction: manualReverseConfig.direction,
@@ -2023,7 +2421,13 @@ export class CashSessionsService {
       payload.sourceTenantId,
     );
 
-    const openSession = await this.loadOpenSession(company.id, payload.cashierUserId);
+    const openSession = await this.loadOpenSession(
+      company.id,
+      this.getOperationalBranchCode(),
+      payload.sourceSystem,
+      payload.sourceTenantId,
+      payload.cashierUserId,
+    );
     if (!openSession) {
       throw new BadRequestException(
         "O usuário informado precisa abrir o caixa antes da baixa.",
@@ -2209,7 +2613,7 @@ export class CashSessionsService {
           superTefPayment,
           {
             companyId: company.id,
-            branchCode: installment.branchCode,
+            branchCode: openSession.branchCode || installment.branchCode,
             paymentMethod: paymentMethod.code as
               | "CREDIT_CARD"
               | "DEBIT_CARD",
@@ -2285,7 +2689,7 @@ export class CashSessionsService {
       const createdSettlement = await tx.installmentSettlement.create({
         data: {
           companyId: company.id,
-          branchCode: installment.branchCode,
+          branchCode: openSession.branchCode || installment.branchCode,
           installmentId: installment.id,
           cashSessionId: openSession.id,
           settlementGroupId,
@@ -2354,7 +2758,7 @@ export class CashSessionsService {
         await tx.superTefAuditEvent.create({
           data: {
             companyId: company.id,
-            branchCode: installment.branchCode,
+            branchCode: openSession.branchCode || installment.branchCode,
             entityType: "PAYMENT",
             entityId: superTefPayment.id,
             action: "APPLIED_TO_RECEIVABLE",
@@ -2391,7 +2795,7 @@ export class CashSessionsService {
       await tx.cashMovement.create({
         data: {
           companyId: company.id,
-          branchCode: installment.branchCode,
+          branchCode: openSession.branchCode || installment.branchCode,
           cashSessionId: openSession.id,
           movementType: "SETTLEMENT",
           direction: "IN",
@@ -2426,7 +2830,7 @@ export class CashSessionsService {
         await tx.customerCreditMovement.create({
           data: {
             companyId: company.id,
-            branchCode: installment.branchCode,
+            branchCode: openSession.branchCode || installment.branchCode,
             creditId: customerCredit.id,
             cashSessionId: openSession.id,
             movementType: "USED",
@@ -2444,7 +2848,7 @@ export class CashSessionsService {
         await tx.cashMovement.create({
           data: {
             companyId: company.id,
-            branchCode: installment.branchCode,
+            branchCode: openSession.branchCode || installment.branchCode,
             cashSessionId: openSession.id,
             movementType: "CUSTOMER_CREDIT_USAGE",
             direction: "OUT",

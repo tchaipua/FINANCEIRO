@@ -586,3 +586,47 @@ Motivo:
 
 - evitar duas implementações visuais e regras divergentes;
 - assegurar que qualquer evolução da tela central seja imediatamente utilizada por todos os sistemas consumidores.
+
+## D036 - Perfis financeiros pertencem ao Financeiro
+
+Decisão:
+
+- credenciais, pessoas e vínculos funcionais permanecem na Escola, Projeto Inicial/Petshop ou Central;
+- o Financeiro recebe uma projeção sem senha e mantém perfil e permissões por empresa/filial;
+- perfis de origem não concedem operação financeira diretamente após a inicialização;
+- toda sincronização e alteração de atribuição é auditada e nenhuma desativação remove fisicamente o registro;
+- a Central MSINFOR não recebe nova tela nem nova tabela para esta entrega.
+
+Motivo: separar acesso ao sistema de origem de autorização financeira e impedir permissões divergentes entre filiais.
+
+## D037 - Cadastro operacional de usuários do sistema pertence ao Financeiro
+
+Decisão:
+
+- Escola e Projeto Inicial não mantêm uma segunda tela de cadastro de usuário do sistema;
+- `PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA` localiza a pessoa por CPF no tenant de origem, permite completar o cadastro e atribui os perfis da origem e do Financeiro;
+- o sistema de origem reutiliza ou cria sua pessoa e mantém apenas a projeção técnica necessária ao login e às regras locais; a credencial única é vinculada à Central e a senha não é persistida pelo Financeiro;
+- o Financeiro persiste o sujeito, o perfil e as permissões por empresa/filial, com auditoria append-only e soft delete;
+- o papel `ADMIN` da origem não abre a área MSINFOR: o card e a entrada direta exigem também `FINANCE_ADMIN`; assim, `ADMIN_TOTAL` + `GERENTE_FINANCEIRO` representa o administrador operacional completo sem acesso ao módulo MSINFOR;
+- cadastros de professor, aluno, responsável e cliente permanecem nos módulos de negócio e seus acessos PWA não exigem perfil de usuário do sistema;
+- cliente nunca é criado no banco financeiro por este fluxo.
+
+Motivo: oferecer um único ponto de manutenção sem romper o `VIEWUSUARIOS`, a identidade única por CPF, a separação entre papel de negócio e usuário administrativo ou o isolamento multi-tenant.
+
+## D038 - Permissão do Master para operar o caixa
+
+Decisão:
+
+- o MSINFOR Central é a fonte exclusiva do booleano `canOperateCashier` do
+  usuário Master;
+- a Escola transporta essa decisão no JWT revogável e no contexto do BFF, sem
+  aceitar que o navegador a declare;
+- a Escola assina a decisão nos escopos HMAC `MASTER_IDENTITY` +
+  `MASTER_CASHIER_ALLOWED` ou `MASTER_CASHIER_DENIED`;
+- o Financeiro aplica a regra no guard interno: caixa, vendas de mutação e
+  pagamentos presenciais ficam bloqueados quando a decisão for negativa;
+- usuários locais continuam sujeitos ao RBAC financeiro existente, sem
+  herdar a regra exclusiva do Master.
+
+Motivo: refletir no Financeiro a configuração administrativa da Central sem
+criar credencial ou cadastro paralelo e sem permitir bypass pelo frontend.

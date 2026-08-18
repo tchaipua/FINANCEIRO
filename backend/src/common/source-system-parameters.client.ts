@@ -58,14 +58,17 @@ function sourceEnvironmentPrefix(sourceSystem: string) {
 export function resolveSourceCallbackConfiguration(sourceSystem: string) {
   const prefix = sourceEnvironmentPrefix(sourceSystem);
   const normalizedSourceSystem = String(sourceSystem || "").trim().toUpperCase();
-  const defaultSchoolUrl =
-    String(process.env.NODE_ENV || "").toLowerCase() !== "production" &&
-    normalizedSourceSystem === "ESCOLA"
-      ? "http://localhost:3001/api/v1"
+  const defaultSourceUrl =
+    String(process.env.NODE_ENV || "").toLowerCase() !== "production"
+      ? normalizedSourceSystem === "ESCOLA"
+        ? "http://localhost:3001/api/v1"
+        : normalizedSourceSystem === "PROJETO_INICIAL"
+          ? "http://localhost:3101/api/v1"
+          : ""
       : "";
 
   const rawBaseUrl = String(
-      (prefix ? process.env[`${prefix}_API_URL`] : "") || defaultSchoolUrl,
+      (prefix ? process.env[`${prefix}_API_URL`] : "") || defaultSourceUrl,
     )
       .trim()
       .replace(/\/+$/g, "");

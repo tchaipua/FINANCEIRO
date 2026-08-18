@@ -137,3 +137,15 @@ Base funcional do projeto `Financeiro`, com recebiveis, produtos, contas a pagar
 - concluído: central `CONFIGURAÇÃO RECIBOS` com acesso ao editor atual e ao fluxo por imagem;
 - concluído: pacote portátil `.msreport.json` com hash, validação, prévia, importação em rascunho/publicada e exportação;
 - concluído: cada importação aplica exclusivamente o tenant e a filial atuais, criando nova versão sem sobrescrever histórico.
+
+## Acessos financeiros
+
+- concluído: projeção de usuários da Escola e do Projeto Inicial sem cópia de senha;
+- concluído: perfis e permissões financeiras por empresa e filial;
+- concluído: bootstrap seguro do primeiro administrador e proteção contra filial sem administrador;
+- concluído: RBAC financeiro aplicado no guard interno, com compatibilidade de implantação inicial;
+- concluído: auditoria append-only, soft delete e teste de isolamento entre tenants;
+- concluído: tela `PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA` integrada ao novo cadastro.
+- concluído: inclusão de usuário do sistema diretamente no Financeiro, com busca e reuso de pessoa por CPF na origem, identidade Central, perfil de origem e perfil financeiro em uma única operação;
+- concluído: callbacks HMAC `SYSTEM_USERS_WRITE` para Escola e Projeto Inicial, com validação de tenant/filial e testes de contrato.
+- concluído: permissão `canOperateCashier` do Master Central propagada pela Escola com escopo HMAC assinado, bloqueio backend de caixa/vendas presenciais e ocultação dos cards de caixa no portal.

@@ -38,7 +38,51 @@ export class CurrentCashSessionQueryDto {
   cashierDisplayName?: string;
 }
 
+export class EnsureLoginCashSessionDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  cashierUserId!: string;
+
+  @IsString()
+  cashierDisplayName!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  openingAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 export class ListCashSessionsDto {
+  // Trusted context fields injected by the embedded Petshop gateway.
+  @IsOptional()
+  @IsString()
+  sourceBranchCode?: string;
+
+  @IsOptional()
+  @IsString()
+  branchCode?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
   @IsOptional()
   @IsString()
   embedded?: string;
@@ -66,6 +110,14 @@ export class ListCashSessionsDto {
   @IsOptional()
   @IsString()
   cashierDisplayName?: string;
+
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @IsOptional()
+  @IsString()
+  companyDocument?: string;
 }
 
 export class OpenCashSessionDto {
@@ -123,6 +175,83 @@ export class CloseCurrentCashSessionDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+export const CASH_SESSION_CLOSING_MODES = [
+  "MANUAL",
+  "DAILY_REQUIRED",
+  "DAILY_AUTOMATIC",
+] as const;
+
+export class ListCashOperatorPoliciesDto {
+  @IsOptional()
+  @IsString()
+  embedded?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceSystem?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceTenantId?: string;
+
+  // The Projeto Inicial gateway signs the request context and declares the
+  // canonical values in the query string. Keep those declarations valid for
+  // this read endpoint so the global whitelist does not reject a trusted
+  // context before the service can resolve the authenticated company/branch.
+  @IsOptional()
+  @IsString()
+  sourceBranchCode?: string;
+
+  @IsOptional()
+  @IsString()
+  branchCode?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  cashierDisplayName?: string;
+
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @IsOptional()
+  @IsString()
+  companyDocument?: string;
+}
+
+export class SaveCashOperatorPolicyDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  targetCashierUserId!: string;
+
+  @IsString()
+  targetCashierDisplayName!: string;
+
+  @IsIn(CASH_SESSION_CLOSING_MODES)
+  closingMode!: (typeof CASH_SESSION_CLOSING_MODES)[number];
 }
 
 export const CASH_SESSION_MANUAL_MOVEMENT_TYPES = [

@@ -26,6 +26,10 @@ type CashSessionDetail = {
   totalReceivedAmount: number;
   expectedClosingAmount: number;
   declaredClosingAmount?: number | null;
+  closeReason?: string | null;
+  closedBy?: string | null;
+  cashClosingMode?: 'MANUAL' | 'DAILY_REQUIRED' | 'DAILY_AUTOMATIC';
+  closeRequired?: boolean;
   openedAt: string;
   closedAt?: string | null;
   receivedByPaymentMethod: {
@@ -503,7 +507,7 @@ export default function FinanceiroCashDetailPage() {
     if (
       autoCloseCashSessionPopupOpened ||
       isLoading ||
-      !wasCloseCashSessionOpenedFromGrid() ||
+      (!wasCloseCashSessionOpenedFromGrid() && !session?.closeRequired) ||
       session?.status !== 'OPEN'
     ) {
       return;
@@ -514,10 +518,21 @@ export default function FinanceiroCashDetailPage() {
       password: '',
       feedback: null,
     });
-  }, [autoCloseCashSessionPopupOpened, isLoading, session?.status]);
+  }, [autoCloseCashSessionPopupOpened, isLoading, session?.closeRequired, session?.status]);
 
   function handleCancelCloseCashSessionModal() {
     if (isClosingCashSession) return;
+
+    if (session?.closeRequired) {
+      setCloseCashSessionModal((current) => current ? {
+        ...current,
+        feedback: {
+          type: 'error',
+          message: 'O fechamento diário é obrigatório para continuar usando o sistema.',
+        },
+      } : current);
+      return;
+    }
 
     if (wasCloseCashSessionOpenedFromGrid()) {
       window.location.href = withFinanceBasePath(`/caixa${preservedQueryString}`);
@@ -1253,6 +1268,12 @@ export default function FinanceiroCashDetailPage() {
       {error ? (
         <section className={`${cardClass} border-rose-200 bg-rose-50 px-6 py-5 text-sm font-semibold text-rose-700`}>
           {error}
+        </section>
+      ) : null}
+
+      {session?.closeRequired ? (
+        <section className={`${cardClass} border-amber-300 bg-amber-50 px-6 py-5 text-sm font-bold text-amber-800`}>
+          O fechamento diário deste caixa é obrigatório. Feche o caixa para continuar trabalhando no sistema.
         </section>
       ) : null}
 

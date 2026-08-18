@@ -717,6 +717,67 @@ export class BanksService {
     };
   }
 
+  private isDdaIntegrationConfigurationError(error: unknown) {
+    const message = String(error instanceof Error ? error.message : error || "")
+      .trim()
+      .toLowerCase();
+
+    return [
+      "unsupported state or unable to authenticate data",
+      "segredo criptografado inválido",
+      "configure a chave financeiro_certificate_secret",
+      "integração sicoob baseada em powershell está desabilitada",
+      "integração sicoob baseada em powershell não é suportada",
+      "financeiro_sicoob_powershell_enabled",
+    ].some((marker) => message.includes(marker));
+  }
+
+  private async loadPersistedDdaSnapshot(
+    company: { id: string },
+    bank: {
+      id: string;
+      branchCode: number;
+      bankName: string;
+      branchNumber: string;
+      branchDigit?: string | null;
+      accountNumber: string;
+      accountDigit?: string | null;
+    },
+    message: string,
+  ) {
+    const records = await this.prisma.bankDdaRecord.findMany({
+      where: {
+        companyId: company.id,
+        branchCode: bank.branchCode,
+        bankAccountId: bank.id,
+        canceledAt: null,
+      },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    });
+    const items = records.map((record) => this.mapPersistedDda(record));
+    const openItems = items.filter((item) => item.status === "OPEN");
+    const latestSeenAt = records.reduce<Date | null>(
+      (latest, record) =>
+        !latest || record.lastSeenAt > latest ? record.lastSeenAt : latest,
+      null,
+    );
+
+    return {
+      provider: "SICOOB",
+      bankAccountId: bank.id,
+      bankAccountLabel: this.buildBankAccountLabel(bank),
+      accountNumber: Number(this.buildSicoobAccountNumber(bank)),
+      ddaCount: items.length,
+      openAmount: roundMoney(
+        openItems.reduce((total, item) => total + item.amount, 0),
+      ),
+      pulledAt: latestSeenAt?.toISOString() || null,
+      scope: null,
+      items,
+      message,
+    };
+  }
+
   private async persistSicoobDda(
     company: { id: string },
     bank: {
@@ -2106,8 +2167,9 @@ export class BanksService {
       );
     }
 
+    let dda: DownloadSicoobDdaResult;
     try {
-      const dda = await this.sicoobDdaService.downloadOpenDda(
+      dda = await this.sicoobDdaService.downloadOpenDda(
         {
           clientId: bank.billingApiClientId,
           certificateBase64: this.revealBankSecret(
@@ -2121,20 +2183,28 @@ export class BanksService {
           accountNumber,
         },
       );
-
-      return this.persistSicoobDda(
-        company,
-        bank,
-        this.mapSicoobDda(bank, dda),
-        query,
-      );
     } catch (error) {
       if (error instanceof SicoobDdaApiError) {
         throw new BadRequestException(error.message);
       }
 
+      if (this.isDdaIntegrationConfigurationError(error)) {
+        return this.loadPersistedDdaSnapshot(
+          company,
+          bank,
+          "Espelho local carregado. A integração Sicoob requer a configuração do certificado para buscar dados novos.",
+        );
+      }
+
       throw error;
     }
+
+    return this.persistSicoobDda(
+      company,
+      bank,
+      this.mapSicoobDda(bank, dda),
+      query,
+    );
   }
 
   private async changeDdaLocalStatus(

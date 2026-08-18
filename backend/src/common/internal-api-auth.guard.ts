@@ -26,6 +26,7 @@ import {
   getInternalApiTimestampWindowMs,
 } from "./security-config";
 import { getFinanceContext } from "./finance-context";
+import { getRequiredFinancePermissions } from "./finance-access-policy";
 
 const GENERIC_UNAUTHORIZED_MESSAGE =
   "REQUISIÇÃO INTERNA NÃO AUTORIZADA.";
@@ -37,6 +38,8 @@ const SOURCE_SETTINGS_SYNC_PATH =
   "/api/v1/companies/sync-source-integration-settings";
 const SOURCE_TENANT_PROVISION_PATH =
   "/api/v1/companies/provision-source-tenant";
+const FINANCE_ACCESS_SYNC_PATH =
+  "/api/v1/finance-access/subjects/synchronize";
 const OPERATIONAL_SCOPES = new Set([
   "FINANCE_ACCESS",
   "FINANCE_ADMIN",
@@ -46,15 +49,23 @@ const MUTATION_SCOPES = new Set([
   "FINANCE_ADMIN",
   "MANAGE_FINANCIAL",
 ]);
+const MASTER_IDENTITY_SCOPE = "MASTER_IDENTITY";
+const MASTER_CASHIER_ALLOWED_SCOPE = "MASTER_CASHIER_ALLOWED";
+const MASTER_CASHIER_DENIED_SCOPE = "MASTER_CASHIER_DENIED";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type AuthenticatedScope = {
   sourceSystem: "ESCOLA" | "PROJETO_INICIAL";
   sourceTenantId: string;
   sourceBranchCode: number;
   sourceUserId: string;
+  centralTenantId?: string;
   companyId: string;
   branchId: string;
   scopes: readonly string[];
+  isMasterIdentity: boolean;
+  canOperateCashier: boolean;
   timestamp: number;
   nonce: string;
 };
@@ -156,6 +167,18 @@ function validateDeclaredContext(
       case "branchId":
         assertEquivalentString(nestedValue, scope.branchId);
         break;
+      case "centralTenantId": {
+        const declaredCentralTenantId = String(nestedValue || "")
+          .trim()
+          .toLowerCase();
+        if (
+          !scope.centralTenantId ||
+          declaredCentralTenantId !== scope.centralTenantId
+        ) {
+          throw new ForbiddenException(CONTEXT_DIVERGENCE_MESSAGE);
+        }
+        break;
+      }
       case "userRole":
       case "permissions":
         if (nestedValue !== undefined && nestedValue !== null && nestedValue !== "") {
@@ -179,6 +202,7 @@ function defineImmutableRequestContext(
     sourceTenantId: scope.sourceTenantId,
     sourceBranchCode: scope.sourceBranchCode,
     sourceUserId: scope.sourceUserId,
+    centralTenantId: scope.centralTenantId,
     companyId: scope.companyId,
     branchId: scope.branchId,
     financeAuth: Object.freeze({ ...scope, scopes: Object.freeze([...scope.scopes]) }),
@@ -191,6 +215,48 @@ function defineImmutableRequestContext(
       writable: false,
       value,
     });
+  }
+}
+
+function hasCashierPayment(value: unknown, visited = new WeakSet<object>()): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (visited.has(value)) return false;
+  visited.add(value);
+  if (Array.isArray(value)) {
+    return value.some((item) => hasCashierPayment(item, visited));
+  }
+  for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedKey = key.toLowerCase();
+    if (
+      ["paymentmethod", "settlementmethod"].includes(normalizedKey) &&
+      ["CASH", "DEBIT_CARD", "CREDIT_CARD", "CHECK", "CUSTOMER_CREDIT"].includes(
+        String(nestedValue || "").trim().toUpperCase(),
+      )
+    ) {
+      return true;
+    }
+    if (hasCashierPayment(nestedValue, visited)) return true;
+  }
+  return false;
+}
+
+function assertMasterCashierAccess(
+  requestPath: string,
+  method: string,
+  body: unknown,
+  isMasterIdentity: boolean,
+  canOperateCashier: boolean,
+) {
+  if (!isMasterIdentity || canOperateCashier) return;
+  const normalizedPath = requestPath.replace(/^\/api\/v1\//, "").toLowerCase();
+  if (
+    normalizedPath.startsWith("cash-sessions") ||
+    (normalizedPath.startsWith("sales") && method !== "GET" && method !== "HEAD") ||
+    hasCashierPayment(body)
+  ) {
+    throw new ForbiddenException(
+      "O usuário Master não possui permissão para operar o caixa.",
+    );
   }
 }
 
@@ -307,6 +373,18 @@ export class InternalApiAuthGuard implements CanActivate {
       request.originalUrl,
       "http://internal.invalid",
     ).pathname;
+    const isMasterIdentity = scopes.includes(MASTER_IDENTITY_SCOPE);
+    const canOperateCashier = !isMasterIdentity
+      ? true
+      : scopes.includes(MASTER_CASHIER_ALLOWED_SCOPE) &&
+        !scopes.includes(MASTER_CASHIER_DENIED_SCOPE);
+    assertMasterCashierAccess(
+      requestPath,
+      request.method,
+      request.body,
+      isMasterIdentity,
+      canOperateCashier,
+    );
     const isSourceSettingsSync = requestPath === SOURCE_SETTINGS_SYNC_PATH;
     const isSourceTenantProvision = requestPath === SOURCE_TENANT_PROVISION_PATH;
     const isReadMethod = request.method === "GET" || request.method === "HEAD";
@@ -344,6 +422,8 @@ export class InternalApiAuthGuard implements CanActivate {
         companyId: "",
         branchId: "",
         scopes: Object.freeze(scopes),
+        isMasterIdentity,
+        canOperateCashier,
         timestamp,
         nonce,
       });
@@ -428,14 +508,108 @@ export class InternalApiAuthGuard implements CanActivate {
       throw new ForbiddenException("ESCOPO FINANCEIRO NÃO AUTORIZADO.");
     }
 
+    const centralTenantId = normalizeRequiredIdentifier(
+      request.query.centralTenantId,
+    )
+      ?.trim()
+      .toLowerCase();
+    if (
+      request.query.centralTenantId !== undefined &&
+      (!centralTenantId || !UUID_PATTERN.test(centralTenantId))
+    ) {
+      throw new ForbiddenException(CONTEXT_DIVERGENCE_MESSAGE);
+    }
+
+    let effectiveScopes: readonly string[] = scopes;
+    const isFinanceAccessSync = requestPath === FINANCE_ACCESS_SYNC_PATH;
+    if (isFinanceAccessSync) {
+      if (!scopes.includes("FINANCE_ADMIN")) {
+        throw new ForbiddenException("ESCOPO FINANCEIRO NÃO AUTORIZADO.");
+      }
+      effectiveScopes = Object.freeze(["FINANCE_ACCESS", "MANAGE_FINANCIAL", "FINANCE_ADMIN"]);
+    } else if (!isSourceSettingsSync) {
+      const assignmentCount = this.prisma.financeAccessAssignment?.count
+        ? await this.prisma.financeAccessAssignment.count({
+            where: {
+              companyId: company.id,
+              branchCode,
+              canceledAt: null,
+            },
+          })
+        : 0;
+      if (assignmentCount > 0) {
+        const subject = await this.prisma.financeAccessSubject.findUnique({
+          where: {
+            companyId_sourceSystem_sourceTenantId_sourceUserId: {
+              companyId: company.id,
+              sourceSystem: systemId,
+              sourceTenantId: tenantId,
+              sourceUserId: userId,
+            },
+          },
+          include: {
+            assignments: {
+              where: { branchCode, active: true, canceledAt: null },
+            },
+          },
+        });
+        let sourceBranchCodes: number[] = [];
+        try {
+          const parsed = JSON.parse(subject?.sourceBranchCodesJson || "[]");
+          sourceBranchCodes = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          sourceBranchCodes = [];
+        }
+        if (
+          !subject?.sourceActive ||
+          subject.canceledAt ||
+          !sourceBranchCodes.includes(branchCode) ||
+          !subject.assignments[0]
+        ) {
+          throw new ForbiddenException("USUÁRIO SEM ACESSO FINANCEIRO ATIVO NESTA FILIAL.");
+        }
+        let permissionCodes: string[] = [];
+        try {
+          const parsed = JSON.parse(subject.assignments[0].permissionCodesJson);
+          permissionCodes = Array.isArray(parsed)
+            ? parsed.map((value) => String(value).trim().toUpperCase())
+            : [];
+        } catch {
+          permissionCodes = [];
+        }
+        const requiredPermissions = getRequiredFinancePermissions(request.method, requestPath);
+        if (!requiredPermissions.some((permission) => permissionCodes.includes(permission))) {
+          throw new ForbiddenException("PERMISSÃO FINANCEIRA NÃO AUTORIZADA.");
+        }
+        const mappedScopes = new Set<string>();
+        if (permissionCodes.includes("VIEW_FINANCIAL")) mappedScopes.add("FINANCE_ACCESS");
+        if (permissionCodes.some((permission) => permission !== "VIEW_FINANCIAL")) {
+          mappedScopes.add("MANAGE_FINANCIAL");
+        }
+        if (permissionCodes.includes("FINANCE_ADMIN")) mappedScopes.add("FINANCE_ADMIN");
+        if (isMasterIdentity) {
+          mappedScopes.add(MASTER_IDENTITY_SCOPE);
+          mappedScopes.add(
+            canOperateCashier
+              ? MASTER_CASHIER_ALLOWED_SCOPE
+              : MASTER_CASHIER_DENIED_SCOPE,
+          );
+        }
+        effectiveScopes = Object.freeze([...mappedScopes]);
+      }
+    }
+
     const scope: AuthenticatedScope = Object.freeze({
       sourceSystem: systemId,
       sourceTenantId: tenantId,
       sourceBranchCode: branchCode,
       sourceUserId: userId,
+      centralTenantId,
       companyId: company.id,
       branchId: branch.id,
-      scopes: Object.freeze(scopes),
+      scopes: Object.freeze([...effectiveScopes]),
+      isMasterIdentity,
+      canOperateCashier,
       timestamp,
       nonce,
     });
@@ -489,9 +663,12 @@ export class InternalApiAuthGuard implements CanActivate {
       sourceTenantId: scope.sourceTenantId,
       sourceBranchCode: scope.sourceBranchCode,
       sourceUserId: scope.sourceUserId,
+      centralTenantId: scope.centralTenantId,
       companyId: scope.companyId,
       branchId: scope.branchId,
       scopes: scope.scopes,
+      isMasterIdentity: scope.isMasterIdentity,
+      canOperateCashier: scope.canOperateCashier,
       branchCode: scope.sourceBranchCode,
     });
     Object.freeze(financeContext);

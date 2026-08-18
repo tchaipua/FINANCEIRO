@@ -15,7 +15,7 @@ const { PrismaService } = require("../dist/prisma/prisma.service.js");
 const { ProductsService } = require("../dist/modules/products/application/products.service.js");
 const { financeContext } = require("../dist/common/finance-context.js");
 const {
-  ensureDefaultProductClassification,
+  summarizeProductClassification,
 } = require("../dist/common/product-classification.js");
 
 async function main() {
@@ -65,25 +65,18 @@ async function main() {
         updatedBy: "TEST",
       },
     });
-    await ensureDefaultProductClassification(prisma, {
+    const classificationSummary = await summarizeProductClassification(prisma, {
       companyId: company.id,
       branchCode: 1,
       mode: "GROUP_ONLY",
-      requestedBy: "TEST",
     });
-    const defaultGroup = await prisma.productGroup.findFirst({
-      where: {
-        companyId: company.id,
-        branchCode: 1,
-        name: "PADRÃO",
-        canceledAt: null,
-      },
-    });
-    assert.ok(defaultGroup);
+    assert.equal(classificationSummary.status, "PENDING_CLASSIFICATION");
+    assert.equal(classificationSummary.productsAwaitingClassification, 1);
     const backfilledLegacyProduct = await prisma.product.findUnique({
       where: { id: legacyProduct.id },
     });
-    assert.equal(backfilledLegacyProduct.groupId, defaultGroup.id);
+    assert.equal(backfilledLegacyProduct.groupId, null);
+    assert.equal(backfilledLegacyProduct.subgroupId, null);
     const subgroup = await prisma.productSubgroup.create({
       data: {
         companyId: company.id,

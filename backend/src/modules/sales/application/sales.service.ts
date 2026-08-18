@@ -19,6 +19,7 @@ import {
   normalizeBranchCode,
 } from "../../../common/branch.constants";
 import { getFinanceContext } from "../../../common/finance-context";
+import { ensureOpenCashSessionReady } from "../../../common/cash-session-policy";
 import { getSuperTefCardApplicationError } from "../../../common/supertef-payment.utils";
 import {
   CancelSaleDto,
@@ -793,20 +794,28 @@ export class SalesService {
     });
   }
 
-  private async loadOpenCashSession(companyId: string, cashierUserId?: string | null) {
+  private async loadOpenCashSession(
+    companyId: string,
+    branchCode: number,
+    sourceSystem: string,
+    sourceTenantId: string,
+    cashierUserId?: string | null,
+  ) {
     const normalizedCashierUserId = normalizeText(cashierUserId);
     if (!normalizedCashierUserId) {
       throw new BadRequestException("Informe o operador do caixa para pagamentos à vista.");
     }
 
-    return this.prisma.cashSession.findFirst({
-      where: {
-        companyId,
-        cashierUserId: normalizedCashierUserId,
-        status: "OPEN",
-        canceledAt: null,
-      },
+    const state = await ensureOpenCashSessionReady(this.prisma, {
+      companyId,
+      branchCode,
+      sourceSystem,
+      sourceTenantId,
+      cashierUserId: normalizedCashierUserId,
+      includeRelations: false,
     });
+
+    return state.session;
   }
 
   private expandDeferredPayments(payments: Array<SalePaymentDto & { paymentMethod: string }>) {
@@ -1162,7 +1171,13 @@ export class SalesService {
       (payment) => payment.paymentMethod === "BOLETO" && payment.amount > 0,
     );
     const openCashSession = hasImmediatePayment
-      ? await this.loadOpenCashSession(company.id, payload.cashierUserId)
+      ? await this.loadOpenCashSession(
+          company.id,
+          branchCode,
+          payload.sourceSystem,
+          payload.sourceTenantId,
+          payload.cashierUserId,
+        )
       : null;
 
     if (hasImmediatePayment && !openCashSession) {
@@ -2944,6 +2959,7 @@ export class SalesService {
       sourceSystem: payload.sourceSystem,
       sourceTenantId: payload.sourceTenantId,
     });
+    const branchCode = this.currentBranchCode(payload.sourceBranchCode);
     const canceledAt = new Date();
     const canceledBy =
       normalizeText(payload.requestedBy) ||
@@ -2998,7 +3014,13 @@ export class SalesService {
 
     const cancelerCashSession =
       Number(sale.paidAmount || 0) > 0
-        ? await this.loadOpenCashSession(company.id, payload.cashierUserId)
+        ? await this.loadOpenCashSession(
+            company.id,
+            branchCode,
+            payload.sourceSystem,
+            payload.sourceTenantId,
+            payload.cashierUserId,
+          )
         : null;
 
     if (Number(sale.paidAmount || 0) > 0 && !cancelerCashSession) {

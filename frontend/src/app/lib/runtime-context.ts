@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { financeApiFetch } from '@/app/lib/api';
+import { financeApiFetch, setFinanceSourceSystem } from '@/app/lib/api';
 import {
   isFinanceColorThemeId,
   normalizeFinanceColorIntensity,
@@ -29,6 +29,8 @@ export type FinanceRuntimeContext = {
   cashierDisplayName: string | null;
   userRole: string | null;
   permissions: string[];
+  identityProvider: 'MSINFOR_CENTRAL' | 'LOCAL' | null;
+  canOperateCashier: boolean;
   colorTheme: FinanceColorThemeId | null;
   colorIntensity: FinanceColorIntensity;
 };
@@ -76,6 +78,8 @@ const EMPTY_RUNTIME_CONTEXT: FinanceRuntimeContext = {
   cashierDisplayName: null,
   userRole: null,
   permissions: [],
+  identityProvider: null,
+  canOperateCashier: false,
   colorTheme: null,
   colorIntensity: 3,
 };
@@ -156,7 +160,21 @@ function normalizeServerRuntimeContext(value: unknown): FinanceRuntimeContext {
     cashierDisplayName: normalizeTextValue(payload.cashierDisplayName, false),
     userRole: normalizeTextValue(payload.userRole),
     permissions: normalizePermissions(payload.permissions),
+    identityProvider:
+      normalizeTextValue(payload.identityProvider) === 'MSINFOR_CENTRAL' ||
+      normalizeTextValue(payload.identityProvider) === 'LOCAL'
+        ? normalizeTextValue(payload.identityProvider) as 'MSINFOR_CENTRAL' | 'LOCAL'
+        : null,
+    canOperateCashier:
+      normalizeTextValue(payload.identityProvider) === 'MSINFOR_CENTRAL'
+        ? payload.canOperateCashier === true
+        : true,
   };
+}
+
+export function hasCashierOperationAccess(context: FinanceRuntimeContext) {
+  if (!context.sourceSystem || !context.sourceTenantId) return false;
+  return context.identityProvider !== 'MSINFOR_CENTRAL' || context.canOperateCashier;
 }
 
 function readPresentationOnlyRuntimeContext(): FinanceRuntimeContext {
@@ -177,6 +195,7 @@ export function useFinanceRuntimeContext(): FinanceRuntimeContext {
 
   useEffect(() => {
     const abortController = new AbortController();
+    setFinanceSourceSystem(null);
     setRuntimeContext(readPresentationOnlyRuntimeContext());
 
     void financeApiFetch('/context', {
@@ -192,7 +211,9 @@ export function useFinanceRuntimeContext(): FinanceRuntimeContext {
       })
       .then((payload) => {
         if (!abortController.signal.aborted) {
-          setRuntimeContext(normalizeServerRuntimeContext(payload));
+          const normalizedContext = normalizeServerRuntimeContext(payload);
+          setFinanceSourceSystem(normalizedContext.sourceSystem);
+          setRuntimeContext(normalizedContext);
         }
       })
       .catch(() => {

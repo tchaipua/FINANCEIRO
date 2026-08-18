@@ -97,6 +97,8 @@ async function main() {
       },
     });
 
+    const centralTenantId = "a0115f07-4562-4363-9d7d-af749fa79bed";
+
     const context = {
       authenticated: true,
       branchCode: 1,
@@ -104,6 +106,7 @@ async function main() {
       sourceTenantId,
       sourceBranchCode: 1,
       sourceUserId: "TEST",
+      centralTenantId,
       companyId: company.id,
       branchId: firstBranch.id,
       scopes: ["FINANCE_ACCESS", "MANAGE_FINANCIAL", "FINANCE_ADMIN"],
@@ -196,7 +199,6 @@ async function main() {
         };
       },
     });
-    const centralTenantId = "a0115f07-4562-4363-9d7d-af749fa79bed";
     const refreshedBranch = await financeContext.run(context, async () =>
       companiesWithCentralSynchronization.refreshCentralBranchConfiguration(
         company.id,
@@ -213,30 +215,11 @@ async function main() {
       refreshedBranch.stockClassificationMode,
       "GROUP_AND_SUBGROUP",
     );
-    const defaultGroup = await prisma.productGroup.findFirst({
-      where: {
-        companyId: company.id,
-        branchCode: 1,
-        name: "PADRÃO",
-        canceledAt: null,
-      },
-    });
-    assert.ok(defaultGroup);
-    const defaultSubgroup = await prisma.productSubgroup.findFirst({
-      where: {
-        companyId: company.id,
-        branchCode: 1,
-        groupId: defaultGroup.id,
-        name: "PADRÃO",
-        canceledAt: null,
-      },
-    });
-    assert.ok(defaultSubgroup);
     const backfilledProducts = await prisma.product.findMany({
       where: { id: { in: legacyProducts.map((product) => product.id) } },
     });
-    assert.equal(backfilledProducts.every((product) => product.groupId === defaultGroup.id), true);
-    assert.equal(backfilledProducts.every((product) => product.subgroupId === defaultSubgroup.id), true);
+    assert.equal(backfilledProducts.every((product) => product.groupId === null), true);
+    assert.equal(backfilledProducts.every((product) => product.subgroupId === null), true);
     const synchronizationAudit = await prisma.sourceIntegrationAuditEvent.findFirst({
       where: {
         companyId: company.id,
@@ -249,6 +232,10 @@ async function main() {
     assert.match(
       synchronizationAudit.metadataJson || "",
       /"centralTenantId":"a0115f07-4562-4363-9d7d-af749fa79bed"/,
+    );
+    assert.match(
+      synchronizationAudit.metadataJson || "",
+      /"productsAwaitingClassification":2/,
     );
     console.log("Financeiro: diretório de filiais da empresa aprovado.");
   } finally {

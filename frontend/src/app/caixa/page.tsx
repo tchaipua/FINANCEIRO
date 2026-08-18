@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { financeApiFetch, getJson } from '@/app/lib/api';
+import { getJson } from '@/app/lib/api';
 import { formatCurrency, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
   buildDefaultExportColumns,
@@ -19,6 +19,7 @@ import { withFinanceBasePath } from '@/app/lib/public-path';
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
+  hasCashierOperationAccess,
   normalizeFinanceDisplayText,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
@@ -37,6 +38,10 @@ type CashSessionItem = {
   expectedClosingAmount: number;
   openedAt: string;
   closedAt?: string | null;
+  closeReason?: string | null;
+  closedBy?: string | null;
+  cashClosingMode?: 'MANUAL' | 'DAILY_REQUIRED' | 'DAILY_AUTOMATIC';
+  closeRequired?: boolean;
 };
 
 type CashSessionFilters = {
@@ -73,7 +78,7 @@ const DEFAULT_FILTERS: CashSessionFilters = {
 const CASH_SESSION_GRID_COLUMNS: GridColumnDefinition<CashSessionItem, CashSessionGridColumnKey>[] = [
   { key: 'companyName', label: 'Empresa', getValue: (item) => item.companyName || '---' },
   { key: 'cashierDisplayName', label: 'Operador', getValue: (item) => formatCashierDisplayName(item.cashierDisplayName) },
-  { key: 'status', label: 'Situação', getValue: (item) => normalizeSessionStatus(item.status) },
+  { key: 'status', label: 'Situação', getValue: (item) => item.closeRequired ? 'FECHAMENTO PENDENTE' : normalizeSessionStatus(item.status) },
   { key: 'openedAt', label: 'Abertura', getValue: (item) => formatDateTimeLabel(item.openedAt) },
   { key: 'closedAt', label: 'Fechamento', getValue: (item) => formatDateTimeLabel(item.closedAt) },
   { key: 'totalReceivedAmount', label: 'Recebido', getValue: (item) => formatCurrency(item.totalReceivedAmount) },
@@ -526,6 +531,7 @@ export default function FinanceiroCashPage() {
     buildDefaultExportColumns(CASH_SESSION_GRID_COLUMNS),
   );
   const runtimeTenantReady = Boolean(runtimeContext.sourceTenantId);
+  const cashierOperationAccess = hasCashierOperationAccess(runtimeContext);
   const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
   const canViewAllCashiers =
     runtimeContext.userRole === 'ADMIN' || runtimeContext.userRole === 'SOFTHOUSE_ADMIN';
@@ -601,6 +607,11 @@ export default function FinanceiroCashPage() {
   ]);
 
   const loadSessions = useCallback(async () => {
+    if (!cashierOperationAccess) {
+      setSessions([]);
+      setIsLoading(false);
+      return;
+    }
     if (!runtimeTenantReady) {
       setSessions([]);
       setIsLoading(false);
@@ -618,41 +629,23 @@ export default function FinanceiroCashPage() {
         `/cash-sessions${buildFinanceApiQueryString(runtimeContext, queryParams)}`,
       );
 
-      const currentCashierHasOpenSession = loadedSessions.some(
-        (session) =>
-          session.status === 'OPEN' &&
-          session.cashierUserId === runtimeContext.cashierUserId,
-      );
-
-      if (
-        runtimeContext.sourceSystem &&
-        runtimeContext.sourceTenantId &&
-        runtimeContext.cashierUserId &&
-        runtimeContext.cashierDisplayName &&
-        !currentCashierHasOpenSession
-      ) {
-        const response = await financeApiFetch('/cash-sessions/open', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sourceSystem: runtimeContext.sourceSystem,
-            sourceTenantId: runtimeContext.sourceTenantId,
-            cashierUserId: runtimeContext.cashierUserId,
-            cashierDisplayName: runtimeContext.cashierDisplayName,
-            openingAmount: 0,
-          }),
-        });
-
-        if (response.ok) {
-          loadedSessions = await getJson<CashSessionItem[]>(
-            `/cash-sessions${buildFinanceApiQueryString(runtimeContext, queryParams)}`,
-          );
-        }
-      }
-
       setSessions(sortCashSessionsByRecentOpening(loadedSessions));
+      const pendingDailyClose = !canViewAllCashiers
+        ? loadedSessions.find(
+            (session) =>
+              session.status === 'OPEN' &&
+              session.cashierUserId === runtimeContext.cashierUserId &&
+              session.closeRequired,
+          )
+        : null;
+      if (pendingDailyClose && typeof window !== 'undefined') {
+        window.location.href = withFinanceBasePath(
+          buildCloseCashSessionDetailHref(
+            pendingDailyClose.id,
+            buildFinanceNavigationQueryString(runtimeContext),
+          ),
+        );
+      }
     } catch (currentError) {
       setSessions([]);
       setError(
@@ -664,7 +657,7 @@ export default function FinanceiroCashPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canViewAllCashiers, runtimeContext, runtimeTenantReady]);
+  }, [canViewAllCashiers, cashierOperationAccess, runtimeContext, runtimeTenantReady]);
 
   useEffect(() => {
     void loadSessions();
@@ -707,6 +700,18 @@ export default function FinanceiroCashPage() {
       search: draftFilters.search.trim(),
       status: draftFilters.status,
     });
+  }
+
+  if (!cashierOperationAccess) {
+    return (
+      <div className={FINANCE_GRID_PAGE_LAYOUT.shell}>
+        <section className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">
+          <div className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-700">Operação restrita</div>
+          <h1 className="mt-2 text-xl font-black text-slate-900">O usuário Master não está autorizado a trabalhar como caixa.</h1>
+          <p className="mt-2 text-sm font-semibold text-amber-800">A configuração pode ser alterada no MSINFOR Central.</p>
+        </section>
+      </div>
+    );
   }
 
   return (

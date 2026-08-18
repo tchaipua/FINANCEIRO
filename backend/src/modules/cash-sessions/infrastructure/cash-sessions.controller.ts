@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CashSessionsService } from "../application/cash-sessions.service";
 import {
@@ -8,12 +8,15 @@ import {
   CreateCashMovementDto,
   CreateReceivablePixIntentDto,
   CurrentCashSessionQueryDto,
+  EnsureLoginCashSessionDto,
+  ListCashOperatorPoliciesDto,
   ListInstallmentSettlementHistoryDto,
   ListCustomerCreditsDto,
   ListCashSessionsDto,
   OpenCashSessionDto,
   ReverseSettlementGroupDto,
   ReverseManualSettlementDto,
+  SaveCashOperatorPolicyDto,
   ReceivablePixIntentContextDto,
   SettleCashInstallmentDto,
   SettleManualInstallmentDto,
@@ -23,6 +26,22 @@ import {
 @Controller()
 export class CashSessionsController {
   constructor(private readonly cashSessionsService: CashSessionsService) {}
+
+  @Get("cash-sessions/operator-policies")
+  @ApiOperation({
+    summary: "Lista as políticas de fechamento de caixa por operador",
+  })
+  listOperatorPolicies(@Query() query: ListCashOperatorPoliciesDto) {
+    return this.cashSessionsService.listOperatorPolicies(query);
+  }
+
+  @Patch("cash-sessions/operator-policy")
+  @ApiOperation({
+    summary: "Atualiza a política de fechamento de caixa de um operador",
+  })
+  saveOperatorPolicy(@Body() payload: SaveCashOperatorPolicyDto) {
+    return this.cashSessionsService.saveOperatorPolicy(payload);
+  }
 
   @Get("customer-credits")
   @ApiOperation({
@@ -54,6 +73,14 @@ export class CashSessionsController {
   })
   getCurrent(@Query() query: CurrentCashSessionQueryDto) {
     return this.cashSessionsService.getCurrent(query);
+  }
+
+  @Post("cash-sessions/login-check")
+  @ApiOperation({
+    summary: "Valida e prepara o caixa do operador durante a autenticação",
+  })
+  ensureLoginCashSession(@Body() payload: EnsureLoginCashSessionDto) {
+    return this.cashSessionsService.ensureLoginCashSession(payload);
   }
 
   @Get("cash-sessions/:sessionId")

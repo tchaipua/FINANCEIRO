@@ -45,7 +45,6 @@ import {
 } from "../../../common/party-registry";
 import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import { ChangePayableSupplierStatusDto } from "./dto/payables.dto";
-import { ensureDefaultProductClassification } from "../../../common/product-classification";
 
 type ResolvedCompany = {
   id: string;
@@ -1183,13 +1182,6 @@ export class PayablesService {
       },
     });
 
-    await ensureDefaultProductClassification(tx, {
-      companyId,
-      branchCode: branchConfig.branchCode,
-      mode: branchConfig.stockClassificationMode,
-      requestedBy,
-    });
-
     if (createdProductsCache) {
       createdProductsCache.set(cacheKey, createdProduct);
     }
@@ -1994,13 +1986,6 @@ export class PayablesService {
         invoiceImport.companyId,
         payload,
       );
-      await ensureDefaultProductClassification(tx, {
-        companyId: invoiceImport.companyId,
-        branchCode: branchStockConfig.branchCode,
-        mode: branchStockConfig.stockClassificationMode,
-        requestedBy: payload.requestedBy,
-      });
-
       const titleTotalAmount = roundMoney(
         normalizedInstallments.reduce(
           (accumulator, installment) => accumulator + installment.finalAmount,

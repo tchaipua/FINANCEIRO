@@ -27,6 +27,8 @@ type BranchInventoryConfig = {
   name?: string;
   inventoryControlType: 'TRADITIONAL' | 'COLOR_SIZE' | 'LOT';
   quantityPrecision: 'INTEGER_ONLY' | 'DECIMAL_ALLOWED' | 'PRODUCT_DEFINED';
+  stockGridControlMode: 'NO' | 'YES' | 'BY_PRODUCT';
+  stockClassificationMode: 'NONE' | 'GROUP_ONLY' | 'GROUP_AND_SUBGROUP';
 };
 
 type MenuItem = {
@@ -35,13 +37,16 @@ type MenuItem = {
   href?: string;
   accent: string;
   icon: ReactNode;
-  visibleWhen?: 'ALWAYS' | 'COLOR_SIZE';
+  adminOnly?: boolean;
+  visibleWhen?: 'ALWAYS' | 'COLOR_SIZE' | 'CLASSIFICATION';
 };
 
 const DEFAULT_BRANCH_INVENTORY_CONFIG: BranchInventoryConfig = {
   branchCode: 1,
   inventoryControlType: 'TRADITIONAL',
   quantityPrecision: 'INTEGER_ONLY',
+  stockGridControlMode: 'NO',
+  stockClassificationMode: 'NONE',
 };
 
 const auditText = `--- LOGICA DA TELA ---
@@ -64,6 +69,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - atalho de historico de movimentacao do estoque
 - atalho para conferencia das imagens locais dos produtos por EAN-8/EAN-13
 - atalhos de cores, numeros e grades quando a filial usa grade cor/numero
+- atalho de grupos e subgrupos quando a filial usa classificacao de estoque
 - identificacao da filial operacional atual
 
 FILTROS APLICADOS AGORA:
@@ -74,6 +80,7 @@ ORDENACAO:
 - Nao aplicavel nesta tela de menu.
 
 OBSERVACAO:
+- Quando stockClassificationMode = GROUP_ONLY ou GROUP_AND_SUBGROUP, a tela exibe o atalho de grupos e subgrupos. Quando stockClassificationMode = NONE, esse atalho fica oculto.
 - Quando inventoryControlType = COLOR_SIZE, a tela exibe os cadastros auxiliares de cores, numeros e grade. Em outros tipos de estoque, esses atalhos ficam ocultos para nao poluir a operacao.`;
 
 const MENU_ITEMS: MenuItem[] = [
@@ -86,6 +93,20 @@ const MENU_ITEMS: MenuItem[] = [
       <svg className="h-12 w-12 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9z" />
         <path strokeLinecap="round" strokeLinejoin="round" d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+      </svg>
+    ),
+  },
+  {
+    id: 'grupos-subgrupos',
+    label: 'Grupos e Subgrupos',
+    href: '/estoque/grupos',
+    accent: 'from-amber-500 to-amber-600',
+    adminOnly: true,
+    visibleWhen: 'CLASSIFICATION',
+    icon: (
+      <svg className="h-12 w-12 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6.5A2.5 2.5 0 0 1 6.5 4H13l7 7-6 6-7-7V6.5z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.5 8.5h.01M6 14l4 4h4" />
       </svg>
     ),
   },
@@ -155,7 +176,13 @@ const MENU_ITEMS: MenuItem[] = [
 
 function shouldShowMenuItem(item: MenuItem, branchInventoryConfig: BranchInventoryConfig) {
   if (!item.visibleWhen || item.visibleWhen === 'ALWAYS') return true;
-  return branchInventoryConfig.inventoryControlType === item.visibleWhen;
+  if (item.visibleWhen === 'CLASSIFICATION') {
+    return (
+      branchInventoryConfig.stockClassificationMode === 'GROUP_ONLY' ||
+      branchInventoryConfig.stockClassificationMode === 'GROUP_AND_SUBGROUP'
+    );
+  }
+  return branchInventoryConfig.stockGridControlMode !== 'NO';
 }
 
 function StockMenuCard({
@@ -251,8 +278,13 @@ export default function FinanceiroEstoquePage() {
   }, [loadBranchInventoryConfig]);
 
   const visibleMenuItems = useMemo(
-    () => MENU_ITEMS.filter((item) => shouldShowMenuItem(item, branchInventoryConfig)),
-    [branchInventoryConfig],
+    () =>
+      MENU_ITEMS.filter(
+        (item) =>
+          (!item.adminOnly || runtimeContext.userRole === 'ADMIN') &&
+          shouldShowMenuItem(item, branchInventoryConfig),
+      ),
+    [branchInventoryConfig, runtimeContext.userRole],
   );
 
   return (

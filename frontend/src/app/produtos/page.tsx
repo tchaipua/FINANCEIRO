@@ -42,6 +42,8 @@ type ProductItem = {
   groupName?: string | null;
   subgroupId?: string | null;
   subgroupName?: string | null;
+  classificationStatus?: 'NOT_REQUIRED' | 'CLASSIFIED' | 'PENDING_CLASSIFICATION';
+  classificationStatusLabel?: string | null;
   internalCode?: string | null;
   sku?: string | null;
   barcode?: string | null;
@@ -2093,6 +2095,11 @@ export default function FinanceiroProdutosPage() {
                           <div className="mt-1 text-xs font-medium text-slate-500">
                             {product.barcode || product.companyName || '---'}
                           </div>
+                          {product.classificationStatus === 'PENDING_CLASSIFICATION' ? (
+                            <div className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">
+                              {product.classificationStatusLabel || 'AGUARDANDO CLASSIFICAÇÃO'}
+                            </div>
+                          ) : null}
                         </td>
                       );
                     }
@@ -2392,13 +2399,15 @@ export default function FinanceiroProdutosPage() {
                     Classificação
                   </div>
                   <div className="grid gap-4 lg:grid-cols-2">
+                    {branchInventoryConfig.stockClassificationMode !== 'NONE' ? (
+                    <>
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Grupo {branchInventoryConfig.stockClassificationMode !== 'NONE' ? '*' : '(opcional)'}
+                        Grupo *
                       </span>
                       <select
                         value={formState.groupId}
-                        required={branchInventoryConfig.stockClassificationMode !== 'NONE'}
+                        required
                         onChange={(event) =>
                           setFormState((current) => ({
                             ...current,
@@ -2408,7 +2417,7 @@ export default function FinanceiroProdutosPage() {
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
                       >
-                        <option value="">Selecione o grupo</option>
+                        <option value="">SEM CLASSIFICAÇÃO — selecione o grupo</option>
                         {productGroups.map((group) => (
                           <option key={group.id} value={group.id}>
                             {group.name}
@@ -2417,9 +2426,10 @@ export default function FinanceiroProdutosPage() {
                       </select>
                     </label>
 
+                    {branchInventoryConfig.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? (
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Subgrupo {branchInventoryConfig.stockClassificationMode === 'GROUP_AND_SUBGROUP' ? '*' : '(opcional)'}
+                        Subgrupo *
                       </span>
                       <select
                         value={formState.subgroupId}
@@ -2430,16 +2440,19 @@ export default function FinanceiroProdutosPage() {
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
                       >
-                        <option value="">Selecione o subgrupo</option>
+                        <option value="">SEM CLASSIFICAÇÃO — selecione o subgrupo</option>
                         {productSubgroups
                           .filter((subgroup) => subgroup.groupId === formState.groupId)
                           .map((subgroup) => (
                             <option key={subgroup.id} value={subgroup.id}>
                               {subgroup.name}
                             </option>
-                          ))}
+                        ))}
                       </select>
                     </label>
+                    ) : null}
+                    </>
+                    ) : null}
 
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">

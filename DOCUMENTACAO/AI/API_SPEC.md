@@ -112,7 +112,7 @@ Regras:
 - filial `PRODUCT_DEFINED` usa `allowFraction` do produto
 - `GROUP_ONLY` exige grupo ativo da filial no cadastro e na alteração do produto
 - `GROUP_AND_SUBGROUP` exige grupo e subgrupo ativos e pertencentes à mesma filial
-- ao ativar `GROUP_ONLY` ou `GROUP_AND_SUBGROUP`, produtos legados sem classificação recebem automaticamente o grupo `PADRÃO` e, quando aplicável, o subgrupo `PADRÃO`; a rotina é idempotente e auditada
+- ao ativar `GROUP_ONLY` ou `GROUP_AND_SUBGROUP`, produtos legados sem classificação não recebem grupo/subgrupo automático; permanecem sem vínculo e são marcados como `AGUARDANDO CLASSIFICAÇÃO`, com a quantidade registrada na auditoria da alteração
 
 ### GET `/products/stock-movements`
 
@@ -1165,3 +1165,24 @@ Todas as rotas usam `sourceSystem`, `sourceTenantId` e `sourceBranchCode`. A con
 O navegador nunca recebe acesso direto à rede ou aos arquivos do cliente. O agente Windows escuta somente `127.0.0.1:47821`, concede sessão curta apenas às origens locais autorizadas e envia o conteúdo à impressora instalada.
 
 O pacote portátil usa `format=MSINFOR_REPORT_PACKAGE` e `schemaVersion=1`. Ele contém layout, variáveis, dados de exemplo anônimos, compatibilidade, origem técnica e hash. A empresa e a filial de destino nunca vêm no arquivo: são resolvidas pelo contexto autenticado no momento da importação. Código já existente cria nova versão; publicação arquiva a versão anterior sem exclusão física.
+
+## Acessos financeiros
+
+- `GET /finance-access/profiles`: catálogo de perfis e permissões financeiras;
+- `GET /finance-access/source-profiles`: catálogo de perfis administrativos aceitos pelo sistema de origem;
+- `GET /finance-access/subjects`: usuários projetados da origem e atribuição da filial autenticada;
+- `POST /finance-access/system-users/resolve-person`: consulta o CPF no tenant/filial autenticados do sistema de origem;
+- `POST /finance-access/system-users`: cria ou vincula o usuário do sistema na origem, provisiona sua identidade e grava o perfil financeiro na mesma operação;
+- `POST /finance-access/subjects/synchronize`: sincronização idempotente feita somente pelo backend da origem;
+- `PATCH /finance-access/subjects/:subjectId/assignment`: grava perfil, permissões e situação por filial.
+
+As rotas exigem `FINANCE_ADMIN`. As chamadas de retorno à Escola ou ao Projeto Inicial são assinadas com o escopo exclusivo `SYSTEM_USERS_WRITE`; CPF, tenant, filial e ator são validados nos dois lados. A senha é transportada somente no corpo backend a backend até a identidade Central, nunca é gravada ou auditada no Financeiro. A primeira sincronização inicializa o ator administrativo como `ADMIN_FINANCEIRO`; depois disso, o RBAC persistido no Financeiro passa a ser a segunda camada obrigatória de autorização.
+
+O portal consulta `GET /finance-access/profiles` para exibir a área MSINFOR. Um `ADMIN` da origem com perfil `GERENTE_FINANCEIRO` não recebe `FINANCE_ADMIN`, não vê o card e tem a entrada direta negada.
+
+Para a identidade `MSINFOR_CENTRAL`, o BFF também assina a decisão da Central
+nos escopos `MASTER_IDENTITY` e `MASTER_CASHIER_ALLOWED` ou
+`MASTER_CASHIER_DENIED`. O guard interno rejeita operações de caixa, mutações
+de venda e pagamentos presenciais quando o escopo for `DENIED`; a ausência da
+permissão não é substituída por papel `ADMIN` ou por dados enviados pelo
+navegador.

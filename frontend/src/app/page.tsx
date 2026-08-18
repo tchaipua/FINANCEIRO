@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { financeApiFetch } from '@/app/lib/api';
+import { buildFinanceNavigationQueryString, hasCashierOperationAccess, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
@@ -18,6 +19,7 @@ type MenuItem = {
   image: string;
   adminOnly?: boolean;
   financialManagerOnly?: boolean;
+  cashierOnly?: boolean;
 };
 
 const MENU_ITEMS: MenuItem[] = [
@@ -78,21 +80,13 @@ const MENU_ITEMS: MenuItem[] = [
     image: '/principal-financeiro/estoque.svg?v=1',
   },
   {
-    id: 'estoque-grupos',
-    label: 'Grupos e Subgrupos',
-    href: '/estoque/grupos',
-    hostPath: '/principal/financeiro/estoque/grupos',
-    description: 'Cadastre e organize os grupos e subgrupos do estoque por filial.',
-    image: '/principal-financeiro/estoque.svg?v=1',
-    adminOnly: true,
-  },
-  {
     id: 'caixa',
     label: 'Controle Caixa',
     href: '/caixa',
     hostPath: '/principal/financeiro/caixa',
     description: 'Abertura e fechamento do caixa do usuario logado.',
     image: '/principal-financeiro/caixa.svg?v=2',
+    cashierOnly: true,
   },
   {
     id: 'vendas',
@@ -101,6 +95,7 @@ const MENU_ITEMS: MenuItem[] = [
     hostPath: '/principal/financeiro/vendas',
     description: 'Venda produtos com caixa, estoque e contas a receber.',
     image: '/principal-financeiro/vendas.svg?v=1',
+    cashierOnly: true,
   },
   {
     id: 'vendas-2',
@@ -220,11 +215,57 @@ function FinanceMenuCard({ item, href, target }: FinanceMenuCardProps) {
 export default function FinanceiroHomePage() {
   const runtimeContext = useFinanceRuntimeContext();
   const preservedQueryString = buildFinanceNavigationQueryString(runtimeContext);
+  const cashierAccess = hasCashierOperationAccess(runtimeContext);
+  const financeAccessContextKey = `${runtimeContext.cashierUserId || ''}:${runtimeContext.userRole || ''}`;
   const [hostBaseUrl, setHostBaseUrl] = useState<string | null>(null);
+  const [hasFinanceAdmin, setHasFinanceAdmin] = useState(false);
 
   useEffect(() => {
     setHostBaseUrl(resolveHostBaseUrl());
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setHasFinanceAdmin(false);
+
+    async function resolveFinanceAdminAccess() {
+      const profilesResponse = await financeApiFetch('/finance-access/profiles', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      if (profilesResponse.ok) return true;
+
+      // A origem pode ter usuários administrativos já sincronizados, mas sem
+      // a atribuição financeira inicial do operador atual. O próprio endpoint
+      // de sincronização é idempotente e mantém a autorização no backend.
+      if (runtimeContext.userRole !== 'ADMIN') return false;
+
+      const syncResponse = await financeApiFetch('/finance-access/source-sync', {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+        signal: controller.signal,
+      });
+      if (!syncResponse.ok) return false;
+
+      const retryResponse = await financeApiFetch('/finance-access/profiles', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
+      return retryResponse.ok;
+    }
+
+    void resolveFinanceAdminAccess()
+      .then((hasAccess) => {
+        if (!controller.signal.aborted) setHasFinanceAdmin(hasAccess);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHasFinanceAdmin(false);
+      });
+    return () => controller.abort();
+  }, [runtimeContext.sourceTenantId, runtimeContext.sourceBranchCode, financeAccessContextKey]);
 
   return (
     <div className="space-y-6">
@@ -250,9 +291,11 @@ export default function FinanceiroHomePage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {MENU_ITEMS.filter(
             (item) =>
-              (!item.adminOnly || runtimeContext.userRole === 'ADMIN') &&
+              (!item.adminOnly || hasFinanceAdmin) &&
+              (!item.cashierOnly || cashierAccess) &&
+              (item.id !== 'msinfor' || hasFinanceAdmin) &&
               (!item.financialManagerOnly ||
-                runtimeContext.userRole === 'ADMIN' ||
+                hasFinanceAdmin ||
                 runtimeContext.permissions.includes('MANAGE_FINANCIAL')),
           ).map((item) => {
             const shouldReturnToHost = runtimeContext.embedded && hostBaseUrl;
@@ -287,7 +330,7 @@ Contexto atual:
 - perfil: ${runtimeContext.userRole || 'NÃO INFORMADO'}
 
 Regra de acesso:
-- o card MSINFOR é exibido somente para perfil ADMIN
+- os cards administrativos e o card MSINFOR são exibidos somente quando o Financeiro confirma FINANCE_ADMIN
 - cada card preserva sourceSystem + sourceTenantId durante a navegação`}
             sqlText="-- PORTAL DE NAVEGAÇÃO: ESTA TELA NÃO CONSULTA DADOS PERSISTIDOS."
           />

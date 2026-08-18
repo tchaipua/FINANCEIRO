@@ -6,9 +6,12 @@ export type AuthenticatedFinanceRequestContext = {
   sourceTenantId: string;
   sourceBranchCode: number;
   sourceUserId: string;
+  centralTenantId?: string;
   companyId: string;
   branchId: string;
   scopes: readonly string[];
+  isMasterIdentity?: boolean;
+  canOperateCashier?: boolean;
 };
 
 export interface IFinanceContext
@@ -36,6 +39,13 @@ export function hasAuthenticatedFinanceScope(...requiredScopes: string[]) {
   return requiredScopes.some((scope) =>
     availableScopes.has(String(scope).toUpperCase()),
   );
+}
+
+export function assertCashierOperationAllowed(message = "O usuário Master não possui permissão para operar o caixa.") {
+  const context = getFinanceContext();
+  if (context?.isMasterIdentity && context.canOperateCashier !== true) {
+    throw new ForbiddenException(message);
+  }
 }
 
 export function runWithFinanceBranchScope<T>(

@@ -11,6 +11,8 @@ import { getFinanceContext } from "../../../common/finance-context";
 import { normalizeTaxId } from "../../../common/brazil-tax-id.utils";
 import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import {
+  getProductClassificationStatus,
+  getProductClassificationStatusLabel,
   normalizeStockClassificationMode,
   type StockClassificationMode,
 } from "../../../common/product-classification";
@@ -556,6 +558,17 @@ export class ProductsService {
   ) {
     const currentStock = roundMoney(product.currentStock || 0);
     const committedStock = roundMoney(Math.max(0, reservedStock));
+    const classificationStatus = getProductClassificationStatus(
+      branchConfig?.stockClassificationMode || "NONE",
+      product,
+    );
+    const classificationStatusLabel = getProductClassificationStatusLabel(
+      classificationStatus,
+    );
+    const unclassifiedLabel =
+      classificationStatus === "PENDING_CLASSIFICATION"
+        ? "SEM CLASSIFICAÇÃO"
+        : null;
     return {
       id: product.id,
       companyId: product.companyId,
@@ -565,9 +578,15 @@ export class ProductsService {
       status: product.status,
       name: product.name,
       groupId: product.groupId || null,
-      groupName: product.group?.name || null,
+      groupName: product.group?.name || unclassifiedLabel,
       subgroupId: product.subgroupId || null,
-      subgroupName: product.subgroup?.name || null,
+      subgroupName:
+        product.subgroup?.name ||
+        (branchConfig?.stockClassificationMode === "GROUP_AND_SUBGROUP"
+          ? unclassifiedLabel
+          : null),
+      classificationStatus,
+      classificationStatusLabel,
       internalCode: product.internalCode || null,
       sku: product.sku || null,
       barcode: product.barcode || null,

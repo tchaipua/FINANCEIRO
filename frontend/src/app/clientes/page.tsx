@@ -2,9 +2,8 @@
 
 import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
-import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -12,7 +11,6 @@ import { requestJson } from '@/app/lib/api';
 import {
   formatBrazilTaxId,
   normalizeBrazilTaxId,
-  normalizeBrazilTaxIdInput,
 } from '@/app/lib/brazil-tax-id';
 import { getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import {
@@ -30,9 +28,7 @@ import {
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES';
-const CUSTOMER_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_CADASTRO_MODAL';
 const CUSTOMER_DETAILS_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_DETALHES_MODAL';
-const CUSTOMER_STATUS_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_STATUS_MODAL';
 const CUSTOMER_COLUMNS_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_COLUNAS_MODAL';
 const CUSTOMER_EXPORT_MODAL_ID = 'PRINCIPAL_FINANCEIRO_CLIENTES_EXPORTACAO_MODAL';
 
@@ -40,7 +36,6 @@ type Customer = {
   id: string;
   status: 'ACTIVE' | 'INACTIVE';
   origin: 'ESCOLA' | 'PROJETO_INICIAL' | 'FINANCEIRO';
-  canManageLocally: boolean;
   externalEntityType: string;
   externalEntityId: string;
   name: string;
@@ -67,54 +62,11 @@ type Customer = {
 type CustomersResponse = {
   sourceSystem: string;
   registrationMode: 'LOCAL' | 'INTEGRATED_ONLY';
-  canCreateLocally: boolean;
   items: Customer[];
 };
 
 type CustomerGridColumnKey = 'name' | 'document' | 'contact' | 'city' | 'origin';
 type CustomerExportColumnKey = CustomerGridColumnKey | 'status' | 'updatedAt';
-
-type CustomerForm = {
-  name: string;
-  document: string;
-  stateRegistration: string;
-  municipalRegistration: string;
-  stateRegistrationIndicator: string;
-  email: string;
-  phone: string;
-  addressLine1: string;
-  street: string;
-  addressNumber: string;
-  addressComplement: string;
-  neighborhood: string;
-  city: string;
-  cityCode: string;
-  state: string;
-  postalCode: string;
-  countryCode: string;
-  countryName: string;
-};
-
-const EMPTY_FORM: CustomerForm = {
-  name: '',
-  document: '',
-  stateRegistration: '',
-  municipalRegistration: '',
-  stateRegistrationIndicator: '9',
-  email: '',
-  phone: '',
-  addressLine1: '',
-  street: '',
-  addressNumber: '',
-  addressComplement: '',
-  neighborhood: '',
-  city: '',
-  cityCode: '',
-  state: '',
-  postalCode: '',
-  countryCode: '1058',
-  countryName: 'BRASIL',
-};
 
 function formatDocument(value?: string | null) {
   return formatBrazilTaxId(value);
@@ -187,20 +139,13 @@ function requestSchoolCustomersSync() {
 export default function CustomersPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [items, setItems] = useState<Customer[]>([]);
-  const [canCreateLocally, setCanCreateLocally] = useState(false);
   const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE' | 'ALL'>('ACTIVE');
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [synchronizing, setSynchronizing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
-  const [statusCustomer, setStatusCustomer] = useState<Customer | null>(null);
-  const [form, setForm] = useState<CustomerForm>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -247,7 +192,6 @@ export default function CustomersPage() {
       });
       const response = await requestJson<CustomersResponse>(`/customers${query}`);
       setItems(response.items || []);
-      setCanCreateLocally(Boolean(response.canCreateLocally));
     } catch (error) {
       setErrorMessage(
         getFriendlyRequestErrorMessage(error, 'Não foi possível carregar os clientes.'),
@@ -342,113 +286,6 @@ ORDER BY PA.name ASC;`,
       });
   }, [auditContext.auditText, auditContext.sqlText, runtimeContext.embedded]);
 
-  const openNewCustomer = () => {
-    setEditingCustomer(null);
-    setForm(EMPTY_FORM);
-    setEditorOpen(true);
-  };
-
-  const openEditCustomer = (customer: Customer) => {
-    setEditingCustomer(customer);
-    setForm({
-      name: customer.name || '',
-      document: customer.document || '',
-      stateRegistration: customer.stateRegistration || '',
-      municipalRegistration: customer.municipalRegistration || '',
-      stateRegistrationIndicator: customer.stateRegistrationIndicator || '9',
-      email: customer.email || '',
-      phone: customer.phone || '',
-      addressLine1: customer.addressLine1 || '',
-      street: customer.street || '',
-      addressNumber: customer.addressNumber || '',
-      addressComplement: customer.addressComplement || '',
-      neighborhood: customer.neighborhood || '',
-      city: customer.city || '',
-      cityCode: customer.cityCode || '',
-      state: customer.state || '',
-      postalCode: customer.postalCode || '',
-      countryCode: customer.countryCode || '1058',
-      countryName: customer.countryName || 'BRASIL',
-    });
-    setEditorOpen(true);
-  };
-
-  const closeEditor = () => {
-    setEditorOpen(false);
-    setEditingCustomer(null);
-    setForm(EMPTY_FORM);
-  };
-
-  async function saveCustomer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
-
-    setSaving(true);
-    setErrorMessage(null);
-    try {
-      const payload = {
-        ...form,
-        document: normalizeBrazilTaxId(form.document) || undefined,
-        sourceSystem: runtimeContext.sourceSystem,
-        sourceTenantId: runtimeContext.sourceTenantId,
-        sourceBranchCode: runtimeContext.sourceBranchCode,
-        companyName: runtimeContext.companyName || undefined,
-        requestedBy: runtimeContext.cashierUserId || 'OPERADOR_FINANCEIRO',
-      };
-      await requestJson<Customer>(
-        editingCustomer ? `/customers/${editingCustomer.id}` : '/customers',
-        {
-          method: editingCustomer ? 'PATCH' : 'POST',
-          body: JSON.stringify(payload),
-        },
-      );
-      setSuccessMessage(
-        editingCustomer ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.',
-      );
-      closeEditor();
-      await loadCustomers();
-    } catch (error) {
-      setErrorMessage(
-        getFriendlyRequestErrorMessage(error, 'Não foi possível salvar o cliente.'),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function changeStatus(password = '', reason = '') {
-    if (!statusCustomer || !runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) return;
-    setSaving(true);
-    setErrorMessage(null);
-    try {
-      const action = statusCustomer.status === 'ACTIVE' ? 'inactivate' : 'activate';
-      await requestJson<Customer>(`/customers/${statusCustomer.id}/${action}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          sourceSystem: runtimeContext.sourceSystem,
-          sourceTenantId: runtimeContext.sourceTenantId,
-          sourceBranchCode: runtimeContext.sourceBranchCode,
-          requestedBy: runtimeContext.cashierUserId || 'OPERADOR_FINANCEIRO',
-          password,
-          reason,
-        }),
-      });
-      setSuccessMessage(
-        statusCustomer.status === 'ACTIVE'
-          ? 'Cliente inativado com sucesso.'
-          : 'Cliente reativado com sucesso.',
-      );
-      setStatusCustomer(null);
-      await loadCustomers();
-    } catch (error) {
-      setErrorMessage(
-        getFriendlyRequestErrorMessage(error, 'Não foi possível alterar a situação do cliente.'),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="flex h-[calc(100vh-1rem)] min-h-[520px] flex-col gap-4">
       {!runtimeContext.embedded ? (
@@ -481,17 +318,6 @@ ORDER BY PA.name ASC;`,
           }}
           className="flex items-center gap-3"
         >
-          {!isIntegratedSource && canCreateLocally ? (
-            <button
-              type="button"
-              onClick={openNewCustomer}
-              title="Incluir novo cliente"
-              aria-label="Incluir novo cliente"
-              className={`${FINANCE_GRID_PAGE_LAYOUT.iconButton} h-11 w-11 shrink-0 text-2xl font-black`}
-            >
-              +
-            </button>
-          ) : null}
           <input
             type="search"
             value={searchInput}
@@ -513,12 +339,6 @@ ORDER BY PA.name ASC;`,
           </button>
         </form>
 
-        {successMessage ? (
-          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
-            <span>{successMessage}</span>
-            <button type="button" onClick={() => setSuccessMessage(null)} className="font-black" aria-label="Fechar mensagem">×</button>
-          </div>
-        ) : null}
         {errorMessage ? (
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700">
             <span>{errorMessage}</span>
@@ -613,50 +433,6 @@ ORDER BY PA.name ASC;`,
                               <path d="M8.5 8h7M8.5 12h7M8.5 16h5" strokeLinecap="round" />
                             </svg>
                           </button>
-                          {customer.canManageLocally ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={(event) => { event.stopPropagation(); openEditCustomer(customer); }}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 border-violet-500 bg-violet-50 text-lg font-black text-violet-600 transition hover:bg-violet-100 hover:text-violet-800"
-                                title="Editar cliente"
-                                aria-label={`Editar cliente ${customer.name}`}
-                              >
-                                ✎
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => { event.stopPropagation(); setStatusCustomer(customer); }}
-                                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 text-lg font-black transition ${customer.status === 'ACTIVE' ? 'border-rose-400 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-800' : 'border-emerald-400 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800'}`}
-                                title={customer.status === 'ACTIVE' ? 'Inativar cliente' : 'Reativar cliente'}
-                                aria-label={`${customer.status === 'ACTIVE' ? 'Inativar' : 'Reativar'} cliente ${customer.name}`}
-                              >
-                                {customer.status === 'ACTIVE' ? <i className="bi bi-x-octagon" aria-hidden="true" /> : '↺'}
-                              </button>
-                            </>
-                          ) : null}
-                          {!customer.canManageLocally ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled
-                                className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border-2 border-violet-500 bg-violet-50 text-lg font-black text-violet-600 opacity-60"
-                                title="Edição será configurada na próxima etapa"
-                                aria-label={`Editar cliente ${customer.name} — em preparação`}
-                              >
-                                ✎
-                              </button>
-                              <button
-                                type="button"
-                                disabled
-                                className="inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border-2 border-rose-400 bg-rose-50 text-lg font-black text-rose-600 opacity-60"
-                                title="Inativação será configurada na próxima etapa"
-                                aria-label={`Inativar cliente ${customer.name} — em preparação`}
-                              >
-                                <i className="bi bi-x-octagon" aria-hidden="true" />
-                              </button>
-                            </>
-                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -776,72 +552,11 @@ ORDER BY PA.name ASC;`,
       ) : null}
 
       <AuditedPopupShell
-        isOpen={canCreateLocally && editorOpen}
-        screenId={CUSTOMER_MODAL_ID}
-        title={editingCustomer ? 'Editar cliente' : 'Cadastrar cliente'}
-        eyebrow="Cadastro local"
-        description="Cadastro utilizado pelas vendas e pelo contas a receber desta empresa."
-        brandingName={runtimeContext.companyName}
-        logoUrl={runtimeContext.logoUrl}
-        onClose={closeEditor}
-        panelClassName="max-w-4xl" headerTheme="blue" footerScreenIdCompact
-      >
-        <form onSubmit={saveCustomer} className="grid gap-4 md:grid-cols-2">
-          {([
-            ['name', 'Nome / razão social', 'md:col-span-2'],
-            ['document', 'CPF / CNPJ', ''],
-            ['stateRegistration', 'Inscrição estadual', ''],
-            ['stateRegistrationIndicator', 'Indicador IE (1, 2 ou 9)', ''],
-            ['municipalRegistration', 'Inscrição municipal', ''],
-            ['phone', 'Telefone', ''],
-            ['email', 'E-mail', 'md:col-span-2'],
-            ['street', 'Logradouro fiscal', ''],
-            ['addressNumber', 'Número', ''],
-            ['addressComplement', 'Complemento', ''],
-            ['neighborhood', 'Bairro', ''],
-            ['postalCode', 'CEP', ''],
-            ['city', 'Cidade', ''],
-            ['cityCode', 'Código IBGE do município', ''],
-            ['state', 'UF', ''],
-            ['countryCode', 'Código do país', ''],
-            ['countryName', 'País', ''],
-            ['addressLine1', 'Endereço completo legado', 'md:col-span-2'],
-          ] as const).map(([field, label, className]) => (
-            <label key={field} className={className}>
-              <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</span>
-              <input
-                required={field === 'name'}
-                value={form[field]}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    [field]:
-                      field === 'document'
-                        ? normalizeBrazilTaxIdInput(event.target.value)
-                        : event.target.value.toUpperCase(),
-                  }))
-                }
-                className={`${FINANCE_GRID_PAGE_LAYOUT.input} w-full`}
-              />
-            </label>
-          ))}
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-900 md:col-span-2">
-            Para NF-e, informe logradouro, número, bairro, município, código IBGE, UF e CEP.
-            Consumidor sem inscrição estadual usa indicador 9.
-          </div>
-          <div className="md:col-span-2 flex justify-end gap-3 pt-3">
-            <button type="button" onClick={closeEditor} className={FINANCE_GRID_PAGE_LAYOUT.secondaryButton}>Cancelar</button>
-            <button type="submit" disabled={saving} className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}>{saving ? 'Salvando...' : 'Salvar cliente'}</button>
-          </div>
-        </form>
-      </AuditedPopupShell>
-
-      <AuditedPopupShell
         isOpen={Boolean(viewingCustomer)}
         screenId={CUSTOMER_DETAILS_MODAL_ID}
         title="Detalhes do cliente"
-        eyebrow={viewingCustomer?.origin === 'FINANCEIRO' ? 'Cadastro local' : 'Cadastro sincronizado'}
-        description={viewingCustomer?.origin === 'FINANCEIRO' ? 'Cliente cadastrado diretamente no Financeiro.' : 'Visualização do cadastro. A manutenção dos dados principais ocorre no sistema de origem.'}
+        eyebrow="Cadastro sincronizado"
+        description="Visualização somente leitura. A manutenção dos dados ocorre exclusivamente no sistema de origem."
         brandingName={runtimeContext.companyName}
         logoUrl={runtimeContext.logoUrl}
         onClose={() => setViewingCustomer(null)}
@@ -890,45 +605,6 @@ ORDER BY PA.name ASC;`,
         ) : null}
       </AuditedPopupShell>
 
-      {statusCustomer?.status === 'ACTIVE' ? (
-        <InactivationConfirmationPopup
-          isOpen
-          screenId={CUSTOMER_STATUS_MODAL_ID}
-          title="Inativar cliente"
-          targetName={statusCustomer.name}
-          description="Baixe ou cancele todas as parcelas em aberto antes de inativar o cliente. O histórico financeiro será preservado."
-          brandingName={runtimeContext.companyName}
-          logoUrl={runtimeContext.logoUrl}
-          onClose={() => setStatusCustomer(null)}
-          onConfirm={(password, reason) => changeStatus(password, reason)}
-          isSaving={saving}
-          auditText="Confirmação obrigatória de senha e motivo antes de inativar um cliente no Financeiro."
-        />
-      ) : null}
-
-      <AuditedPopupShell
-        isOpen={Boolean(statusCustomer && statusCustomer.status !== 'ACTIVE')}
-        screenId={CUSTOMER_STATUS_MODAL_ID}
-        title={statusCustomer?.status === 'ACTIVE' ? 'Inativar cliente' : 'Reativar cliente'}
-        eyebrow="Confirmação"
-        description="A operação preserva todo o histórico financeiro do cliente."
-        brandingName={runtimeContext.companyName}
-        logoUrl={runtimeContext.logoUrl}
-        onClose={() => setStatusCustomer(null)}
-        panelClassName="max-w-xl" headerTheme="blue" footerScreenIdCompact
-        footerActions={
-          <>
-            <button type="button" onClick={() => setStatusCustomer(null)} className={FINANCE_GRID_PAGE_LAYOUT.secondaryButton}>Cancelar</button>
-            <button type="button" onClick={() => void changeStatus()} disabled={saving} className={FINANCE_GRID_PAGE_LAYOUT.primaryButton}>{saving ? 'Confirmando...' : 'Confirmar'}</button>
-          </>
-        }
-      >
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-center">
-          <div className="text-xs font-black uppercase tracking-[0.16em] text-amber-600">Cliente selecionado</div>
-          <div className="mt-2 text-xl font-black text-slate-900">{statusCustomer?.name}</div>
-          <div className="mt-1 text-sm font-semibold text-slate-600">{formatDocument(statusCustomer?.document)}</div>
-        </div>
-      </AuditedPopupShell>
     </div>
   );
 }

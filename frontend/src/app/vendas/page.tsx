@@ -17,6 +17,7 @@ import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from 
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
+  hasCashierOperationAccess,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import { formatAuditValue, formatTenantAuditValue, toSqlLiteral } from '@/app/lib/screen-audit-context';
@@ -1188,6 +1189,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   }, [actionMenuOpen]);
 
   const canLoadContext = Boolean(runtimeContext.sourceSystem && runtimeContext.sourceTenantId);
+  const cashierOperationAccess = hasCashierOperationAccess(runtimeContext);
   const cashierUserId = runtimeContext.cashierUserId || 'USUARIO';
   const cashierDisplayName = runtimeContext.cashierDisplayName || cashierUserId;
   const saleDraftStorageKey = useMemo(
@@ -1794,6 +1796,11 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       ? productSearchCommand
       : parseProductSearchCommand(rawCommand);
     const term = command.term.trim();
+    if (!cashierOperationAccess && ['FIM', 'VV', 'VP'].includes(term.toUpperCase())) {
+      setErrorMessage('O usuário Master não está autorizado a trabalhar como caixa.');
+      focusProductSearchInput();
+      return;
+    }
     if (term.toUpperCase() === 'FIM') {
       if (!cartItems.length) {
         setErrorMessage('Inclua ao menos um produto antes de finalizar a venda.');
@@ -1851,6 +1858,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     openProductLookup(command.quantity, term);
   }, [
     addProductToCart,
+    cashierOperationAccess,
     cartItems.length,
     cartTotals.total,
     focusProductSearchInput,
@@ -1911,6 +1919,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
 
   const handlePaymentMethodCardClick = useCallback(
     (paymentMethod: PaymentMethod) => {
+      if (!cashierOperationAccess && isImmediatePayment(paymentMethod)) {
+        setErrorMessage('O usuário Master não está autorizado a trabalhar como caixa.');
+        return;
+      }
       if (paymentMethod === 'TERM') {
         setPaymentAmountModal(null);
         openVPSale('checkout');
@@ -1937,7 +1949,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         installments: buildPaymentInstallmentDrafts(nextAmount, 1, nextDueDate),
       });
     },
-    [cartTotals.paymentTotal, cartTotals.total, openVPSale, paymentAmountByMethod],
+    [cashierOperationAccess, cartTotals.paymentTotal, cartTotals.total, openVPSale, paymentAmountByMethod],
   );
 
   const confirmPaymentAmount = useCallback(() => {

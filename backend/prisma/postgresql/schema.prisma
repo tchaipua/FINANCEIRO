@@ -71,6 +71,10 @@ model Company {
   bankDdaRecords                  BankDdaRecord[]
   bankDdaAuditEvents              BankDdaAuditEvent[]
   cashSessions                    CashSession[]
+  cashOperatorPolicies            CashOperatorPolicy[]
+  financeAccessSubjects           FinanceAccessSubject[]
+  financeAccessAssignments        FinanceAccessAssignment[]
+  financeAccessAuditEvents        FinanceAccessAuditEvent[]
   cashMovements                   CashMovement[]
   settlements                     InstallmentSettlement[]
   customerCredits                 CustomerCredit[]
@@ -267,6 +271,81 @@ model CompanyBranch {
   @@unique([companyId, branchCode])
   @@index([companyId, isActive, name])
   @@map("company_branches")
+}
+
+model FinanceAccessSubject {
+  id                       String    @id @default(uuid())
+  companyId                String
+  sourceSystem             String
+  sourceTenantId           String
+  sourceUserId             String
+  centralIdentityAccountId String?
+  registeredPersonId       String?
+  displayName              String
+  email                    String?
+  sourceRole               String?
+  sourceBranchCodesJson    String    @default("[]")
+  subjectType              String    @default("INTERNAL_USER")
+  sourceActive             Boolean   @default(true)
+  lastSynchronizedAt       DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt                DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy                String?
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy                String?
+  canceledAt               DateTime? @db.Timestamptz(3)
+  canceledBy               String?
+
+  company     Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  assignments FinanceAccessAssignment[]
+  auditEvents FinanceAccessAuditEvent[]
+
+  @@unique([companyId, sourceSystem, sourceTenantId, sourceUserId])
+  @@index([companyId, displayName, sourceActive, canceledAt])
+  @@map("finance_access_subjects")
+}
+
+model FinanceAccessAssignment {
+  id                  String    @id @default(uuid())
+  companyId           String
+  subjectId           String
+  branchCode          Int
+  profileCode         String
+  permissionCodesJson String
+  active              Boolean   @default(true)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy           String?
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy           String?
+  canceledAt          DateTime? @db.Timestamptz(3)
+  canceledBy          String?
+
+  company Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subject FinanceAccessSubject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, subjectId, branchCode])
+  @@index([companyId, branchCode, active, canceledAt])
+  @@map("finance_access_assignments")
+}
+
+model FinanceAccessAuditEvent {
+  id           String   @id @default(uuid())
+  companyId    String
+  branchCode   Int
+  subjectId    String?
+  action       String
+  summary      String
+  metadataJson String?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+  performedBy  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  createdBy    String?
+
+  company Company               @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subject FinanceAccessSubject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, subjectId, occurredAt])
+  @@map("finance_access_audit_events")
 }
 
 model ScreenParameter {
@@ -2639,6 +2718,8 @@ model CashSession {
   totalReceivedAmount   Float     @default(0)
   expectedClosingAmount Float     @default(0)
   declaredClosingAmount Float?
+  closeReason           String?
+  closedBy              String?
   openedAt              DateTime  @default(now()) @db.Timestamptz(3)
   closedAt              DateTime? @db.Timestamptz(3)
   notes                 String?
@@ -2657,6 +2738,27 @@ model CashSession {
   @@index([companyId, cashierUserId, status])
   @@index([companyId, openedAt])
   @@map("cash_sessions")
+}
+
+model CashOperatorPolicy {
+  id                 String    @id @default(uuid())
+  companyId          String
+  branchCode         Int       @default(1)
+  cashierUserId      String
+  cashierDisplayName String
+  closingMode        String    @default("MANUAL")
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  createdBy          String?
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+  updatedBy          String?
+  canceledAt         DateTime? @db.Timestamptz(3)
+  canceledBy         String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, cashierUserId])
+  @@index([companyId, branchCode, closingMode])
+  @@map("cash_operator_policies")
 }
 
 model CashMovement {

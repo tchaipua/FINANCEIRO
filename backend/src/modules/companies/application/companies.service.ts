@@ -39,7 +39,7 @@ import {
   CentralBranchEditorClient,
   type CentralBranchConfiguration,
 } from "./central-branch-editor.client";
-import { ensureDefaultProductClassification } from "../../../common/product-classification";
+import { summarizeProductClassification } from "../../../common/product-classification";
 
 @Injectable()
 export class CompaniesService {
@@ -513,13 +513,12 @@ export class CompaniesService {
       },
     });
 
-    const classificationBackfill = await ensureDefaultProductClassification(
+    const classificationSummary = await summarizeProductClassification(
       this.prisma,
       {
         companyId: company.id,
         branchCode,
         mode: companyBranch.stockClassificationMode,
-        requestedBy: actor,
       },
     );
 
@@ -732,7 +731,7 @@ export class CompaniesService {
           smtpConfigured: Boolean(payload.smtpHost && payload.smtpEmail),
           telegramConfigured: Boolean(payload.telegramBotToken),
           sourceConfigurationId: sourceConfiguration.id,
-          classificationBackfill,
+          classificationSummary,
         }),
         performedBy: actor,
         createdBy: actor,
@@ -920,7 +919,7 @@ export class CompaniesService {
     const requestedBy =
       String(context?.sourceUserId || "FINANCEIRO_EMPRESAS").trim() ||
       "FINANCEIRO_EMPRESAS";
-    const centralTenantId = String(launchContext?.centralTenantId || "")
+    const centralTenantId = String(context?.centralTenantId || "")
       .trim()
       .toLowerCase();
     if (!centralTenantId) {
@@ -967,7 +966,7 @@ export class CompaniesService {
     const { company, branch } = await runWithCompanyWideBranchDirectoryRead(
       () => this.findScopedBranch(id, branchId, scope),
     );
-    const centralTenantId = String(scope.centralTenantId || "")
+    const centralTenantId = String(getFinanceContext()?.centralTenantId || "")
       .trim()
       .toLowerCase();
     if (!centralTenantId) {
@@ -1164,13 +1163,12 @@ export class CompaniesService {
           where: { id: branch.id },
           data,
         });
-        const classificationBackfill = await ensureDefaultProductClassification(
+          const classificationSummary = await summarizeProductClassification(
           tx,
           {
             companyId: company.id,
             branchCode: branch.branchCode,
             mode: updated.stockClassificationMode,
-            requestedBy: "CENTRAL_API_SYNC",
           },
         );
         await tx.screenParameter.upsert({
@@ -1211,7 +1209,7 @@ export class CompaniesService {
               changed,
               before,
               after,
-              classificationBackfill,
+              classificationSummary,
             }),
             performedBy: "CENTRAL_API_SYNC",
             createdBy: "CENTRAL_API_SYNC",
@@ -1419,13 +1417,12 @@ export class CompaniesService {
         },
       });
 
-      const classificationBackfill = await ensureDefaultProductClassification(
+      const classificationSummary = await summarizeProductClassification(
         tx,
         {
           companyId: company.id,
           branchCode: branch.branchCode,
           mode: updated.stockClassificationMode,
-          requestedBy: payload.requestedBy,
         },
       );
 
@@ -1468,7 +1465,7 @@ export class CompaniesService {
             sourceTenantId: company.sourceTenantId,
             sourceStockParametersChanged,
             parameters,
-            classificationBackfill,
+            classificationSummary,
           }),
           performedBy: payload.requestedBy || null,
           createdBy: payload.requestedBy || null,

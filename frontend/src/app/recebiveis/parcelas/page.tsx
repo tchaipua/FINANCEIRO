@@ -10,6 +10,7 @@ import { formatCurrency, formatDateLabel, getFriendlyRequestErrorMessage } from 
 import {
   buildFinanceApiQueryString,
   buildFinanceNavigationQueryString,
+  hasCashierOperationAccess,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
 import { withFinanceBasePath } from '@/app/lib/public-path';
@@ -367,11 +368,14 @@ export default function FinanceiroParcelasPage() {
   const [alertModal, setAlertModal] = useState<AlertModalState | null>(null);
 
   const permissions = runtimeContext.permissions;
+  const cashierOperationAccess = hasCashierOperationAccess(runtimeContext);
   const canViewCashier = hasAnyPermission(runtimeContext.userRole, permissions, [
     'VIEW_CASHIER',
     'SETTLE_RECEIVABLES',
   ]);
-  const canOpenCashier = hasPermission(runtimeContext.userRole, permissions, 'VIEW_CASHIER');
+  const canOpenCashier =
+    cashierOperationAccess &&
+    hasPermission(runtimeContext.userRole, permissions, 'VIEW_CASHIER');
   const canSettleInstallments = hasPermission(
     runtimeContext.userRole,
     permissions,
@@ -387,7 +391,7 @@ export default function FinanceiroParcelasPage() {
   const cashierDisplayName = repairTextEncoding(runtimeContext.cashierDisplayName) || 'USUARIO';
 
   async function loadCurrentSession() {
-    if (!contextReady || !canViewCashier) {
+    if (!contextReady || !canViewCashier || !cashierOperationAccess) {
       setCurrentSession(null);
       setIsLoadingSession(false);
       return;
@@ -451,7 +455,7 @@ export default function FinanceiroParcelasPage() {
   useEffect(() => {
     void loadCurrentSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextReady, canViewCashier, cashierUserId]);
+  }, [contextReady, canViewCashier, cashierOperationAccess, cashierUserId]);
 
   useEffect(() => {
     void loadInstallments(appliedFilters);

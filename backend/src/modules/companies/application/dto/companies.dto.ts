@@ -362,8 +362,9 @@ export class SyncSourceIntegrationSettingsDto {
 }
 
 export class CentralBranchEditorLaunchDto {
+  @IsOptional()
   @IsUUID()
-  centralTenantId!: string;
+  centralTenantId?: string;
 }
 
 export class ProvisionSourceTenantBranchDto {
