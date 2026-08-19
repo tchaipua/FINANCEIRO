@@ -16,6 +16,7 @@ type ScreenNameCopyProps = {
   auditText?: string;
   sqlText?: string;
   compact?: boolean;
+  screenIdRightAligned?: boolean;
 };
 
 type ScreenAuditMetadata = {
@@ -594,6 +595,7 @@ export default function ScreenNameCopy({
   auditText,
   sqlText,
   compact = false,
+  screenIdRightAligned = false,
 }: ScreenNameCopyProps) {
   const [status, setStatus] = useState<CopyStatus>('idle');
   const [isAuditOpen, setIsAuditOpen] = useState(false);
@@ -603,7 +605,7 @@ export default function ScreenNameCopy({
   const effectiveAuditText = auditText || auditMetadata?.auditText;
   const effectiveSqlText = sqlText || auditMetadata?.sqlText;
   const displayScreenId =
-    compact && screenId.length > 38
+    compact && !screenIdRightAligned && screenId.length > 38
       ? `${screenId.slice(0, 35)}...`
       : screenId;
   const tooltipPath = useRuntimeTooltipPath(extractSourcePath(effectiveOriginText));
@@ -640,7 +642,7 @@ export default function ScreenNameCopy({
   return (
     <>
       <div className={`flex min-w-0 items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 ${compact ? 'justify-end' : ''} ${className}`}>
-        <span className={compact ? 'min-w-0 max-w-[calc(100%-42px)] truncate' : 'min-w-0 flex-1 truncate'}>
+        <span className={screenIdRightAligned ? 'min-w-0 max-w-[calc(100%_-_84px)] shrink-0 truncate' : compact ? 'min-w-0 max-w-[calc(100%-42px)] truncate' : 'min-w-0 flex-1 truncate'}>
           {label}:{' '}
           <span className="font-normal text-[10px] tracking-[0.35em] text-slate-500" title={screenId}>
             {displayScreenId}

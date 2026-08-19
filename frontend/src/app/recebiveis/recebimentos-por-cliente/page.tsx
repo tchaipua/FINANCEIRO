@@ -3,7 +3,7 @@
 import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -558,7 +558,9 @@ export default function FinanceiroRecebimentosPorClientePage() {
       return (Object.keys(appliedFilters) as CustomerGridColumnKey[]).every((key) => {
         const filter = appliedFilters[key];
         if (!filter) return true;
-        return includesFilterText(getCustomerColumnValue(row, key), filter);
+        return key === 'earliestDueDate'
+          ? matchesGridDateRange(getCustomerColumnValue(row, key), filter)
+          : includesFilterText(getCustomerColumnValue(row, key), filter);
       });
     });
 
@@ -709,6 +711,7 @@ export default function FinanceiroRecebimentosPorClientePage() {
     return (
       <GridColumnFilterHeader
         label={column.label}
+        filterType={column.key === 'earliestDueDate' ? 'date-range' : 'text'}
         isOpen={activeFilterColumn === column.key}
         isActive={Boolean(appliedFilters[column.key])}
         filterValue={filterDrafts[column.key]}

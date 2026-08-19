@@ -10,6 +10,7 @@ import {
   buildFinanceNavigationQueryString,
   useFinanceRuntimeContext,
 } from '@/app/lib/runtime-context';
+import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_ESTOQUE';
@@ -185,6 +186,11 @@ function shouldShowMenuItem(item: MenuItem, branchInventoryConfig: BranchInvento
   return branchInventoryConfig.stockGridControlMode !== 'NO';
 }
 
+function postEmbeddedScreenContext(screenId: string) {
+  const message = { type: 'MSINFOR_SCREEN_CONTEXT', screenId };
+  postMessageToTrustedParent(message);
+}
+
 function StockMenuCard({
   item,
   preservedQueryString,
@@ -276,6 +282,15 @@ export default function FinanceiroEstoquePage() {
   useEffect(() => {
     void loadBranchInventoryConfig();
   }, [loadBranchInventoryConfig]);
+
+  useEffect(() => {
+    if (!isEmbedded) return;
+
+    postEmbeddedScreenContext(SCREEN_ID);
+    const retryTimer = window.setTimeout(() => postEmbeddedScreenContext(SCREEN_ID), 250);
+
+    return () => window.clearTimeout(retryTimer);
+  }, [isEmbedded]);
 
   const visibleMenuItems = useMemo(
     () =>

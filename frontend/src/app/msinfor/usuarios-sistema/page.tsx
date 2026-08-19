@@ -70,6 +70,16 @@ type CashOperatorPolicy = {
   updatedAt: string | null;
 };
 type SelectedUserTab = "ACCESS" | "CASH";
+type FinancialNotificationPreference = {
+  code: string;
+  group: string;
+  name: string;
+  enabled: boolean;
+  sendInternal: boolean;
+  sendEmail: boolean;
+  sendTelegram: boolean;
+  updatedAt: string | null;
+};
 type GridKey = "name" | "email" | "role" | "status";
 type Sort = { key: GridKey | null; direction: "ASC" | "DESC" };
 type Filters = Record<GridKey, string>;
@@ -79,6 +89,8 @@ const POPUP_SCREEN_ID =
   "POPUP_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA_CONFIGURACOES_USUARIO";
 const NEW_USER_POPUP_SCREEN_ID =
   "POPUP_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA_NOVO_USUARIO";
+const NOTIFICATIONS_POPUP_SCREEN_ID =
+  "POPUP_PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA_NOTIFICACOES";
 const cardClass = "rounded-3xl border border-slate-200 bg-white shadow-sm";
 const GRID_STORAGE_KEY = "financeiro:msinfor:usuarios-sistema:grid-columns";
 const CENTRAL_API_BASE_URL = String(
@@ -258,6 +270,11 @@ export default function FinanceSystemUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
+  const [notificationUser, setNotificationUser] = useState<SystemUser | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = useState<FinancialNotificationPreference[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [notificationFeedback, setNotificationFeedback] = useState("");
   const [selectedUserTab, setSelectedUserTab] = useState<SelectedUserTab>(
     "ACCESS",
   );
@@ -528,6 +545,106 @@ export default function FinanceSystemUsersPage() {
     }
   }
 
+  async function openFinancialNotifications(user: SystemUser) {
+    setNotificationUser(user);
+    setNotificationPreferences([]);
+    setNotificationFeedback("");
+    setLoadingNotifications(true);
+    try {
+      const payload = await getJson<{ preferences?: FinancialNotificationPreference[] }>(
+        `/financial-notifications/subjects/${user.id}/preferences`,
+      );
+      setNotificationPreferences(Array.isArray(payload.preferences) ? payload.preferences : []);
+    } catch (requestError: unknown) {
+      setNotificationFeedback(
+        requestError instanceof Error
+          ? requestError.message.toUpperCase()
+          : "NÃO FOI POSSÍVEL CARREGAR AS NOTIFICAÇÕES FINANCEIRAS.",
+      );
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }
+
+  function updateNotificationPreference(
+    eventCode: string,
+    field: "enabled" | "sendInternal" | "sendEmail" | "sendTelegram",
+    checked: boolean,
+  ) {
+    setNotificationPreferences((current) =>
+      current.map((item) => {
+        if (item.code !== eventCode) return item;
+        if (field === "enabled") {
+          return {
+            ...item,
+            enabled: checked,
+            sendInternal: checked ? item.sendInternal : false,
+            sendEmail: checked ? item.sendEmail : false,
+            sendTelegram: checked ? item.sendTelegram : false,
+          };
+        }
+        return {
+          ...item,
+          enabled: checked ? true : item.enabled,
+          [field]: checked,
+        };
+      }),
+    );
+  }
+
+  function setNotificationChannelForAll(
+    field: "enabled" | "sendInternal" | "sendEmail" | "sendTelegram",
+    checked: boolean,
+  ) {
+    setNotificationPreferences((current) =>
+      current.map((item) =>
+        field === "enabled"
+          ? {
+              ...item,
+              enabled: checked,
+              sendInternal: checked ? item.sendInternal : false,
+              sendEmail: checked ? item.sendEmail : false,
+              sendTelegram: checked ? item.sendTelegram : false,
+            }
+          : { ...item, enabled: checked ? true : item.enabled, [field]: checked },
+      ),
+    );
+  }
+
+  async function saveFinancialNotifications() {
+    if (!notificationUser) return;
+    try {
+      setSavingNotifications(true);
+      setNotificationFeedback("");
+      const saved = await requestJson<{ preferences?: FinancialNotificationPreference[] }>(
+        `/financial-notifications/subjects/${notificationUser.id}/preferences`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            preferences: notificationPreferences.map((item) => ({
+              eventType: item.code,
+              enabled: item.enabled,
+              sendInternal: item.sendInternal,
+              sendEmail: item.sendEmail,
+              sendTelegram: item.sendTelegram,
+            })),
+          }),
+          fallbackMessage: "Não foi possível salvar as notificações financeiras.",
+        },
+      );
+      setNotificationPreferences(Array.isArray(saved.preferences) ? saved.preferences : []);
+      setNotificationFeedback("NOTIFICAÇÕES FINANCEIRAS SALVAS COM SUCESSO.");
+    } catch (requestError: unknown) {
+      setNotificationFeedback(
+        requestError instanceof Error
+          ? requestError.message.toUpperCase()
+          : "NÃO FOI POSSÍVEL SALVAR AS NOTIFICAÇÕES FINANCEIRAS.",
+      );
+    } finally {
+      setSavingNotifications(false);
+    }
+  }
+
   function openNewSystemUser() {
     const financeProfile =
       profiles.find((profile) => profile.code === "GERENTE_FINANCEIRO") ||
@@ -750,7 +867,7 @@ export default function FinanceSystemUsersPage() {
               <div
                 className="grid border-b border-slate-200 bg-slate-100 px-4 py-3 text-[10px] font-black tracking-wide text-slate-600"
                 style={{
-                  gridTemplateColumns: `repeat(${Math.max(visibleColumns.length, 1)}, minmax(150px, 1fr)) 145px`,
+                  gridTemplateColumns: `repeat(${Math.max(visibleColumns.length, 1)}, minmax(150px, 1fr)) 270px`,
                 }}
               >
                 {visibleColumns.map((column) => (
@@ -812,7 +929,7 @@ export default function FinanceSystemUsersPage() {
                     key={user.id}
                     className={`grid items-center border-b border-slate-100 px-4 py-3 text-xs last:border-b-0 ${index % 2 ? "bg-slate-50/80" : "bg-white"}`}
                     style={{
-                      gridTemplateColumns: `repeat(${Math.max(visibleColumns.length, 1)}, minmax(150px, 1fr)) 145px`,
+                      gridTemplateColumns: `repeat(${Math.max(visibleColumns.length, 1)}, minmax(150px, 1fr)) 270px`,
                     }}
                   >
                     {visibleColumns.map((column) => (
@@ -839,7 +956,14 @@ export default function FinanceSystemUsersPage() {
                         )}
                       </div>
                     ))}
-                    <div className="text-right">
+                    <div className="flex justify-end gap-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void openFinancialNotifications(user)}
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-black text-blue-800"
+                      >
+                        NOTIFICAÇÕES
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -1084,6 +1208,153 @@ export default function FinanceSystemUsersPage() {
               >
                 {savingNewUser ? "SALVANDO..." : "SALVAR USUÁRIO"}
               </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+      {notificationUser ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4"
+          onMouseDown={() => !savingNotifications && setNotificationUser(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="CONFIGURAR NOTIFICAÇÕES FINANCEIRAS"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center gap-4 border-b border-blue-900 bg-[#153a6a] px-5 py-4 text-white">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1">
+                <img
+                  src={normalizeFinanceLogoUrl(runtimeContext.logoUrl)}
+                  alt="LOGOTIPO INSTITUCIONAL"
+                  className="h-full w-full object-contain"
+                  onError={(event) => {
+                    event.currentTarget.onerror = null;
+                    event.currentTarget.src = withFinanceBasePath("/logo-msinfor.jpg");
+                  }}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black tracking-[.2em] text-blue-100">
+                  EVENTOS DO FINANCEIRO · FILIAL {runtimeContext.sourceBranchCode}
+                </div>
+                <h2 className="truncate text-lg font-black">
+                  NOTIFICAÇÕES DE {normalizedText(notificationUser.name)}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotificationUser(null)}
+                disabled={savingNotifications}
+                aria-label="FECHAR"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 text-2xl font-black disabled:opacity-50"
+              >
+                ×
+              </button>
+            </header>
+            <div className="overflow-y-auto bg-slate-50 p-5">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+                <div className="text-[11px] font-black tracking-[.18em] text-blue-700">
+                  EVENTOS INDIVIDUAIS
+                </div>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  MARQUE OS EVENTOS QUE ESTA PESSOA DEVERÁ RECEBER E ESCOLHA OS CANAIS.
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ["enabled", "TODOS OS EVENTOS"],
+                    ["sendInternal", "TODOS NO SISTEMA"],
+                    ["sendEmail", "TODOS POR E-MAIL"],
+                    ["sendTelegram", "TODOS POR TELEGRAM"],
+                  ].map(([field, label]) => (
+                    <label key={field} className="flex cursor-pointer items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 shadow-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(notificationPreferences.length) && notificationPreferences.every((item) => item[field as keyof FinancialNotificationPreference] === true)}
+                        onChange={(event) => setNotificationChannelForAll(field as "enabled" | "sendInternal" | "sendEmail" | "sendTelegram", event.target.checked)}
+                        className="h-5 w-5 accent-blue-700"
+                      />
+                      <span className="text-[10px] font-black text-blue-800">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {loadingNotifications ? (
+                <div className="py-12 text-center text-xs font-black text-slate-500">CARREGANDO EVENTOS...</div>
+              ) : (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {notificationPreferences.map((item, index) => {
+                    const colorClass = index % 3 === 0
+                      ? "border-sky-300 bg-sky-100/70"
+                      : index % 3 === 1
+                        ? "border-emerald-300 bg-emerald-100/70"
+                        : "border-amber-300 bg-amber-100/70";
+                    return (
+                      <article key={item.code} className={`rounded-2xl border p-3 shadow-sm ${colorClass}`}>
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={item.enabled}
+                            onChange={(event) => updateNotificationPreference(item.code, "enabled", event.target.checked)}
+                            className="mt-0.5 h-5 w-5 accent-blue-700"
+                          />
+                          <span>
+                            <span className="block text-[9px] font-black tracking-[.12em] text-slate-500">{item.group}</span>
+                            <span className="mt-1 block text-xs font-black text-slate-800">{item.name}</span>
+                          </span>
+                        </label>
+                        <div className="mt-3 space-y-2">
+                          {[
+                            ["sendInternal", "SISTEMA"],
+                            ["sendEmail", "E-MAIL"],
+                            ["sendTelegram", "TELEGRAM"],
+                          ].map(([field, label]) => (
+                            <label key={field} className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/80 bg-white/70 px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(item[field as keyof FinancialNotificationPreference])}
+                                onChange={(event) => updateNotificationPreference(item.code, field as "sendInternal" | "sendEmail" | "sendTelegram", event.target.checked)}
+                                className="h-4 w-4 accent-blue-700"
+                              />
+                              <span className="text-[9px] font-black tracking-wide text-slate-600">{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+              {notificationFeedback ? (
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-black text-blue-800">
+                  {notificationFeedback}
+                </div>
+              ) : null}
+            </div>
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3">
+              <div>
+                <div className="text-[9px] font-black tracking-wide text-slate-400">
+                  AUDITORIA VISUAL · EMPRESA, FILIAL, USUÁRIO E EVENTOS AUDITADOS
+                </div>
+                <ScreenNameCopy
+                  screenId={NOTIFICATIONS_POPUP_SCREEN_ID}
+                  compact
+                  originText="Sistema Financeiro - notificações por usuário do sistema."
+                  auditText="Preferências e simulações registradas com tenant, filial e operador."
+                />
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void saveFinancialNotifications()}
+                  disabled={savingNotifications || loadingNotifications}
+                  className="rounded-xl bg-blue-700 px-5 py-3 text-[10px] font-black text-white disabled:opacity-50"
+                >
+                  {savingNotifications ? "PROCESSANDO..." : "SALVAR NOTIFICAÇÕES"}
+                </button>
+              </div>
             </footer>
           </section>
         </div>

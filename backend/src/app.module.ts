@@ -24,6 +24,7 @@ import { InternalReplayCacheService } from "./common/internal-replay-cache.servi
 import { HealthController } from "./common/health.controller";
 import { MultipartBodyMiddleware } from "./common/multipart-body.middleware";
 import { FinanceAccessModule } from "./modules/finance-access/finance-access.module";
+import { FinancialNotificationsModule } from "./modules/financial-notifications/financial-notifications.module";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { FinanceAccessModule } from "./modules/finance-access/finance-access.mod
     S3ControlModule,
     PrintingModule,
     FinanceAccessModule,
+    FinancialNotificationsModule,
   ],
   controllers: [HealthController],
   providers: [

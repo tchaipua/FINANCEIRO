@@ -877,6 +877,32 @@ export default function FinanceiroParcelasPage() {
     );
   }
 
+  function renderStandardDueDateColumnHeader() {
+    const isActive = Boolean(appliedFilters.dueDateStart || appliedFilters.dueDateEnd) || gridSort.key === 'dueDate';
+    return (
+      <GridColumnFilterHeader
+        label="Vencimento"
+        filterType="date-range"
+        isOpen={activeFilterColumn === 'dueDate'}
+        isActive={isActive}
+        filterValue={`${filterDrafts.dueDateStart}|${filterDrafts.dueDateEnd}`}
+        align="right"
+        sortDirection={gridSort.key === 'dueDate' ? gridSort.direction : null}
+        onToggle={() => openColumnFilter('dueDate')}
+        onSort={(direction) => {
+          setGridSort({ key: 'dueDate', direction });
+          setActiveFilterColumn(null);
+        }}
+        onFilterValueChange={(value) => {
+          const [from = '', to = ''] = value.split('|');
+          setFilterDrafts((current) => ({ ...current, dueDateStart: from, dueDateEnd: to }));
+        }}
+        onApply={() => applyColumnFilter('dueDate')}
+        onClear={() => clearColumnFilter('dueDate')}
+      />
+    );
+  }
+
   function renderDueDateColumnHeader() {
     const isOpen = activeFilterColumn === 'dueDate';
     const isActive =
@@ -1298,7 +1324,7 @@ export default function FinanceiroParcelasPage() {
                   {renderTextColumnHeader('classLabel', 'Turma', 'TURMA')}
                 </th>
                 <th className="px-4 py-3">
-                  {renderDueDateColumnHeader()}
+                  {renderStandardDueDateColumnHeader()}
                 </th>
                 <th className="px-4 py-3">
                   {renderTextColumnHeader('amount', 'Valor', 'VALOR', 'right')}

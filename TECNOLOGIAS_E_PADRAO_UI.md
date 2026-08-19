@@ -74,6 +74,13 @@ Registrar a stack oficial inicial do projeto `Financeiro` e a diretriz visual qu
 - O layout base reutilizavel foi documentado no frontend em `frontend/src/app/lib/grid-page-standards.ts`
 - Novas telas de grid devem seguir esse padrão, salvo se houver excecao explicita aprovada pelo usuario
 
+### Filtro de data em colunas do grid
+
+- toda coluna de data deve usar o filtro por intervalo do componente `frontend/src/app/components/grid-column-filter-header.tsx`
+- o filtro apresenta o combobox `Período` com mês atual, 12 meses anteriores e 6 posteriores no formato `AGOSTO/2026`
+- a opção `PERÍODO PERSONALIZADO` permite informar `De` e `Até`; o intervalo é inclusivo
+- a regra deve ser aplicada também quando a tela possuir um filtro de período legado, que deve ser visualmente alinhado ao mesmo padrão
+
 ## Regra de acesso
 
 - O `Financeiro` nao tera login humano proprio

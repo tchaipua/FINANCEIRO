@@ -1186,3 +1186,12 @@ nos escopos `MASTER_IDENTITY` e `MASTER_CASHIER_ALLOWED` ou
 de venda e pagamentos presenciais quando o escopo for `DENIED`; a ausência da
 permissão não é substituída por papel `ADMIN` ou por dados enviados pelo
 navegador.
+
+## Notificações financeiras por usuário
+
+- `GET /financial-notifications/events`: catálogo único dos eventos de contas a receber, contas a pagar e caixa;
+- `GET /financial-notifications/subjects/:subjectId/preferences`: matriz efetiva do usuário na filial autenticada;
+- `PATCH /financial-notifications/subjects/:subjectId/preferences`: grava evento e canais `SISTEMA`, `E-MAIL` e `TELEGRAM`;
+- `POST /financial-notifications/simulate`: gera eventos de teste sem alterar títulos, parcelas, baixas ou caixa; o override de e-mail é restrito a teste/desenvolvimento e à allowlist temporária.
+
+Todas as rotas exigem `FINANCE_ADMIN`. Entregas à origem usam callback HMAC com escopo exclusivo `FINANCIAL_NOTIFICATIONS_WRITE`, chave idempotente por destinatário e evento e nunca revertem a mutação financeira quando um canal externo falha.

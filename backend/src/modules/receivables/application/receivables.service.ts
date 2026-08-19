@@ -56,6 +56,7 @@ import {
   upsertPartyIdentity,
 } from "../../../common/party-registry";
 import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
+import { FinancialNotificationsService } from "../../financial-notifications/application/financial-notifications.service";
 
 @Injectable()
 export class ReceivablesService {
@@ -63,6 +64,7 @@ export class ReceivablesService {
     private readonly prisma: PrismaService,
     private readonly sicoobBillingService: SicoobBillingService,
     private readonly sicrediBillingService: SicrediBillingService,
+    private readonly financialNotifications: FinancialNotificationsService,
   ) {}
 
   private branchCode() {
@@ -1615,6 +1617,32 @@ export class ReceivablesService {
       openAmount: updatedInstallment.openAmount,
       settings: financialSettings,
     });
+
+    const notificationBase = {
+      titleName: updatedInstallment.title.sourceEntityName || updatedInstallment.title.sourceEntityId,
+      installmentNumber: updatedInstallment.installmentNumber,
+      requestedBy: payload.requestedBy || null,
+    };
+    if (roundMoney(Number(installment.amount || 0)) !== nextAmount) {
+      void this.financialNotifications.dispatch({
+        eventType: "RECEIVABLE_INSTALLMENT_AMOUNT_CHANGED",
+        eventKey: `RECEIVABLE_INSTALLMENT:${updatedInstallment.id}:AMOUNT:${updatedInstallment.updatedAt.getTime()}`,
+        title: "VALOR DE PARCELA DO CONTAS A RECEBER ALTERADO",
+        message: `A PARCELA ${updatedInstallment.installmentNumber} DE ${notificationBase.titleName} FOI ALTERADA DE R$ ${roundMoney(Number(installment.amount || 0)).toFixed(2)} PARA R$ ${nextAmount.toFixed(2)}.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { ...notificationBase, installmentId: updatedInstallment.id, previousAmount: installment.amount, nextAmount },
+      }).catch(() => undefined);
+    }
+    if (installment.dueDate.getTime() !== dueDate.getTime()) {
+      void this.financialNotifications.dispatch({
+        eventType: "RECEIVABLE_INSTALLMENT_DUE_DATE_CHANGED",
+        eventKey: `RECEIVABLE_INSTALLMENT:${updatedInstallment.id}:DUE_DATE:${updatedInstallment.updatedAt.getTime()}`,
+        title: "VENCIMENTO DE PARCELA DO CONTAS A RECEBER ALTERADO",
+        message: `O VENCIMENTO DA PARCELA ${updatedInstallment.installmentNumber} DE ${notificationBase.titleName} FOI ALTERADO.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { ...notificationBase, installmentId: updatedInstallment.id, previousDueDate: installment.dueDate.toISOString(), nextDueDate: dueDate.toISOString() },
+      }).catch(() => undefined);
+    }
 
     return {
       id: updatedInstallment.id,

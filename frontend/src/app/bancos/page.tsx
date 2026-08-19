@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import { financeApiFetch, getJson } from '@/app/lib/api';
@@ -559,7 +559,9 @@ function matchesBankColumnFilters(bank: BankItem, filters: BankColumnFilters) {
       return true;
     }
 
-    return normalizeBankGridFilterValue(getBankGridFilterValue(bank, column.key)).includes(filter);
+    return column.key === 'updatedAt'
+      ? matchesGridDateRange(getBankGridFilterValue(bank, column.key), filters[column.key])
+      : normalizeBankGridFilterValue(getBankGridFilterValue(bank, column.key)).includes(filter);
   });
 }
 
@@ -1339,6 +1341,7 @@ export default function FinanceiroBanksPage() {
     return (
       <GridColumnFilterHeader
         label={column.label}
+        filterType={column.key === 'updatedAt' ? 'date-range' : 'text'}
         isOpen={activeBankFilterColumn === column.key}
         isActive={isActive}
         filterValue={bankColumnFilterDrafts[column.key]}

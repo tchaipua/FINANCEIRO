@@ -4,7 +4,7 @@ import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -370,7 +370,12 @@ export default function FinanceiroOpenDdasPage() {
     if (statusFilter !== 'ALL' && item.status !== statusFilter) return false;
     const generalText = DDA_COLUMNS.map((column) => column.getValue(item)).join(' ');
     if (generalSearch.trim() && !normalizeGridText(generalText).includes(normalizeGridText(generalSearch))) return false;
-    return (Object.keys(appliedFilters) as DdaColumnKey[]).every((key) => !appliedFilters[key] || normalizeGridText(getColumnValue(item, key)).includes(normalizeGridText(appliedFilters[key])));
+    return (Object.keys(appliedFilters) as DdaColumnKey[]).every((key) => {
+      if (!appliedFilters[key]) return true;
+      return key === 'dueDate' || key === 'paidAt'
+        ? matchesGridDateRange(getColumnValue(item, key), appliedFilters[key])
+        : normalizeGridText(getColumnValue(item, key)).includes(normalizeGridText(appliedFilters[key]));
+    });
   }), [appliedFilters, ddaItems, generalSearch, getColumnValue, statusFilter]);
   const sortedItems = useMemo(() => [...filteredItems].sort((left, right) => {
     let leftValue: string | number = getColumnValue(left, gridSort.key); let rightValue: string | number = getColumnValue(right, gridSort.key);
@@ -395,7 +400,7 @@ export default function FinanceiroOpenDdasPage() {
   function clearAllGridFilters() { setGeneralSearch(''); setFilterDrafts(DEFAULT_FILTERS); setAppliedFilters(DEFAULT_FILTERS); setGridSort({ key: 'dueDate', direction: 'ASC' }); setActiveFilterColumn(null); setCurrentPage(1); }
   function renderColumnHeader(column: GridColumnDefinition<OpenDdaItem, DdaColumnKey>, index: number) {
     const isActive = Boolean(appliedFilters[column.key]) || gridSort.key === column.key;
-    return <div className="flex items-center gap-1.5">{index === 0 ? <button type="button" onClick={clearAllGridFilters} title="Limpar todos os filtros" aria-label="Limpar todos os filtros" className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${hasActiveGridFilters ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-400'}`}><ClearFiltersIcon /></button> : null}<GridColumnFilterHeader label={column.label} isOpen={activeFilterColumn === column.key} isActive={isActive} filterValue={filterDrafts[column.key]} placeholder={`FILTRAR ${column.label.toUpperCase()}`} align={column.align === 'right' ? 'right' : 'left'} sortDirection={gridSort.key === column.key ? gridSort.direction : null} onToggle={() => { setFilterDrafts((current) => ({ ...current, [column.key]: appliedFilters[column.key] })); setActiveFilterColumn((current) => current === column.key ? null : column.key); }} onSort={(direction) => { setGridSort({ key: column.key, direction }); setActiveFilterColumn(null); setCurrentPage(1); }} onFilterValueChange={(value) => setFilterDrafts((current) => ({ ...current, [column.key]: value.toUpperCase() }))} onApply={() => { setAppliedFilters((current) => ({ ...current, [column.key]: filterDrafts[column.key] })); setActiveFilterColumn(null); setCurrentPage(1); }} onClear={() => { setFilterDrafts((current) => ({ ...current, [column.key]: '' })); setAppliedFilters((current) => ({ ...current, [column.key]: '' })); setActiveFilterColumn(null); setCurrentPage(1); }} /></div>;
+    return <div className="flex items-center gap-1.5">{index === 0 ? <button type="button" onClick={clearAllGridFilters} title="Limpar todos os filtros" aria-label="Limpar todos os filtros" className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${hasActiveGridFilters ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-400'}`}><ClearFiltersIcon /></button> : null}<GridColumnFilterHeader label={column.label} filterType={column.key === 'dueDate' || column.key === 'paidAt' ? 'date-range' : 'text'} isOpen={activeFilterColumn === column.key} isActive={isActive} filterValue={filterDrafts[column.key]} placeholder={`FILTRAR ${column.label.toUpperCase()}`} align={column.align === 'right' ? 'right' : 'left'} sortDirection={gridSort.key === column.key ? gridSort.direction : null} onToggle={() => { setFilterDrafts((current) => ({ ...current, [column.key]: appliedFilters[column.key] })); setActiveFilterColumn((current) => current === column.key ? null : column.key); }} onSort={(direction) => { setGridSort({ key: column.key, direction }); setActiveFilterColumn(null); setCurrentPage(1); }} onFilterValueChange={(value) => setFilterDrafts((current) => ({ ...current, [column.key]: value.toUpperCase() }))} onApply={() => { setAppliedFilters((current) => ({ ...current, [column.key]: filterDrafts[column.key] })); setActiveFilterColumn(null); setCurrentPage(1); }} onClear={() => { setFilterDrafts((current) => ({ ...current, [column.key]: '' })); setAppliedFilters((current) => ({ ...current, [column.key]: '' })); setActiveFilterColumn(null); setCurrentPage(1); }} /></div>;
   }
 
   return (

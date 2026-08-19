@@ -52,6 +52,7 @@ import {
 } from "../../../common/cash-session-policy";
 import { SicoobPixService } from "../../sales/application/sicoob-pix.service";
 import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
+import { FinancialNotificationsService } from "../../financial-notifications/application/financial-notifications.service";
 
 const CASH_SESSION_PAYMENT_METHOD_METADATA = {
   CASH: {
@@ -154,6 +155,7 @@ export class CashSessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sicoobPixService: SicoobPixService,
+    private readonly financialNotifications: FinancialNotificationsService,
   ) {}
 
   private async withLoginCashSessionLock<T>(
@@ -1777,6 +1779,15 @@ export class CashSessionsService {
         });
       });
 
+      void this.financialNotifications.dispatch({
+        eventType: "CASH_MOVEMENT_CANCELED",
+        eventKey: `CASH_MOVEMENT:${movement.id}:CANCELED`,
+        title: "MOVIMENTO DE CAIXA CANCELADO",
+        message: `O MOVIMENTO ${movement.description || movement.id} FOI CANCELADO.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { movementId: movement.id, reason, requestedBy: canceledBy },
+      }).catch(() => undefined);
+
       return {
         ...this.mapCashSession(session),
         canceledMovementId: movement.id,
@@ -1868,6 +1879,15 @@ export class CashSessionsService {
         },
       });
     });
+
+    void this.financialNotifications.dispatch({
+      eventType: "CASH_MOVEMENT_CANCELED",
+      eventKey: `CASH_MOVEMENT:${movement.id}:CANCELED`,
+      title: "MOVIMENTO DE CAIXA CANCELADO",
+      message: `O MOVIMENTO ${movement.description || movement.id} FOI CANCELADO.`,
+      actionUrl: "/principal/notificacoes",
+      metadata: { movementId: movement.id, reason: payload.reason || payload.notes || null, requestedBy: canceledBy },
+    }).catch(() => undefined);
 
     return {
       ...this.mapCashSession(session),
@@ -2395,6 +2415,15 @@ export class CashSessionsService {
         reversedCount,
       };
     });
+
+    void this.financialNotifications.dispatch({
+      eventType: "RECEIVABLE_SETTLEMENT_REVERSED",
+      eventKey: `RECEIVABLE_SETTLEMENT_GROUP:${normalizedSettlementGroupId}:REVERSED`,
+      title: "RECEBIMENTO ESTORNADO",
+      message: `${result.reversedCount} BAIXA(S) DO CONTAS A RECEBER FORAM ESTORNADAS, NO TOTAL DE R$ ${result.reversedAmount.toFixed(2)}.`,
+      actionUrl: "/principal/notificacoes",
+      metadata: { settlementGroupId: normalizedSettlementGroupId, reversedCount: result.reversedCount, reversedAmount: result.reversedAmount, reason: payload.reason || payload.notes || null, requestedBy: canceledBy },
+    }).catch(() => undefined);
 
     return {
       settlementGroupId: normalizedSettlementGroupId,
@@ -3137,6 +3166,15 @@ export class CashSessionsService {
         nextStatus,
       };
     });
+
+    void this.financialNotifications.dispatch({
+      eventType: "RECEIVABLE_SETTLEMENT_REVERSED",
+      eventKey: `RECEIVABLE_SETTLEMENT:${settlement.id}:REVERSED`,
+      title: "RECEBIMENTO DE PARCELA ESTORNADO",
+      message: `A BAIXA DA PARCELA ${settlement.installmentId} NO VALOR DE R$ ${Number(settlement.receivedAmount || 0).toFixed(2)} FOI ESTORNADA.`,
+      actionUrl: "/principal/notificacoes",
+      metadata: { settlementId: settlement.id, installmentId: settlement.installmentId, restoredOpenAmount: restoreOpenAmount, reason: payload.reason || payload.notes || null, requestedBy: canceledBy },
+    }).catch(() => undefined);
 
     return {
       installmentId: settlement.installmentId,

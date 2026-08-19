@@ -1604,7 +1604,29 @@ export default function FinanceiroReceivableBatchesPage() {
     }
 
     if (column.key === 'createdAt') {
-      return renderBatchCreatedAtPeriodHeader(column);
+      const isActive = Boolean(createdAtPeriodFilter.start || createdAtPeriodFilter.end) || batchGridSort.key === column.key;
+      return (
+        <GridColumnFilterHeader
+          label={column.label}
+          filterType="date-range"
+          isOpen={activeBatchFilterColumn === column.key}
+          isActive={isActive}
+          filterValue={`${createdAtPeriodDraft.start}|${createdAtPeriodDraft.end}`}
+          align="right"
+          sortDirection={batchGridSort.key === column.key ? batchGridSort.direction : null}
+          onToggle={() => openBatchColumnFilter(column.key)}
+          onSort={(direction) => {
+            setBatchGridSort({ key: column.key, direction });
+            setActiveBatchFilterColumn(null);
+          }}
+          onFilterValueChange={(value) => {
+            const [start = '', end = ''] = value.split('|');
+            setCreatedAtPeriodDraft({ start, end });
+          }}
+          onApply={() => applyBatchColumnFilter(column.key)}
+          onClear={() => clearBatchColumnFilter(column.key)}
+        />
+      );
     }
 
     const isActive =

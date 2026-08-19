@@ -630,3 +630,15 @@ Decisão:
 
 Motivo: refletir no Financeiro a configuração administrativa da Central sem
 criar credencial ou cadastro paralelo e sem permitir bypass pelo frontend.
+
+## D039 - Notificações operacionais financeiras pertencem ao Financeiro
+
+Decisão:
+
+- a ação `NOTIFICAÇÕES` fica no grid `PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA` e lista somente usuários projetados do sistema;
+- preferências são isoladas por empresa, filial, origem, tenant, usuário e evento;
+- os eventos reais geram entregas idempotentes, e a origem persiste o aviso em sua caixa de notificações existente;
+- e-mail e Telegram usam a configuração efetiva sincronizada da empresa/filial; falha de mensageria não desfaz uma mutação financeira concluída;
+- simulações geram somente notificações e auditoria, sem modificar dados financeiros.
+
+Motivo: manter a regra operacional junto ao domínio que conhece os eventos e reutilizar a experiência de leitura já existente em cada sistema consumidor.

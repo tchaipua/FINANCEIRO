@@ -383,3 +383,28 @@ Registrar a evolucao dos padroes visuais e funcionais aprovados no projeto `Fina
   - `DOCUMENTACAO/AI/UI_PATTERNS.md`
   - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
 - Status: aprovado
+
+### UIP-0042
+
+- Data: 2026-08-19
+- Padrao: filtro mensal e por intervalo em colunas de data do grid
+- Contexto: foi solicitado consolidar no Financeiro o mesmo filtro por período já aprovado no Projeto Inicial, com a mesma experiência para as telas da Escola e do Petshop.
+- Alteracao: o componente `grid-column-filter-header.tsx` agora oferece combobox do mês atual, 12 meses anteriores e 6 posteriores, período personalizado e campos `De`/`Até`; os grids com colunas de data foram migrados para esse contrato, incluindo as telas com filtros de período legados.
+- Componentes/Telas:
+  - `frontend/src/app/components/grid-column-filter-header.tsx`
+  - `frontend/src/app/bancos/page.tsx`
+  - `frontend/src/app/bancos/ddas-abertos/page.tsx`
+  - `frontend/src/app/bancos/extrato/page.tsx`
+  - `frontend/src/app/contas-a-pagar/fornecedores/page.tsx`
+  - `frontend/src/app/estoque/grupos/page.tsx`
+  - `frontend/src/app/recebiveis/creditos/page.tsx`
+  - `frontend/src/app/recebiveis/historico-baixas/page.tsx`
+  - `frontend/src/app/recebiveis/historico-cliente/page.tsx`
+  - `frontend/src/app/recebiveis/lotes/page.tsx`
+  - `frontend/src/app/recebiveis/parcelas/page.tsx`
+  - `frontend/src/app/recebiveis/recebimentos-por-cliente/page.tsx`
+  - `frontend/src/app/recebiveis/retornos/page.tsx`
+  - `frontend/src/app/vendas/periodo/page.tsx`
+  - `DOCUMENTACAO/AI/UI_PATTERNS.md`
+  - `DOCUMENTACAO/AI/UI_PATTERN_CHANGELOG.md`
+- Status: aprovado

@@ -675,3 +675,11 @@ Pacotes `.msreport.json` não criam uma tabela paralela. A importação validada
 - `finance_access_audit_events`: trilha append-only de sincronizações e alterações de acesso.
 
 Pessoa, cliente e funcionário continuam pertencendo ao sistema de origem. O cadastro operacional do usuário do sistema é iniciado no Financeiro, que persiste somente a referência estável e seus perfis por empresa/filial. A origem mantém uma projeção técnica local para login e regras próprias, a identidade/credencial é vinculada à Central e a senha nunca é armazenada no Financeiro.
+
+## Notificações financeiras
+
+- `financial_notification_preferences`: preferência por `companyId`, `branchCode`, origem, tenant, usuário projetado e evento, com canais e soft delete;
+- `financial_notification_deliveries`: outbox idempotente por destinatário e `eventKey`, com situação separada de sistema, e-mail e Telegram;
+- `financial_notification_audit_events`: trilha append-only das configurações e simulações.
+
+Clientes e pessoas funcionais nunca são destinatários desta matriz; somente `finance_access_subjects` ativos e atribuídos à filial podem ser configurados.

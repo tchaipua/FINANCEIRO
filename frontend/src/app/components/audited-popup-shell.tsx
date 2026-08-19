@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 
 type AuditedPopupShellProps = {
   isOpen: boolean;
@@ -26,6 +27,7 @@ type AuditedPopupShellProps = {
   showScreenIdInHeader?: boolean;
   screenIdHeaderClassName?: string;
   footerScreenIdCompact?: boolean;
+  screenIdRightAligned?: boolean;
 };
 
 function getInitials(value?: string | null) {
@@ -33,6 +35,26 @@ function getInitials(value?: string | null) {
     .trim()
     .slice(0, 3)
     .toUpperCase();
+}
+
+const CENTRAL_API_BASE_URL = String(
+  process.env.NEXT_PUBLIC_MSINFOR_CENTRAL_API_URL || 'http://localhost:3201/api/v1',
+).replace(/\/+$/, '');
+
+function normalizePopupLogoUrl(value?: string | null) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (/^(?:data:|https?:\/\/|blob:)/i.test(normalized)) return normalized;
+
+  const key = normalized.replace(/^\/+/, '');
+  if (/^logos\/filiais\//i.test(key)) {
+    return `${CENTRAL_API_BASE_URL}/public/branch-logo?key=${encodeURIComponent(key)}`;
+  }
+  if (/^logos\/empresas\//i.test(key)) {
+    return `${CENTRAL_API_BASE_URL}/public/company-logo?key=${encodeURIComponent(key)}`;
+  }
+
+  return withFinanceBasePath(normalized.startsWith('/') ? normalized : `/${normalized}`);
 }
 
 export default function AuditedPopupShell({
@@ -57,12 +79,14 @@ export default function AuditedPopupShell({
   showScreenIdInHeader = false,
   screenIdHeaderClassName = 'max-w-[260px] truncate',
   footerScreenIdCompact = false,
+  screenIdRightAligned = false,
 }: AuditedPopupShellProps) {
   if (!isOpen) {
     return null;
   }
   const isSubfolderCreationWarning = description?.startsWith('A nova subpasta será criada dentro de:');
   const usesBlueHeader = headerTheme === 'blue';
+  const resolvedLogoUrl = normalizePopupLogoUrl(logoUrl);
 
   return (
     <div className={FINANCE_GRID_PAGE_LAYOUT.modalOverlay} data-audited-popup-shell>
@@ -70,9 +94,9 @@ export default function AuditedPopupShell({
         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${usesBlueHeader ? 'border-blue-700 bg-blue-700' : 'border-slate-100 bg-slate-50'}`}>
           <div className="flex items-start gap-3">
             <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-white shadow-sm ${usesBlueHeader ? 'border-white/30' : 'border-slate-200'}`}>
-              {logoUrl ? (
+              {resolvedLogoUrl ? (
                 <img
-                  src={logoUrl}
+                  src={resolvedLogoUrl}
                   alt={brandingName || 'Empresa'}
                   className="h-full w-full object-contain p-1.5"
                 />
@@ -120,6 +144,7 @@ export default function AuditedPopupShell({
               screenId={screenId}
               className="justify-end"
               compact={footerScreenIdCompact}
+              screenIdRightAligned={screenIdRightAligned}
               originText={originText}
               auditText={auditText}
               sqlText={sqlText}

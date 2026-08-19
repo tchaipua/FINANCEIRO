@@ -4,6 +4,7 @@ import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/tru
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuditedPopupShell from '@/app/components/audited-popup-shell';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import { getJson } from '@/app/lib/api';
@@ -111,16 +112,21 @@ type ProductFilterItem = {
 
 type MovementTypeFilter = 'ALL' | 'ENTRY' | 'EXIT';
 type SaleOriginDetailTab = 'header' | 'products' | 'payments';
+type MovementGridSortDirection = 'ASC' | 'DESC';
+type MovementGridSort = {
+  key: MovementGridColumnKey | null;
+  direction: MovementGridSortDirection;
+};
 type MovementGridColumnKey =
   | 'occurredAt'
   | 'movementType'
   | 'product'
   | 'quantity'
-  | 'previousStock'
   | 'resultingStock'
   | 'source'
   | 'createdBy'
   | 'notes';
+type MovementGridFilters = Record<MovementGridColumnKey, string>;
 
 const SALE_ORIGIN_DETAIL_TABS: Array<{ key: SaleOriginDetailTab; label: string }> = [
   { key: 'header', label: 'Cabeçalho' },
@@ -148,8 +154,7 @@ METRICAS / CAMPOS EXIBIDOS:
 - tipo de movimento
 - produto
 - quantidade movimentada
-- saldo anterior
-- saldo resultante
+- saldo após movimento
 - documento de origem
 - observacao
 
@@ -171,7 +176,6 @@ const sqlText = `SELECT
   SM.movementType,
   PR.name AS productName,
   SM.quantity,
-  SM.previousStock,
   SM.resultingStock,
   PII.invoiceNumber
 FROM stock_movements SM
@@ -190,7 +194,24 @@ type StockMovementAuditParams = {
   selectedProductId?: string | null;
   selectedProductName?: string | null;
   movementType: MovementTypeFilter;
+  columnFilters: MovementGridFilters;
   displayedRowsCount: number;
+};
+
+const EMPTY_MOVEMENT_GRID_FILTERS: MovementGridFilters = {
+  occurredAt: '',
+  movementType: '',
+  product: '',
+  quantity: '',
+  resultingStock: '',
+  source: '',
+  createdBy: '',
+  notes: '',
+};
+
+const DEFAULT_MOVEMENT_GRID_SORT: MovementGridSort = {
+  key: null,
+  direction: 'ASC',
 };
 
 function buildStockMovementAuditSql(params: StockMovementAuditParams) {
@@ -204,6 +225,7 @@ function buildStockMovementAuditSql(params: StockMovementAuditParams) {
 -- :search = ${toSqlLiteral(search)}
 -- :productId = ${toSqlLiteral(params.selectedProductId || '')}
 -- :movementType = ${toSqlLiteral(movementType)}
+-- :gridColumnFilters = ${toSqlLiteral(describeMovementGridFilters(params.columnFilters))}
 
 SELECT
   SM.id,
@@ -211,7 +233,6 @@ SELECT
   SM.movementType,
   PR.name AS productName,
   SM.quantity,
-  SM.previousStock,
   SM.resultingStock,
   PII.invoiceNumber
 FROM stock_movements SM
@@ -261,6 +282,7 @@ FILTROS APLICADOS AGORA:
 - busca digitada (:search): ${formatAuditValue(search)}
 - produto selecionado (:productId): ${formatAuditValue(params.selectedProductName || params.selectedProductId)}
 - tipo de movimento (:movementType): ${movementType}
+- filtros das colunas do grid: ${formatAuditValue(describeMovementGridFilters(params.columnFilters))}
 - registros exibidos apos os filtros: ${params.displayedRowsCount}
 - ordenacao atual: movimentacao DESC, criacao DESC
 
@@ -292,14 +314,8 @@ const MOVEMENT_GRID_COLUMNS: GridColumnDefinition<StockMovementItem, MovementGri
     align: 'right',
   },
   {
-    key: 'previousStock',
-    label: 'Saldo anterior',
-    getValue: (item) => formatQuantity(item.previousStock),
-    align: 'right',
-  },
-  {
     key: 'resultingStock',
-    label: 'Saldo final',
+    label: 'Saldo',
     getValue: (item) => formatQuantity(item.resultingStock),
     align: 'right',
   },
@@ -321,7 +337,6 @@ const DEFAULT_MOVEMENT_GRID_CONFIG = {
     'product',
     'quantity',
     'movementType',
-    'previousStock',
     'resultingStock',
     'source',
     'notes',
@@ -351,6 +366,105 @@ function formatQuantity(value?: number | null) {
     maximumFractionDigits: 2,
   });
 }
+
+function normalizeGridFilterValue(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function getMovementGridFilterValue(
+  movement: StockMovementItem,
+  columnKey: MovementGridColumnKey,
+) {
+  switch (columnKey) {
+    case 'occurredAt':
+      return movement.occurredAt;
+    case 'movementType':
+      return movement.movementTypeLabel;
+    case 'product':
+      return [movement.productName, movement.productInternalCode, movement.productBarcode]
+        .filter(Boolean)
+        .join(' ');
+    case 'quantity':
+      return String(movement.quantity);
+    case 'resultingStock':
+      return String(movement.resultingStock);
+    case 'source':
+      return movement.sourceTypeCode || movement.sourceType || '';
+    case 'createdBy':
+      return movement.createdBy || '';
+    case 'notes':
+      return movement.notes || '';
+    default:
+      return '';
+  }
+}
+
+function matchesMovementGridFilters(
+  movement: StockMovementItem,
+  filters: MovementGridFilters,
+) {
+  return MOVEMENT_GRID_COLUMNS.every((column) => {
+    const filterValue = filters[column.key];
+    if (!filterValue) return true;
+
+    if (column.key === 'occurredAt') {
+      return matchesGridDateRange(movement.occurredAt, filterValue);
+    }
+
+    if (column.key === 'source') {
+      return normalizeGridFilterValue(getMovementGridFilterValue(movement, column.key)) ===
+        normalizeGridFilterValue(filterValue);
+    }
+
+    return normalizeGridFilterValue(getMovementGridFilterValue(movement, column.key)).includes(
+      normalizeGridFilterValue(filterValue),
+    );
+  });
+}
+
+function describeMovementGridFilters(filters: MovementGridFilters) {
+  return (
+    MOVEMENT_GRID_COLUMNS.map((column) => {
+      const value = filters[column.key];
+      return value ? `${column.label}=${value}` : '';
+    })
+      .filter(Boolean)
+      .join(' | ') || 'NENHUM'
+  );
+}
+
+function compareMovementGridValues(
+  left: StockMovementItem,
+  right: StockMovementItem,
+  columnKey: MovementGridColumnKey,
+) {
+  if (columnKey === 'occurredAt') {
+    return (
+      new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime()
+    );
+  }
+
+  if (['quantity', 'resultingStock'].includes(columnKey)) {
+    return (
+      Number(getMovementGridFilterValue(left, columnKey)) -
+      Number(getMovementGridFilterValue(right, columnKey))
+    );
+  }
+
+  return normalizeGridFilterValue(getMovementGridFilterValue(left, columnKey)).localeCompare(
+    normalizeGridFilterValue(getMovementGridFilterValue(right, columnKey)),
+    'pt-BR',
+  );
+}
+
+type MovementOriginOption = {
+  value: string;
+  label: string;
+};
 
 function readStoredGridConfig(storageKey: string) {
   if (typeof window === 'undefined') return DEFAULT_MOVEMENT_GRID_CONFIG;
@@ -938,6 +1052,14 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   const [selectedProduct, setSelectedProduct] = useState<ProductFilterItem | null>(null);
   const [initialProductFilterReady, setInitialProductFilterReady] = useState(false);
   const [movementTypeFilter, setMovementTypeFilter] = useState<MovementTypeFilter>('ALL');
+  const [columnFilters, setColumnFilters] = useState<MovementGridFilters>({
+    ...EMPTY_MOVEMENT_GRID_FILTERS,
+  });
+  const [columnFilterDrafts, setColumnFilterDrafts] = useState<MovementGridFilters>({
+    ...EMPTY_MOVEMENT_GRID_FILTERS,
+  });
+  const [activeFilterColumn, setActiveFilterColumn] = useState<MovementGridColumnKey | null>(null);
+  const [gridSort, setGridSort] = useState<MovementGridSort>({ ...DEFAULT_MOVEMENT_GRID_SORT });
   const [selectedMovementId, setSelectedMovementId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -1113,7 +1235,15 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   useEffect(() => {
     setCurrentPage(1);
     setSelectedMovementId(null);
-  }, [appliedSearch, movementTypeFilter, selectedProduct?.id]);
+  }, [
+    appliedSearch,
+    columnFilters,
+    gridSort.direction,
+    gridSort.key,
+    movementTypeFilter,
+    pageSize,
+    selectedProduct?.id,
+  ]);
 
   const activeColumns = useMemo(
     () =>
@@ -1128,6 +1258,144 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
         .filter((column) => !hiddenColumns.includes(column.key)),
     [columnOrder, hiddenColumns],
   );
+  const movementOriginOptions = useMemo<MovementOriginOption[]>(() => {
+    const options = new Map<string, string>();
+
+    movements.forEach((movement) => {
+      const value = String(movement.sourceTypeCode || movement.sourceType || '').trim();
+      if (!value) return;
+      options.set(value, String(movement.sourceType || value).trim() || value);
+    });
+
+    return Array.from(options.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => left.label.localeCompare(right.label, 'pt-BR'));
+  }, [movements]);
+  const hasGridFilters = useMemo(
+    () => Object.values(columnFilters).some(Boolean) || Boolean(gridSort.key),
+    [columnFilters, gridSort.key],
+  );
+  const displayedMovements = useMemo(() => {
+    const filteredMovements = movements.filter((movement) =>
+      matchesMovementGridFilters(movement, columnFilters),
+    );
+
+    if (!gridSort.key) return filteredMovements;
+
+    const directionMultiplier = gridSort.direction === 'DESC' ? -1 : 1;
+    return [...filteredMovements].sort(
+      (left, right) =>
+        compareMovementGridValues(left, right, gridSort.key as MovementGridColumnKey) *
+        directionMultiplier,
+    );
+  }, [columnFilters, gridSort.direction, gridSort.key, movements]);
+
+  function clearAllGridFilters() {
+    setColumnFilters({ ...EMPTY_MOVEMENT_GRID_FILTERS });
+    setColumnFilterDrafts({ ...EMPTY_MOVEMENT_GRID_FILTERS });
+    setGridSort({ ...DEFAULT_MOVEMENT_GRID_SORT });
+    setActiveFilterColumn(null);
+  }
+
+  function openColumnFilter(columnKey: MovementGridColumnKey) {
+    setColumnFilterDrafts((current) => ({
+      ...current,
+      [columnKey]: columnFilters[columnKey],
+    }));
+    setActiveFilterColumn((current) => (current === columnKey ? null : columnKey));
+  }
+
+  function applyColumnFilter(columnKey: MovementGridColumnKey) {
+    setColumnFilters((current) => ({
+      ...current,
+      [columnKey]: columnFilterDrafts[columnKey].trim(),
+    }));
+    setActiveFilterColumn(null);
+  }
+
+  function clearColumnFilter(columnKey: MovementGridColumnKey) {
+    setColumnFilters((current) => ({
+      ...current,
+      [columnKey]: '',
+    }));
+    setColumnFilterDrafts((current) => ({
+      ...current,
+      [columnKey]: '',
+    }));
+    setActiveFilterColumn(null);
+  }
+
+  function renderColumnHeader(column: GridColumnDefinition<StockMovementItem, MovementGridColumnKey>) {
+    const isActive = Boolean(columnFilters[column.key]) || gridSort.key === column.key;
+
+    return (
+      <div className="flex items-center gap-1.5">
+        {column.key === activeColumns[0]?.key ? (
+          <button
+            type="button"
+            onClick={clearAllGridFilters}
+            title="Limpar filtros das colunas"
+            aria-label="Limpar filtros das colunas"
+            className={`inline-flex h-6 w-6 items-center justify-center rounded-full border transition ${
+              hasGridFilters
+                ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600'
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M7 12h10M10 18h4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 15l3 3m0-3-3 3" />
+            </svg>
+          </button>
+        ) : null}
+        <GridColumnFilterHeader
+          label={column.label}
+          filterType={column.key === 'occurredAt' ? 'date-range' : 'text'}
+          filterControl={
+            column.key === 'source' ? (
+              <select
+                value={columnFilterDrafts.source}
+                onChange={(event) =>
+                  setColumnFilterDrafts((current) => ({
+                    ...current,
+                    source: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase text-slate-900 outline-none transition focus:border-blue-500"
+                aria-label="Filtrar origem"
+              >
+                <option value="">TODAS AS ORIGENS</option>
+                {movementOriginOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : undefined
+          }
+          isOpen={activeFilterColumn === column.key}
+          isActive={isActive}
+          filterValue={columnFilterDrafts[column.key]}
+          placeholder={`DIGITE ${column.label.toUpperCase()}`}
+          align={column.align === 'right' ? 'right' : 'left'}
+          sortDirection={gridSort.key === column.key ? gridSort.direction : null}
+          onToggle={() => openColumnFilter(column.key)}
+          onSort={(direction) => {
+            setGridSort({ key: column.key, direction });
+            setActiveFilterColumn(null);
+          }}
+          onFilterValueChange={(value) =>
+            setColumnFilterDrafts((current) => ({
+              ...current,
+              [column.key]: value.toUpperCase(),
+            }))
+          }
+          onApply={() => applyColumnFilter(column.key)}
+          onClear={() => clearColumnFilter(column.key)}
+        />
+      </div>
+    );
+  }
   const stockMovementAuditContext = useMemo(() => {
     const auditParams: StockMovementAuditParams = {
       sourceSystem: runtimeContext.sourceSystem,
@@ -1137,7 +1405,8 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       selectedProductId: selectedProduct?.id,
       selectedProductName: selectedProduct?.name,
       movementType: movementTypeFilter,
-      displayedRowsCount: movements.length,
+      columnFilters,
+      displayedRowsCount: displayedMovements.length,
     };
 
     return {
@@ -1146,8 +1415,9 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
     };
   }, [
     appliedSearch,
+    columnFilters,
+    displayedMovements.length,
     movementTypeFilter,
-    movements.length,
     runtimeContext.sourceBranchCode,
     runtimeContext.sourceSystem,
     runtimeContext.sourceTenantId,
@@ -1158,12 +1428,12 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
   const showClearSearchButton = Boolean(
     searchInput.trim() || appliedSearch.trim() || selectedProduct,
   );
-  const totalPages = Math.max(1, Math.ceil(movements.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(displayedMovements.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedMovements = useMemo(() => {
     const start = (safeCurrentPage - 1) * pageSize;
-    return movements.slice(start, start + pageSize);
-  }, [movements, pageSize, safeCurrentPage]);
+    return displayedMovements.slice(start, start + pageSize);
+  }, [displayedMovements, pageSize, safeCurrentPage]);
 
   useEffect(() => {
     if (currentPage !== safeCurrentPage) {
@@ -1246,13 +1516,13 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
                       column.align === 'right' ? 'text-right' : 'text-left'
                     }`}
                   >
-                    {column.label}
+                    {renderColumnHeader(column)}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {!isLoading && !movements.length ? (
+              {!isLoading && !displayedMovements.length ? (
                 <tr>
                   <td
                     colSpan={activeColumns.length || 1}
@@ -1438,7 +1708,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
             </div>
 
             <div className="inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm">
-              Total registros: <span className="ml-1 text-blue-700">{movements.length}</span>
+              Total registros: <span className="ml-1 text-blue-700">{displayedMovements.length}</span>
             </div>
           </div>
 
@@ -1567,7 +1837,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
       <GridExportModal
         isOpen={isExportModalOpen}
         title="Exportar histórico de estoque"
-        description={`A exportação respeita a busca atual e inclui ${movements.length} registro(s).`}
+        description={`A exportação respeita os filtros atuais e inclui ${displayedMovements.length} registro(s).`}
         format={exportFormat}
         onFormatChange={setExportFormat}
         columns={MOVEMENT_GRID_COLUMNS.map((column) => ({
@@ -1579,7 +1849,7 @@ export default function FinanceiroEstoqueHistoricoMovimentacaoPage() {
         onClose={() => setIsExportModalOpen(false)}
         onExport={async (config) => {
           await exportGridRows({
-            rows: movements,
+            rows: displayedMovements,
             columns: (config.orderedColumns || []).length
               ? config.orderedColumns
                   .map((key) =>

@@ -3,7 +3,7 @@
 import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -640,7 +640,9 @@ export default function SalePeriodPage() {
       return (Object.keys(gridFilters) as SalePeriodColumnKey[]).every((key) => {
         const filter = gridFilters[key];
         if (!filter) return true;
-        return includesFilterText(getSaleColumnValue(sale, key), filter);
+        return key === 'confirmedAt'
+          ? matchesGridDateRange(getSaleColumnValue(sale, key), filter)
+          : includesFilterText(getSaleColumnValue(sale, key), filter);
       });
     });
 
@@ -917,6 +919,7 @@ export default function SalePeriodPage() {
                   <th key={column.key} className={`px-4 py-3 ${column.align === 'right' ? 'text-right' : ''}`}>
                     <GridColumnFilterHeader
                       label={column.label}
+                      filterType={column.key === 'confirmedAt' ? 'date-range' : 'text'}
                       isOpen={activeFilterColumn === column.key}
                       isActive={Boolean(gridFilters[column.key])}
                       filterValue={filterDrafts[column.key]}

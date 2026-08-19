@@ -45,6 +45,7 @@ import {
 } from "../../../common/party-registry";
 import { assertInactivationConfirmation } from "../../../common/inactivation-confirmation";
 import { ChangePayableSupplierStatusDto } from "./dto/payables.dto";
+import { FinancialNotificationsService } from "../../financial-notifications/application/financial-notifications.service";
 
 type ResolvedCompany = {
   id: string;
@@ -85,7 +86,10 @@ type ResolvedProductStockOptions = {
 
 @Injectable()
 export class PayablesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly financialNotifications: FinancialNotificationsService,
+  ) {}
 
   private normalizeOptionalMoney(value?: number | null) {
     if (value === undefined || value === null) {
@@ -1763,6 +1767,19 @@ export class PayablesService {
     const existingById = new Map(
       existingInstallments.map((installment) => [installment.id, installment]),
     );
+    const notificationOperationKey = Date.now();
+    const changedAmounts = normalizedInstallments.filter((item) => {
+      const existing = item.id ? existingById.get(item.id) : null;
+      return existing && roundMoney(Number(existing.amount || 0)) !== item.amount;
+    });
+    const changedDueDates = normalizedInstallments.filter((item) => {
+      const existing = item.id ? existingById.get(item.id) : null;
+      return existing && existing.dueDate.getTime() !== item.dueDate.getTime();
+    });
+    const reversedSettlements = normalizedInstallments.filter((item) => {
+      const existing = item.id ? existingById.get(item.id) : null;
+      return existing && normalizeText(existing.status) === "PAID" && item.status !== "PAID";
+    });
 
     for (const installment of normalizedInstallments) {
       if (installment.id && !existingById.has(installment.id)) {
@@ -1870,6 +1887,51 @@ export class PayablesService {
       });
     });
 
+    const activeIds = new Set(normalizedInstallments.map((item) => item.id).filter(Boolean));
+    const removedInstallments = existingInstallments.filter((item) => !activeIds.has(item.id));
+    for (const installment of changedAmounts) {
+      const previous = existingById.get(installment.id!);
+      void this.financialNotifications.dispatch({
+        eventType: "PAYABLE_INSTALLMENT_AMOUNT_CHANGED",
+        eventKey: `PAYABLE_INSTALLMENT:${installment.id}:AMOUNT:${notificationOperationKey}`,
+        title: "VALOR DE PARCELA DO CONTAS A PAGAR ALTERADO",
+        message: `A ${installment.installmentLabel} FOI ALTERADA DE R$ ${roundMoney(Number(previous?.amount || 0)).toFixed(2)} PARA R$ ${installment.amount.toFixed(2)}.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, previousAmount: previous?.amount, nextAmount: installment.amount, requestedBy: payload.requestedBy || null },
+      }).catch(() => undefined);
+    }
+    for (const installment of changedDueDates) {
+      const previous = existingById.get(installment.id!);
+      void this.financialNotifications.dispatch({
+        eventType: "PAYABLE_INSTALLMENT_DUE_DATE_CHANGED",
+        eventKey: `PAYABLE_INSTALLMENT:${installment.id}:DUE_DATE:${notificationOperationKey}`,
+        title: "VENCIMENTO DE PARCELA DO CONTAS A PAGAR ALTERADO",
+        message: `O VENCIMENTO DA ${installment.installmentLabel} FOI ALTERADO.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, previousDueDate: previous?.dueDate.toISOString(), nextDueDate: installment.dueDate.toISOString(), requestedBy: payload.requestedBy || null },
+      }).catch(() => undefined);
+    }
+    for (const installment of removedInstallments) {
+      void this.financialNotifications.dispatch({
+        eventType: "PAYABLE_INSTALLMENT_CANCELED",
+        eventKey: `PAYABLE_INSTALLMENT:${installment.id}:CANCELED:${notificationOperationKey}`,
+        title: "PARCELA DO CONTAS A PAGAR CANCELADA",
+        message: `A ${installment.installmentLabel} FOI CANCELADA DURANTE A ALTERAÇÃO DA NOTA.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, requestedBy: payload.requestedBy || null },
+      }).catch(() => undefined);
+    }
+    for (const installment of reversedSettlements) {
+      void this.financialNotifications.dispatch({
+        eventType: "PAYABLE_SETTLEMENT_REVERSED",
+        eventKey: `PAYABLE_SETTLEMENT:${installment.id}:REVERSED:${notificationOperationKey}`,
+        title: "PAGAMENTO DE PARCELA ESTORNADO",
+        message: `O PAGAMENTO DA ${installment.installmentLabel} FOI ESTORNADO.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, requestedBy: payload.requestedBy || null },
+      }).catch(() => undefined);
+    }
+
     return {
       ...this.mapImportDetail(updateResult),
       message: "Parcelas da nota atualizadas com sucesso.",
@@ -1909,6 +1971,15 @@ export class PayablesService {
         updatedBy: payload.requestedBy || null,
       },
     });
+
+    void this.financialNotifications.dispatch({
+      eventType: "PAYABLE_MOVEMENT_CANCELED",
+      eventKey: `PAYABLE_MOVEMENT:${invoiceImport.id}:CANCELED`,
+      title: "MOVIMENTO DO CONTAS A PAGAR CANCELADO",
+      message: `A NOTA ${invoiceImport.invoiceNumber || invoiceImport.id} FOI CANCELADA. MOTIVO: ${cancellationReason}.`,
+      actionUrl: "/principal/notificacoes",
+      metadata: { invoiceImportId: invoiceImport.id, cancellationReason, requestedBy: payload.requestedBy || null },
+    }).catch(() => undefined);
 
     return {
       id: invoiceImport.id,

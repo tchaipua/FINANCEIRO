@@ -23,6 +23,7 @@ import {
   ListProductsDto,
   ListStockMovementsDto,
   SaveProductDto,
+  UpdateProductClassificationDto,
 } from "./dto/products.dto";
 
 type NormalizedProductPayload = {
@@ -939,10 +940,14 @@ export class ProductsService {
     const normalizedName = normalizeText(query.name);
     const normalizedInternalCode = normalizeText(query.internalCode);
     const normalizedStatus = normalizeText(query.status);
+    const normalizedGroupId = String(query.groupId || '').trim();
+    const normalizedSubgroupId = String(query.subgroupId || '').trim();
 
     const products = await this.prisma.product.findMany({
       where: {
         companyId: company.id,
+        ...(normalizedGroupId ? { groupId: normalizedGroupId } : {}),
+        ...(normalizedSubgroupId ? { subgroupId: normalizedSubgroupId } : {}),
         ...(normalizedStatus && normalizedStatus !== "ALL"
           ? { status: normalizedStatus }
           : {}),
@@ -1441,6 +1446,41 @@ export class ProductsService {
       normalizedPayload,
       payload.requestedBy,
     );
+
+    return this.mapProduct(updatedProduct, branchConfig);
+  }
+
+  async updateClassification(
+    productId: string,
+    payload: UpdateProductClassificationDto,
+  ) {
+    const { product } = await this.loadScopedProduct(
+      productId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const branchConfig = await this.loadCurrentBranchConfig(product.companyId);
+    const groupId = normalizeIdentifier(payload.groupId);
+    const subgroupId = normalizeIdentifier(payload.subgroupId);
+
+    await this.validateProductClassification(product.companyId, branchConfig, {
+      groupId,
+      subgroupId,
+    });
+
+    const updatedProduct = await this.prisma.product.update({
+      where: { id: product.id },
+      data: {
+        groupId,
+        subgroupId,
+        updatedBy: payload.requestedBy || null,
+      },
+      include: {
+        company: true,
+        group: true,
+        subgroup: true,
+      },
+    });
 
     return this.mapProduct(updatedProduct, branchConfig);
   }

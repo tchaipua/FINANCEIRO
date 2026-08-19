@@ -45,6 +45,7 @@ import {
   upsertPartyIdentity,
 } from "../../../common/party-registry";
 import { decryptStoredBankSecret } from "../../../common/secret-crypto.utils";
+import { FinancialNotificationsService } from "../../financial-notifications/application/financial-notifications.service";
 
 type BranchStockParameterMode = "NO" | "YES" | "BY_PRODUCT";
 
@@ -134,6 +135,7 @@ export class SalesService {
     private readonly sicoobPixService: SicoobPixService,
     private readonly nfeService: NfeService,
     private readonly nfceService: NfceService,
+    private readonly financialNotifications: FinancialNotificationsService,
   ) {}
 
   private async issueFiscalDocumentAfterConfirmation(
@@ -3035,6 +3037,7 @@ export class SalesService {
         { receivedAmount: number; drawerAmount: number }
       >();
       let cancelerDrawerOutAmount = 0;
+      const canceledReceivableInstallmentIds: string[] = [];
       const addCashSessionAdjustment = (
         cashSessionId: string | null | undefined,
         receivedAmount: number,
@@ -3303,6 +3306,7 @@ export class SalesService {
               updatedBy: canceledBy,
             },
           });
+          canceledReceivableInstallmentIds.push(installment.id);
         }
 
         await tx.receivableTitle.update({
@@ -3424,11 +3428,35 @@ export class SalesService {
         canceledCashMovementCount: saleCashMovements.length,
         adjustedCashSessionCount: cashSessionAdjustments.size,
         cancelerCashOutAmount: cancelerDrawerOutAmount,
+        canceledReceivableInstallmentIds,
       };
     });
 
+    void this.financialNotifications.dispatch({
+      eventType: "RECEIVABLE_MOVEMENT_CANCELED",
+      eventKey: `RECEIVABLE_MOVEMENT:SALE:${sale.id}:CANCELED`,
+      title: "MOVIMENTO DO CONTAS A RECEBER CANCELADO",
+      message: `A VENDA ${sale.saleNumber} E SEU MOVIMENTO FINANCEIRO FORAM CANCELADOS. MOTIVO: ${cancellationNote}.`,
+      actionUrl: "/principal/notificacoes",
+      metadata: { saleId: sale.id, receivableTitleId: sale.receivableTitleId, cancellationNote, requestedBy: canceledBy },
+    }).catch(() => undefined);
+    for (const installmentId of result.canceledReceivableInstallmentIds) {
+      void this.financialNotifications.dispatch({
+        eventType: "RECEIVABLE_INSTALLMENT_CANCELED",
+        eventKey: `RECEIVABLE_INSTALLMENT:${installmentId}:CANCELED`,
+        title: "PARCELA DO CONTAS A RECEBER CANCELADA",
+        message: `UMA PARCELA DA VENDA ${sale.saleNumber} FOI CANCELADA COM O MOVIMENTO FINANCEIRO.`,
+        actionUrl: "/principal/notificacoes",
+        metadata: { saleId: sale.id, installmentId, cancellationNote, requestedBy: canceledBy },
+      }).catch(() => undefined);
+    }
+
     return {
-      ...result,
+      saleId: result.saleId,
+      stockMovementCount: result.stockMovementCount,
+      canceledCashMovementCount: result.canceledCashMovementCount,
+      adjustedCashSessionCount: result.adjustedCashSessionCount,
+      cancelerCashOutAmount: result.cancelerCashOutAmount,
       message: "Venda cancelada com sucesso.",
     };
   }

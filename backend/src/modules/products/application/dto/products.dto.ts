@@ -65,6 +65,14 @@ export class ListProductsDto {
 
   @IsOptional()
   @IsString()
+  groupId?: string;
+
+  @IsOptional()
+  @IsString()
+  subgroupId?: string;
+
+  @IsOptional()
+  @IsString()
   cashierUserId?: string;
 
   @IsOptional()
@@ -180,6 +188,26 @@ export class ChangeProductStatusDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class UpdateProductClassificationDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsOptional()
+  @IsString()
+  groupId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  subgroupId?: string | null;
 }
 
 export class SaveProductDto {

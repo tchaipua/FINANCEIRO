@@ -1,16 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
+import GridStatusFilter from '@/app/components/grid-status-filter';
+import AuditedPopupShell from '@/app/components/audited-popup-shell';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
+import GroupProductsPopup from '@/app/estoque/grupos/group-products-popup';
 import { getJson, requestJson } from '@/app/lib/api';
 import { formatDateLabel, getFriendlyRequestErrorMessage } from '@/app/lib/formatters';
 import { buildDefaultExportColumns, exportGridRows, type GridColumnDefinition, type GridExportFormat } from '@/app/lib/grid-export-utils';
 import { FINANCE_GRID_PAGE_LAYOUT } from '@/app/lib/grid-page-standards';
+import { withFinanceBasePath } from '@/app/lib/public-path';
 import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { isTrustedMessageEvent, postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 type ClassificationRow = {
   id: string;
@@ -42,6 +47,7 @@ type ClassificationFilters = Record<ClassificationColumnKey, string>;
 type ClassificationSort = { key: ClassificationColumnKey | null; direction: 'ASC' | 'DESC' };
 
 const SCREEN_ID = 'PRINCIPAL_FINANCEIRO_ESTOQUE_GRUPOS_SUBGRUPOS';
+const SUBGROUPS_POPUP_SCREEN_ID = 'POPUP_FINANCEIRO_ESTOQUE_GRUPO_SUBGRUPOS_CONSULTA';
 const ORIGIN_TEXT = 'Origem: Sistema Financeiro - caminho físico: C:\\Sistemas\\IA\\Financeiro\\frontend\\src\\app\\estoque\\grupos\\page.tsx';
 const EMPTY_FILTERS: ClassificationFilters = {
   type: '', name: '', groupName: '', code: '', subgroupCount: '', productCount: '', updatedAt: '',
@@ -77,6 +83,236 @@ function emptyFormFor(type: 'GROUP' | 'SUBGROUP'): ClassificationForm {
   return { ...EMPTY_FORM, type };
 }
 
+function postEmbeddedScreenContext(screenId: string) {
+  const message = { type: 'MSINFOR_SCREEN_CONTEXT', screenId };
+  postMessageToTrustedParent(message);
+}
+
+function GroupSubgroupsPopup({
+  group,
+  rows,
+  brandingName,
+  logoUrl,
+  onClose,
+  onEdit,
+  onOpenProducts,
+}: {
+  group: ClassificationRow | null;
+  rows: ClassificationRow[];
+  brandingName: string | null;
+  logoUrl: string | null;
+  onClose: () => void;
+  onEdit: (row: ClassificationRow) => void;
+  onOpenProducts: (row: ClassificationRow) => void;
+}) {
+  const [statusFilter, setStatusFilter] = useState<GridStatusFilterValue>('ACTIVE');
+
+  if (!group) return null;
+
+  const subgroups = rows.filter((row) => row.type === 'SUBGROUP' && row.groupId === group.id);
+  const visibleSubgroups = subgroups.filter((row) => statusFilter === 'ALL' || (statusFilter === 'ACTIVE' ? row.status === 'ACTIVE' : row.status === 'INACTIVE'));
+
+  return (
+    <AuditedPopupShell
+      isOpen
+      screenId={SUBGROUPS_POPUP_SCREEN_ID}
+      eyebrow="Consulta do estoque"
+      title="Subgrupos do grupo"
+      description={`${group.name} · ${subgroups.length} subgrupo(s) encontrado(s).`}
+      brandingName={brandingName}
+      logoUrl={logoUrl}
+      originText="Origem: Sistema Financeiro - consulta de subgrupos aberta a partir da grid de grupos."
+      auditText="Popup exclusivo para consultar os subgrupos vinculados ao grupo selecionado, respeitando empresa e filial do contexto financeiro."
+      sqlText="SELECT PS.* FROM product_subgroups PS WHERE PS.groupId = :groupId AND PS.canceledAt IS NULL ORDER BY PS.name ASC;"
+      onClose={onClose}
+      panelClassName="max-w-5xl"
+      headerTheme="blue"
+      screenIdRightAligned
+    >
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+          <thead className="bg-slate-100 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">
+            <tr>
+              <th className="border-b border-slate-200 px-4 py-3">Nome</th>
+              <th className="border-b border-slate-200 px-4 py-3">Código</th>
+              <th className="border-b border-slate-200 px-4 py-3">Produtos</th>
+              <th className="border-b border-slate-200 px-4 py-3 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleSubgroups.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-12 text-center font-bold text-slate-500">
+                  {subgroups.length === 0 ? 'Nenhum subgrupo cadastrado para este grupo.' : 'Nenhum subgrupo corresponde ao semáforo selecionado.'}
+                </td>
+              </tr>
+            ) : visibleSubgroups.map((row, index) => (
+              <tr key={row.id} className={index % 2 ? 'bg-slate-50' : 'bg-white'}>
+                <td className="px-4 py-3 font-black text-slate-900">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full shadow-md ${rowFarolClass(row.status)}`}
+                      title={row.status === 'ACTIVE' ? 'Ativo' : 'Inativo'}
+                      aria-label={row.status === 'ACTIVE' ? 'Ativo' : 'Inativo'}
+                    />
+                    <span>{row.name}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 font-semibold text-slate-600">{row.code || '---'}</td>
+                <td className="px-4 py-3 font-semibold text-slate-600">{row.productCount}</td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onOpenProducts(row)}
+                    title={`Consultar produtos do subgrupo ${row.name}`}
+                    aria-label={`Consultar produtos do subgrupo ${row.name}`}
+                    className="mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" strokeLinejoin="round" />
+                      <path d="M4.5 7.5 12 12l7.5-4.5M12 12v9" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEdit(row)}
+                    title={`Editar subgrupo ${row.name}`}
+                    aria-label={`Editar subgrupo ${row.name}`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M12 20h9" strokeLinecap="round" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div
+        className="mt-3 flex justify-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+      >
+        <GridStatusFilter
+          value={statusFilter}
+          onChange={setStatusFilter}
+          activeLabel="Mostrar somente subgrupos ativos"
+          allLabel="Mostrar subgrupos ativos e inativos"
+          inactiveLabel="Mostrar somente subgrupos inativos"
+        />
+      </div>
+    </AuditedPopupShell>
+  );
+}
+
+function ClassificationFormPopup({
+  form,
+  groups,
+  saving,
+  brandingName,
+  logoUrl,
+  onClose,
+  onChange,
+  onSave,
+}: {
+  form: ClassificationForm;
+  groups: ClassificationRow[];
+  saving: boolean;
+  brandingName: string | null;
+  logoUrl: string | null;
+  onClose: () => void;
+  onChange: (next: ClassificationForm) => void;
+  onSave: () => void;
+}) {
+  return (
+    <AuditedPopupShell
+      isOpen
+      screenId="POPUP_FINANCEIRO_ESTOQUE_GRUPOS_CADASTRO"
+      eyebrow="Cadastro do estoque"
+      title={`${form.id ? 'Alterar' : 'Cadastrar'} ${form.type === 'GROUP' ? 'grupo' : 'subgrupo'}`}
+      description={brandingName || 'Cadastro exclusivo da empresa/filial atual.'}
+      brandingName={brandingName}
+      logoUrl={logoUrl}
+      onClose={onClose}
+      panelClassName="max-w-3xl"
+      headerTheme="blue"
+      bodyClassName="gap-4"
+      footerActions={
+        <div className="flex w-full justify-start">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onSave}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+              <path d="M5 4h12l2 2v14H5V4Z" strokeLinejoin="round" />
+              <path d="M8 4v6h8V4M8 20v-6h8v6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {saving ? 'Salvando...' : 'Salvar cadastro'}
+          </button>
+        </div>
+      }
+    >
+      <div className="grid gap-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Tipo</span>
+          <select
+            value={form.type}
+            disabled={Boolean(form.id)}
+            onChange={(event) => onChange({ ...form, type: event.target.value as 'GROUP' | 'SUBGROUP', groupId: '' })}
+            className={FINANCE_GRID_PAGE_LAYOUT.input}
+          >
+            <option value="GROUP">GRUPO</option>
+            <option value="SUBGROUP">SUBGRUPO</option>
+          </select>
+        </label>
+
+        {form.type === 'SUBGROUP' ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Grupo pai</span>
+            <select
+              value={form.groupId}
+              onChange={(event) => onChange({ ...form, groupId: event.target.value })}
+              className={FINANCE_GRID_PAGE_LAYOUT.input}
+            >
+              <option value="">Selecione o grupo</option>
+              {groups.filter((group) => group.status === 'ACTIVE').map((group) => (
+                <option key={group.id} value={group.id}>{group.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Código</span>
+            <input value={form.code} onChange={(event) => onChange({ ...form, code: event.target.value })} className={FINANCE_GRID_PAGE_LAYOUT.input} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Situação</span>
+            <select value={form.status} onChange={(event) => onChange({ ...form, status: event.target.value as 'ACTIVE' | 'INACTIVE' })} className={FINANCE_GRID_PAGE_LAYOUT.input}>
+              <option value="ACTIVE">ATIVO</option>
+              <option value="INACTIVE">INATIVO</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Nome</span>
+          <input autoFocus value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} className={FINANCE_GRID_PAGE_LAYOUT.input} />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Descrição</span>
+          <textarea value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} className={`${FINANCE_GRID_PAGE_LAYOUT.input} min-h-24`} />
+        </label>
+      </div>
+    </AuditedPopupShell>
+  );
+}
+
 export default function StockGroupsPage() {
   const runtimeContext = useFinanceRuntimeContext();
   const [rows, setRows] = useState<ClassificationRow[]>([]);
@@ -94,11 +330,41 @@ export default function StockGroupsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<ClassificationForm | null>(null);
+  const [subgroupsPopupGroup, setSubgroupsPopupGroup] = useState<ClassificationRow | null>(null);
+  const [groupProductsPopupClassification, setGroupProductsPopupClassification] = useState<ClassificationRow | null>(null);
   const [pendingClassificationInactivation, setPendingClassificationInactivation] = useState<ClassificationRow | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<GridExportFormat>('excel');
   const [exportColumns, setExportColumns] = useState(buildDefaultExportColumns(GRID_COLUMNS));
   const navigationQuery = buildFinanceNavigationQueryString(runtimeContext);
+
+  useEffect(() => {
+    if (!runtimeContext.embedded) return;
+
+    postEmbeddedScreenContext(SCREEN_ID);
+    const retryTimer = window.setTimeout(() => postEmbeddedScreenContext(SCREEN_ID), 250);
+
+    return () => window.clearTimeout(retryTimer);
+  }, [runtimeContext.embedded]);
+
+  useEffect(() => {
+    const handleEmbeddedBackNavigation = (event: MessageEvent) => {
+      if (!isTrustedMessageEvent(event)) return;
+      if (event.source !== window.parent) return;
+
+      const data = event.data as { type?: string; screenId?: string } | null;
+      if (
+        !data ||
+        data.type !== 'MSINFOR_FINANCEIRO_NAVIGATE_BACK' ||
+        data.screenId !== SCREEN_ID
+      ) return;
+
+      window.location.replace(withFinanceBasePath(`/estoque${navigationQuery}`));
+    };
+
+    window.addEventListener('message', handleEmbeddedBackNavigation);
+    return () => window.removeEventListener('message', handleEmbeddedBackNavigation);
+  }, [navigationQuery]);
 
   const load = useCallback(async () => {
     if (!runtimeContext.sourceSystem || !runtimeContext.sourceTenantId) {
@@ -121,12 +387,15 @@ export default function StockGroupsPage() {
 
   const filteredRows = useMemo(() => {
     const normalizedQuick = normalizeFilter(quickSearch);
-    const result = rows.filter((row) => {
+    const scopedRows = rows.filter((row) => row.type === 'GROUP');
+    const result = scopedRows.filter((row) => {
       if (statusFilter !== 'ALL' && row.status !== statusFilter) return false;
       if (normalizedQuick && ![row.name, row.code, row.groupName].some((value) => normalizeFilter(value).includes(normalizedQuick))) return false;
       return GRID_COLUMNS.every((column) => {
-        const filter = normalizeFilter(filters[column.key]);
-        return !filter || normalizeFilter(getRowValue(row, column.key)).includes(filter);
+        const filter = filters[column.key];
+        if (column.key === 'updatedAt') return matchesGridDateRange(getRowValue(row, column.key), filter);
+        const normalizedFilter = normalizeFilter(filter);
+        return !normalizedFilter || normalizeFilter(getRowValue(row, column.key)).includes(normalizedFilter);
       });
     });
     if (!sort.key) return result;
@@ -201,6 +470,37 @@ export default function StockGroupsPage() {
     }
   }
 
+  function openNewGroupForm() {
+    setError(null);
+    setForm(emptyFormFor('GROUP'));
+  }
+
+  function openNewSubgroupForm(groupId: string) {
+    setError(null);
+    setForm({ ...emptyFormFor('SUBGROUP'), groupId });
+  }
+
+  function consultGroupSubgroups(group: ClassificationRow) {
+    setSubgroupsPopupGroup(group);
+  }
+
+  function consultGroupProducts(classification: ClassificationRow) {
+    setGroupProductsPopupClassification(classification);
+  }
+
+  function openEditForm(row: ClassificationRow) {
+    setError(null);
+    setForm({
+      id: row.id,
+      type: row.type,
+      groupId: row.groupId || '',
+      code: row.code || '',
+      name: row.name,
+      description: row.description || '',
+      status: row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    });
+  }
+
   const exportRows = filteredRows;
   if (runtimeContext.userRole && runtimeContext.userRole !== 'ADMIN') {
     return <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center font-bold text-amber-800">Esta tela exige perfil ADMIN no Financeiro.</div>;
@@ -209,18 +509,16 @@ export default function StockGroupsPage() {
   return (
     <div className="space-y-5">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.24em] text-blue-600">Estoque • classificação</div>
-            <h1 className="mt-1 text-2xl font-black text-slate-900">Grupos e subgrupos</h1>
-            <p className="mt-1 text-sm font-medium text-slate-500">Cadastro por filial para organizar os produtos do Financeiro.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => { setError(null); setForm(emptyFormFor('GROUP')); }} className="rounded-2xl bg-blue-600 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white hover:bg-blue-700">Novo grupo</button>
-            <button type="button" onClick={() => { setError(null); setForm(emptyFormFor('SUBGROUP')); }} className="rounded-2xl bg-violet-600 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white hover:bg-violet-700">Novo subgrupo</button>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-col gap-3 md:flex-row">
+        <div className="flex flex-col gap-3 md:flex-row">
+          <button
+            type="button"
+            onClick={openNewGroupForm}
+            title="Novo grupo"
+            aria-label="Novo grupo"
+            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-2xl font-black leading-none text-white transition hover:bg-blue-700"
+          >
+            +
+          </button>
           <input value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="Pesquisar nome, código ou grupo pai" className={`${FINANCE_GRID_PAGE_LAYOUT.input} flex-1`} />
           <button type="button" onClick={() => void load()} className="rounded-2xl border border-slate-300 bg-white px-5 py-2 text-sm font-black text-slate-700 hover:bg-slate-50">Atualizar</button>
         </div>
@@ -236,7 +534,7 @@ export default function StockGroupsPage() {
               <tr>
                 {GRID_COLUMNS.map((column) => (
                   <th key={column.key} className="relative border-b border-slate-200 px-4 py-3">
-                    <GridColumnFilterHeader label={column.label} isOpen={openFilter === column.key} isActive={Boolean(filters[column.key])} filterValue={filterDrafts[column.key]} sortDirection={sort.key === column.key ? sort.direction : null} onToggle={() => setOpenFilter(openFilter === column.key ? null : column.key)} onSort={(direction) => { setSort({ key: column.key, direction }); setOpenFilter(null); }} onFilterValueChange={(value) => setFilterDrafts((current) => ({ ...current, [column.key]: value }))} onApply={() => { setFilters((current) => ({ ...current, [column.key]: filterDrafts[column.key] })); setOpenFilter(null); }} onClear={() => { setFilterDrafts((current) => ({ ...current, [column.key]: '' })); setFilters((current) => ({ ...current, [column.key]: '' })); setOpenFilter(null); }} />
+                    <GridColumnFilterHeader label={column.label} filterType={column.key === 'updatedAt' ? 'date-range' : 'text'} isOpen={openFilter === column.key} isActive={Boolean(filters[column.key])} filterValue={filterDrafts[column.key]} sortDirection={sort.key === column.key ? sort.direction : null} onToggle={() => setOpenFilter(openFilter === column.key ? null : column.key)} onSort={(direction) => { setSort({ key: column.key, direction }); setOpenFilter(null); }} onFilterValueChange={(value) => setFilterDrafts((current) => ({ ...current, [column.key]: value }))} onApply={() => { setFilters((current) => ({ ...current, [column.key]: filterDrafts[column.key] })); setOpenFilter(null); }} onClear={() => { setFilterDrafts((current) => ({ ...current, [column.key]: '' })); setFilters((current) => ({ ...current, [column.key]: '' })); setOpenFilter(null); }} />
                   </th>
                 ))}
                 <th className="border-b border-slate-200 px-4 py-3 text-right">Ações</th>
@@ -254,7 +552,63 @@ export default function StockGroupsPage() {
                   <td className="px-4 py-3 font-semibold text-slate-600">{row.subgroupCount}</td>
                   <td className="px-4 py-3 font-semibold text-slate-600">{row.productCount}</td>
                   <td className="px-4 py-3 font-semibold text-slate-600">{formatDateLabel(row.updatedAt)}</td>
-                  <td className="px-4 py-3 text-right"><button type="button" onClick={() => setForm({ id: row.id, type: row.type, groupId: row.groupId || '', code: row.code || '', name: row.name, description: row.description || '', status: row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE' })} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100">Editar</button></td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      {row.type === 'GROUP' ? (
+                        <button
+                          type="button"
+                          onClick={() => consultGroupSubgroups(row)}
+                          title={`Consultar subgrupos de ${row.name}`}
+                          aria-label={`Consultar subgrupos de ${row.name}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="12" r="2.5" />
+                          </svg>
+                        </button>
+                      ) : null}
+                      {row.type === 'GROUP' ? (
+                        <button
+                          type="button"
+                          onClick={() => consultGroupProducts(row)}
+                          title={`Consultar produtos do grupo ${row.name}`}
+                          aria-label={`Consultar produtos do grupo ${row.name}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" strokeLinejoin="round" />
+                            <path d="M4.5 7.5 12 12l7.5-4.5M12 12v9" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      ) : null}
+                      {row.type === 'GROUP' && row.status === 'ACTIVE' ? (
+                        <button
+                          type="button"
+                          onClick={() => openNewSubgroupForm(row.id)}
+                          title={`Incluir subgrupo em ${row.name}`}
+                          aria-label={`Incluir subgrupo em ${row.name}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700 transition hover:bg-violet-100 hover:text-violet-900"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => openEditForm(row)}
+                        title={`Editar ${row.type === 'GROUP' ? 'grupo' : 'subgrupo'} ${row.name}`}
+                        aria-label={`Editar ${row.type === 'GROUP' ? 'grupo' : 'subgrupo'} ${row.name}`}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="M12 20h9" strokeLinecap="round" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               )) : null}
             </tbody>
@@ -263,7 +617,29 @@ export default function StockGroupsPage() {
         <GridStandardFooter statusFilter={statusFilter} totalRecords={filteredRows.length} pageSize={pageSize} currentPage={page} totalPages={totalPages} onStatusFilterChange={setStatusFilter} onPageSizeChange={setPageSize} onPageChange={setPage} onExport={() => setIsExportOpen(true)} />
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-3 shadow-sm"><ScreenNameCopy screenId={SCREEN_ID} className="justify-end" originText={ORIGIN_TEXT} auditText="Cadastro financeiro por empresa e filial de grupos e subgrupos do estoque." sqlText="SELECT * FROM product_groups UNION ALL SELECT * FROM product_subgroups;" /></section>
+      {!runtimeContext.embedded ? (
+        <section className="rounded-3xl border border-slate-200 bg-white px-5 py-3 shadow-sm"><ScreenNameCopy screenId={SCREEN_ID} className="justify-end" originText={ORIGIN_TEXT} auditText="Cadastro financeiro por empresa e filial de grupos e subgrupos do estoque." sqlText="SELECT * FROM product_groups UNION ALL SELECT * FROM product_subgroups;" /></section>
+      ) : null}
+
+      <GroupSubgroupsPopup
+        group={subgroupsPopupGroup}
+        rows={rows}
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setSubgroupsPopupGroup(null)}
+        onEdit={openEditForm}
+        onOpenProducts={consultGroupProducts}
+      />
+
+      <GroupProductsPopup
+        classification={groupProductsPopupClassification}
+        rows={rows}
+        runtimeContext={runtimeContext}
+        brandingName={runtimeContext.companyName}
+        logoUrl={runtimeContext.logoUrl}
+        onClose={() => setGroupProductsPopupClassification(null)}
+        onChanged={() => void load()}
+      />
 
       <GridExportModal isOpen={isExportOpen} title="Exportar grupos e subgrupos" description={`A exportação considera ${exportRows.length} registro(s) do filtro atual.`} format={exportFormat} onFormatChange={setExportFormat} columns={GRID_COLUMNS} selectedColumns={exportColumns} storageKey={`financeiro:estoque-grupos:export:${runtimeContext.sourceTenantId || 'default'}`} brandingName={runtimeContext.companyName || 'FINANCEIRO'} brandingLogoUrl={runtimeContext.logoUrl} onClose={() => setIsExportOpen(false)} onExport={async (config) => { await exportGridRows({ rows: exportRows, columns: GRID_COLUMNS, selectedColumns: config.selectedColumns, format: exportFormat, fileBaseName: 'grupos-subgrupos-estoque', branding: { title: 'Grupos e subgrupos de estoque', schoolName: runtimeContext.companyName || 'FINANCEIRO', logoUrl: runtimeContext.logoUrl }, pdfOptions: config.pdfOptions }); setExportColumns(config.selectedColumns); setIsExportOpen(false); }} />
 
@@ -280,7 +656,18 @@ export default function StockGroupsPage() {
         isSaving={saving}
       />
 
-      {form ? <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"><div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5"><div><div className="text-[11px] font-black uppercase tracking-[0.24em] text-blue-600">Cadastro do estoque</div><h2 className="mt-1 text-2xl font-black text-slate-900">{form.id ? 'Alterar' : 'Cadastrar'} {form.type === 'GROUP' ? 'grupo' : 'subgrupo'}</h2></div><button type="button" onClick={() => setForm(null)} className="text-2xl font-black text-slate-400 hover:text-rose-600">×</button></div><div className="grid gap-4 p-6"><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Tipo</span><select value={form.type} disabled={Boolean(form.id)} onChange={(event) => setForm((current) => current ? { ...current, type: event.target.value as 'GROUP' | 'SUBGROUP', groupId: '' } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input}><option value="GROUP">GRUPO</option><option value="SUBGROUP">SUBGRUPO</option></select></label>{form.type === 'SUBGROUP' ? <label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Grupo pai</span><select value={form.groupId} onChange={(event) => setForm((current) => current ? { ...current, groupId: event.target.value } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input}><option value="">Selecione o grupo</option>{groups.filter((group) => group.status === 'ACTIVE').map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label> : null}<div className="grid gap-4 md:grid-cols-2"><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Código</span><input value={form.code} onChange={(event) => setForm((current) => current ? { ...current, code: event.target.value } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input} /></label><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Situação</span><select value={form.status} onChange={(event) => setForm((current) => current ? { ...current, status: event.target.value as 'ACTIVE' | 'INACTIVE' } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input}><option value="ACTIVE">ATIVO</option><option value="INACTIVE">INATIVO</option></select></label></div><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Nome</span><input autoFocus value={form.name} onChange={(event) => setForm((current) => current ? { ...current, name: event.target.value } : current)} className={FINANCE_GRID_PAGE_LAYOUT.input} /></label><label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.14em] text-slate-500">Descrição</span><textarea value={form.description} onChange={(event) => setForm((current) => current ? { ...current, description: event.target.value } : current)} className={`${FINANCE_GRID_PAGE_LAYOUT.input} min-h-24`} /></label></div><div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4"><button type="button" onClick={() => setForm(null)} className="rounded-2xl border border-slate-200 bg-white px-5 py-2 text-sm font-bold text-slate-600">Cancelar</button><button type="button" disabled={saving} onClick={() => void saveForm()} className="rounded-2xl bg-blue-600 px-5 py-2 text-sm font-black text-white disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar cadastro'}</button></div></div></div> : null}
+      {form ? (
+        <ClassificationFormPopup
+          form={form}
+          groups={groups}
+          saving={saving}
+          brandingName={runtimeContext.companyName}
+          logoUrl={runtimeContext.logoUrl}
+          onClose={() => setForm(null)}
+          onChange={(next) => setForm(next)}
+          onSave={() => void saveForm()}
+        />
+      ) : null}
     </div>
   );
 }

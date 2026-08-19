@@ -3,7 +3,7 @@
 import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -594,7 +594,9 @@ export default function FinanceiroCustomerCreditsPage() {
       return (Object.keys(appliedFilters) as CreditGridFilterKey[]).every((key) => {
         const filter = appliedFilters[key];
         if (!filter) return true;
-        return includesFilterText(getCreditColumnValue(credit, key), filter);
+        return key === 'createdAt'
+          ? matchesGridDateRange(getCreditColumnValue(credit, key), filter)
+          : includesFilterText(getCreditColumnValue(credit, key), filter);
       });
     });
 
@@ -839,6 +841,7 @@ export default function FinanceiroCustomerCreditsPage() {
                   <th key={column.key} className={`px-4 py-3 ${column.align === 'right' ? 'text-right' : ''}`}>
                     <GridColumnFilterHeader
                       label={column.label}
+                      filterType={column.key === 'createdAt' ? 'date-range' : 'text'}
                       isOpen={activeFilterColumn === column.key}
                       isActive={Boolean(appliedFilters[column.key])}
                       filterValue={filterDrafts[column.key]}

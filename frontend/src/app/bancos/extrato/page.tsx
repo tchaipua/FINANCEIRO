@@ -4,6 +4,7 @@ import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import Link from 'next/link';
 import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { buildGridDatePeriodOptions } from '@/app/components/grid-column-filter-header';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter from '@/app/components/grid-standard-footer';
@@ -158,6 +159,11 @@ const STATEMENT_GRID_COLUMNS: StatementGridColumnDefinition[] = [
   { key: 'balance', label: 'Saldo', visibleByDefault: true },
   { key: 'status', label: 'Situação', visibleByDefault: true },
 ];
+const STATEMENT_DATE_PERIOD_OPTIONS = buildGridDatePeriodOptions();
+
+function getStatementDatePeriodValue(dateFrom: string, dateTo: string) {
+  return STATEMENT_DATE_PERIOD_OPTIONS.find((option) => option.from === dateFrom && option.to === dateTo)?.value || 'CUSTOM';
+}
 const DEFAULT_STATEMENT_GRID_CONFIG: StatementGridConfig = {
   hidden: STATEMENT_GRID_COLUMNS.filter((column) => column.visibleByDefault === false).map(
     (column) => column.key,
@@ -1658,6 +1664,25 @@ export default function FinanceiroBankStatementPage() {
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                         Período no grid
                       </div>
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                          Período
+                        </span>
+                        <select
+                          value={getStatementDatePeriodValue(gridFilters.dateFrom, gridFilters.dateTo)}
+                          onChange={(event) => {
+                            const option = STATEMENT_DATE_PERIOD_OPTIONS.find((item) => item.value === event.target.value);
+                            if (!option) return;
+                            setGridFilters((current) => ({ ...current, dateFrom: option.from, dateTo: option.to }));
+                          }}
+                          className={filterInputClass}
+                        >
+                          <option value="CUSTOM">PERÍODO PERSONALIZADO</option>
+                          {STATEMENT_DATE_PERIOD_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
                       <label className="block space-y-1">
                         <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                           De

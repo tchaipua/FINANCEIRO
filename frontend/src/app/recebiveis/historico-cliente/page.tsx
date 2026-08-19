@@ -3,7 +3,7 @@
 import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -446,7 +446,9 @@ export default function FinanceiroHistoricoClientePage() {
       }
 
       return (Object.keys(appliedFilters) as CustomerHistoryColumnKey[]).every((key) =>
-        includesFilterText(getColumnValue(row, key), appliedFilters[key]),
+        key === 'firstPurchaseDate' || key === 'lastPaymentDate'
+          ? matchesGridDateRange(getColumnValue(row, key), appliedFilters[key])
+          : includesFilterText(getColumnValue(row, key), appliedFilters[key]),
       );
     });
 
@@ -500,6 +502,7 @@ export default function FinanceiroHistoricoClientePage() {
     return (
       <GridColumnFilterHeader
         label={column.label}
+        filterType={column.key === 'firstPurchaseDate' || column.key === 'lastPaymentDate' ? 'date-range' : 'text'}
         isOpen={activeFilterColumn === column.key}
         isActive={Boolean(appliedFilters[column.key])}
         filterValue={filterDrafts[column.key]}

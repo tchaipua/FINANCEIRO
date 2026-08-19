@@ -8,103 +8,106 @@ datasource db {
 }
 
 model Company {
-  id                              String                           @id @default(uuid())
-  sourceSystem                    String
-  sourceTenantId                  String
-  name                            String
-  document                        String?
-  status                          String                           @default("ACTIVE")
-  interestRate                    Float?
-  interestGracePeriod             Int?
-  penaltyRate                     Float?
-  penaltyValue                    Float?
-  penaltyGracePeriod              Int?
-  createdAt                       DateTime                         @default(now())
-  createdBy                       String?
-  updatedAt                       DateTime                         @updatedAt
-  updatedBy                       String?
-  canceledAt                      DateTime?
-  canceledBy                      String?
-  bankAccounts                    BankAccount[]
-  fiscalCertificates              FiscalCertificate[]
-  nfceProfiles                    NfceProfile[]
-  nfeProfiles                     NfeProfile[]
-  nfseProfiles                    NfseProfile[]
-  nfseServiceItems                NfseServiceItem[]
-  nfseServiceDescriptions         NfseServiceDescription[]
-  nfseDocuments                   NfseDocument[]
-  nfseDocumentAttempts            NfseDocumentAttempt[]
-  nfseDocumentEmails              NfseEmailDelivery[]
-  nfseMunicipalParameters         NfseMunicipalParameter[]
-  fiscalOperationNatures          FiscalOperationNature[]
-  fiscalTaxRules                  FiscalTaxRule[]
-  fiscalBenefitCodes              FiscalBenefitCode[]
-  fiscalDocuments                 FiscalDocument[]
-  fiscalDocumentAttempts          FiscalDocumentAttempt[]
-  fiscalDocumentItems             FiscalDocumentItem[]
-  fiscalDocumentInstallments      FiscalDocumentInstallment[]
-  fiscalDocumentEvents            FiscalDocumentEvent[]
-  fiscalDocumentEmails            FiscalDocumentEmailDelivery[]
-  fiscalNumberInutilizations      FiscalNumberInutilization[]
-  fiscalAuditEvents               FiscalAuditEvent[]
-  products                        Product[]
-  suppliers                       Supplier[]
-  parties                         Party[]
-  partyRoles                      PartyRole[]
-  partyExternalReferences         PartyExternalReference[]
-  partyAuditEvents                PartyAuditEvent[]
-  payableInvoiceImports           PayableInvoiceImport[]
-  payableTitles                   PayableTitle[]
-  payableInstallments             PayableInstallment[]
-  stockMovements                  StockMovement[]
-  productStockBalances            ProductStockBalance[]
-  receivableBatches               ReceivableBatch[]
-  receivableTitles                ReceivableTitle[]
-  receivableInstallments          ReceivableInstallment[]
-  bankReturnImports               BankReturnImport[]
-  bankReturnImportItems           BankReturnImportItem[]
-  bankStatementImports            BankStatementImport[]
-  bankStatementMovements          BankStatementMovement[]
-  bankDdaRecords                  BankDdaRecord[]
-  bankDdaAuditEvents              BankDdaAuditEvent[]
-  cashSessions                    CashSession[]
-  cashOperatorPolicies            CashOperatorPolicy[]
-  financeAccessSubjects           FinanceAccessSubject[]
-  financeAccessAssignments        FinanceAccessAssignment[]
-  financeAccessAuditEvents        FinanceAccessAuditEvent[]
-  cashMovements                   CashMovement[]
-  settlements                     InstallmentSettlement[]
-  customerCredits                 CustomerCredit[]
-  customerCreditMovements         CustomerCreditMovement[]
-  branches                        CompanyBranch[]
-  productGroups                   ProductGroup[]
-  productSubgroups                ProductSubgroup[]
-  sales                           Sale[]
-  saleReturns                     SaleReturn[]
-  saleItems                       SaleItem[]
-  saleReturnItems                 SaleReturnItem[]
-  salePayments                    SalePayment[]
-  salePixIntents                  SalePixIntent[]
-  saleStockConsumptions           SaleStockConsumption[]
-  saleStockConsumptionItems       SaleStockConsumptionItem[]
-  receivablePixIntents            ReceivablePixIntent[]
-  screenParameters                ScreenParameter[]
-  printTemplates                  PrintTemplate[]
-  printTemplateVersions           PrintTemplateVersion[]
-  printTemplateBindings           PrintTemplateBinding[]
-  printerProfiles                 PrinterProfile[]
-  printJobs                       PrintJob[]
-  printAuditEvents                PrintAuditEvent[]
-  superTefConfigurations          SuperTefConfiguration[]
-  superTefTerminals               SuperTefTerminal[]
-  superTefCheckouts               SuperTefCheckout[]
-  superTefCheckoutRoutes          SuperTefCheckoutRoute[]
-  superTefPayments                SuperTefPayment[]
-  superTefAuditEvents             SuperTefAuditEvent[]
-  s3Configurations                S3Configuration[]
-  s3AuditEvents                   S3AuditEvent[]
-  sourceIntegrationConfigurations SourceIntegrationConfiguration[]
-  sourceIntegrationAuditEvents    SourceIntegrationAuditEvent[]
+  id                               String                            @id @default(uuid())
+  sourceSystem                     String
+  sourceTenantId                   String
+  name                             String
+  document                         String?
+  status                           String                            @default("ACTIVE")
+  interestRate                     Float?
+  interestGracePeriod              Int?
+  penaltyRate                      Float?
+  penaltyValue                     Float?
+  penaltyGracePeriod               Int?
+  createdAt                        DateTime                          @default(now())
+  createdBy                        String?
+  updatedAt                        DateTime                          @updatedAt
+  updatedBy                        String?
+  canceledAt                       DateTime?
+  canceledBy                       String?
+  bankAccounts                     BankAccount[]
+  fiscalCertificates               FiscalCertificate[]
+  nfceProfiles                     NfceProfile[]
+  nfeProfiles                      NfeProfile[]
+  nfseProfiles                     NfseProfile[]
+  nfseServiceItems                 NfseServiceItem[]
+  nfseServiceDescriptions          NfseServiceDescription[]
+  nfseDocuments                    NfseDocument[]
+  nfseDocumentAttempts             NfseDocumentAttempt[]
+  nfseDocumentEmails               NfseEmailDelivery[]
+  nfseMunicipalParameters          NfseMunicipalParameter[]
+  fiscalOperationNatures           FiscalOperationNature[]
+  fiscalTaxRules                   FiscalTaxRule[]
+  fiscalBenefitCodes               FiscalBenefitCode[]
+  fiscalDocuments                  FiscalDocument[]
+  fiscalDocumentAttempts           FiscalDocumentAttempt[]
+  fiscalDocumentItems              FiscalDocumentItem[]
+  fiscalDocumentInstallments       FiscalDocumentInstallment[]
+  fiscalDocumentEvents             FiscalDocumentEvent[]
+  fiscalDocumentEmails             FiscalDocumentEmailDelivery[]
+  fiscalNumberInutilizations       FiscalNumberInutilization[]
+  fiscalAuditEvents                FiscalAuditEvent[]
+  products                         Product[]
+  suppliers                        Supplier[]
+  parties                          Party[]
+  partyRoles                       PartyRole[]
+  partyExternalReferences          PartyExternalReference[]
+  partyAuditEvents                 PartyAuditEvent[]
+  payableInvoiceImports            PayableInvoiceImport[]
+  payableTitles                    PayableTitle[]
+  payableInstallments              PayableInstallment[]
+  stockMovements                   StockMovement[]
+  productStockBalances             ProductStockBalance[]
+  receivableBatches                ReceivableBatch[]
+  receivableTitles                 ReceivableTitle[]
+  receivableInstallments           ReceivableInstallment[]
+  bankReturnImports                BankReturnImport[]
+  bankReturnImportItems            BankReturnImportItem[]
+  bankStatementImports             BankStatementImport[]
+  bankStatementMovements           BankStatementMovement[]
+  bankDdaRecords                   BankDdaRecord[]
+  bankDdaAuditEvents               BankDdaAuditEvent[]
+  cashSessions                     CashSession[]
+  cashOperatorPolicies             CashOperatorPolicy[]
+  financeAccessSubjects            FinanceAccessSubject[]
+  financeAccessAssignments         FinanceAccessAssignment[]
+  financeAccessAuditEvents         FinanceAccessAuditEvent[]
+  financialNotificationPreferences FinancialNotificationPreference[]
+  financialNotificationDeliveries  FinancialNotificationDelivery[]
+  financialNotificationAuditEvents FinancialNotificationAuditEvent[]
+  cashMovements                    CashMovement[]
+  settlements                      InstallmentSettlement[]
+  customerCredits                  CustomerCredit[]
+  customerCreditMovements          CustomerCreditMovement[]
+  branches                         CompanyBranch[]
+  productGroups                    ProductGroup[]
+  productSubgroups                 ProductSubgroup[]
+  sales                            Sale[]
+  saleReturns                      SaleReturn[]
+  saleItems                        SaleItem[]
+  saleReturnItems                  SaleReturnItem[]
+  salePayments                     SalePayment[]
+  salePixIntents                   SalePixIntent[]
+  saleStockConsumptions            SaleStockConsumption[]
+  saleStockConsumptionItems        SaleStockConsumptionItem[]
+  receivablePixIntents             ReceivablePixIntent[]
+  screenParameters                 ScreenParameter[]
+  printTemplates                   PrintTemplate[]
+  printTemplateVersions            PrintTemplateVersion[]
+  printTemplateBindings            PrintTemplateBinding[]
+  printerProfiles                  PrinterProfile[]
+  printJobs                        PrintJob[]
+  printAuditEvents                 PrintAuditEvent[]
+  superTefConfigurations           SuperTefConfiguration[]
+  superTefTerminals                SuperTefTerminal[]
+  superTefCheckouts                SuperTefCheckout[]
+  superTefCheckoutRoutes           SuperTefCheckoutRoute[]
+  superTefPayments                 SuperTefPayment[]
+  superTefAuditEvents              SuperTefAuditEvent[]
+  s3Configurations                 S3Configuration[]
+  s3AuditEvents                    S3AuditEvent[]
+  sourceIntegrationConfigurations  SourceIntegrationConfiguration[]
+  sourceIntegrationAuditEvents     SourceIntegrationAuditEvent[]
 
   @@unique([sourceSystem, sourceTenantId])
   @@index([name])
@@ -292,13 +295,104 @@ model FinanceAccessSubject {
   canceledAt               DateTime?
   canceledBy               String?
 
-  company     Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  assignments FinanceAccessAssignment[]
-  auditEvents FinanceAccessAuditEvent[]
+  company                 Company                           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  assignments             FinanceAccessAssignment[]
+  auditEvents             FinanceAccessAuditEvent[]
+  notificationPreferences FinancialNotificationPreference[]
+  notificationDeliveries  FinancialNotificationDelivery[]
 
   @@unique([companyId, sourceSystem, sourceTenantId, sourceUserId])
   @@index([companyId, displayName, sourceActive, canceledAt])
   @@map("finance_access_subjects")
+}
+
+model FinancialNotificationPreference {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int
+  sourceSystem   String
+  sourceTenantId String
+  subjectId      String
+  eventType      String
+  enabled        Boolean   @default(false)
+  sendInternal   Boolean   @default(false)
+  sendEmail      Boolean   @default(false)
+  sendTelegram   Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+  canceledAt     DateTime?
+  canceledBy     String?
+
+  company Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subject FinanceAccessSubject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, sourceSystem, sourceTenantId, subjectId, eventType])
+  @@index([companyId, branchCode, eventType, enabled, canceledAt])
+  @@index([subjectId, branchCode, canceledAt])
+  @@map("financial_notification_preferences")
+}
+
+model FinancialNotificationDelivery {
+  id             String    @id @default(uuid())
+  companyId      String
+  branchCode     Int
+  sourceSystem   String
+  sourceTenantId String
+  subjectId      String
+  eventType      String
+  eventKey       String
+  title          String
+  message        String
+  actionUrl      String?
+  metadataJson   String?
+  sendInternal   Boolean   @default(false)
+  sendEmail      Boolean   @default(false)
+  sendTelegram   Boolean   @default(false)
+  internalStatus String    @default("SKIPPED")
+  emailStatus    String    @default("SKIPPED")
+  telegramStatus String    @default("SKIPPED")
+  attemptCount   Int       @default(0)
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  updatedAt      DateTime  @updatedAt
+  updatedBy      String?
+
+  company Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subject FinanceAccessSubject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, branchCode, sourceSystem, sourceTenantId, subjectId, eventKey])
+  @@index([companyId, branchCode, eventType, createdAt])
+  @@index([companyId, branchCode, deliveredAt])
+  @@map("financial_notification_deliveries")
+}
+
+model FinancialNotificationAuditEvent {
+  id             String   @id @default(uuid())
+  companyId      String
+  branchCode     Int
+  sourceSystem   String
+  sourceTenantId String
+  subjectId      String?
+  action         String
+  eventType      String?
+  summary        String
+  beforeJson     String?
+  afterJson      String?
+  metadataJson   String?
+  occurredAt     DateTime @default(now())
+  performedBy    String?
+  createdAt      DateTime @default(now())
+  createdBy      String?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, branchCode, occurredAt])
+  @@index([companyId, subjectId, eventType, occurredAt])
+  @@map("financial_notification_audit_events")
 }
 
 model FinanceAccessAssignment {

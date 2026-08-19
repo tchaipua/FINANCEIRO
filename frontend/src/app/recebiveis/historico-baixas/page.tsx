@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
@@ -446,7 +446,9 @@ export default function FinanceiroHistoricoBaixasPage() {
       }
 
       return (Object.keys(appliedFilters) as SettlementColumnKey[]).every((key) =>
-        includesFilterText(getColumnValue(row, key), appliedFilters[key]),
+        key === 'settledAt'
+          ? matchesGridDateRange(getColumnValue(row, key), appliedFilters[key])
+          : includesFilterText(getColumnValue(row, key), appliedFilters[key]),
       );
     });
 
@@ -542,6 +544,7 @@ export default function FinanceiroHistoricoBaixasPage() {
     return (
       <GridColumnFilterHeader
         label={column.label}
+        filterType={column.key === 'settledAt' ? 'date-range' : 'text'}
         isOpen={activeFilterColumn === column.key}
         isActive={Boolean(appliedFilters[column.key])}
         filterValue={filterDrafts[column.key]}

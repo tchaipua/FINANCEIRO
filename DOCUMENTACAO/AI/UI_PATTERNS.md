@@ -205,6 +205,37 @@ Referencia aprovada:
   - nao criar coluna com titulo `Semaforo` nem pill textual `ATIVO`/`INATIVO` na linha
 - preservar os botoes e controles ja aprovados da tela, alterando apenas a estrutura necessaria para cumprir este padrao
 
+### PAT-015.3 - Filtro padrao de coluna com formato data
+
+- toda coluna do grid que representar uma data deve declarar o tipo de filtro `date-range` ou usar o equivalente compartilhado da tela
+- o popover deve manter ordenacao, `Filtrar` e `Limpar` no mesmo padrao das demais colunas
+- acima dos campos `De` e `Até`, exibir um combobox `Período`
+- o combobox deve iniciar visualmente no mes atual e oferecer 12 meses anteriores e 6 meses posteriores, em uppercase no formato `AGOSTO/2026`
+- manter a opcao `PERÍODO PERSONALIZADO` para informar datas fora das opcoes mensais
+- `De` e `Até` devem usar entrada de data e filtrar o intervalo de forma inclusiva
+- o filtro deve respeitar os registros filtrados no grid, exportacao, ordenacao e totalizadores
+- o Financeiro continua sendo consumidor: esse filtro nao cria nem altera clientes locais
+
+Componente compartilhado:
+
+- `frontend/src/app/components/grid-column-filter-header.tsx`
+
+Telas de referencia atualizadas:
+
+- `frontend/src/app/bancos/page.tsx`
+- `frontend/src/app/bancos/ddas-abertos/page.tsx`
+- `frontend/src/app/bancos/extrato/page.tsx`
+- `frontend/src/app/contas-a-pagar/fornecedores/page.tsx`
+- `frontend/src/app/estoque/grupos/page.tsx`
+- `frontend/src/app/recebiveis/creditos/page.tsx`
+- `frontend/src/app/recebiveis/historico-baixas/page.tsx`
+- `frontend/src/app/recebiveis/historico-cliente/page.tsx`
+- `frontend/src/app/recebiveis/lotes/page.tsx`
+- `frontend/src/app/recebiveis/parcelas/page.tsx`
+- `frontend/src/app/recebiveis/recebimentos-por-cliente/page.tsx`
+- `frontend/src/app/recebiveis/retornos/page.tsx`
+- `frontend/src/app/vendas/periodo/page.tsx`
+
 ### PAT-016 - Tela do Financeiro embutida na vertical consumidora
 
 - quando uma tela do `Financeiro` for aberta dentro da `Escola` ou de outra vertical consumidora, o layout principal visivel deve continuar sendo da vertical consumidora

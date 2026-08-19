@@ -20,6 +20,7 @@
     "test:core": "npm run build && node test/finance-core.test.cjs",
     "test:cash-policy": "npm run build && node test/cash-session-policy.test.cjs",
     "test:finance-access": "npm run build && node test/finance-access.test.cjs",
+    "test:financial-notifications": "npm run build && node test/financial-notifications.test.cjs",
     "test:stock-limits": "npm run build && node test/product-stock-limits.test.cjs",
     "test:company-branches-directory": "npm run build && node test/company-branches-directory.test.cjs",
     "test:product-classification": "npm run build && node test/product-classification-flow.test.cjs",

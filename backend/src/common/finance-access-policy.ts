@@ -90,6 +90,7 @@ export function getRequiredFinancePermissions(method: string, path: string) {
   const isRead = normalizedMethod === "GET" || normalizedMethod === "HEAD";
 
   if (normalizedPath.startsWith("finance-access")) return ["FINANCE_ADMIN"];
+  if (normalizedPath.startsWith("financial-notifications")) return ["FINANCE_ADMIN"];
   if (isRead) return ["VIEW_FINANCIAL"];
   if (
     normalizedPath.startsWith("companies") ||
@@ -125,4 +126,3 @@ export function getRequiredFinancePermissions(method: string, path: string) {
   }
   return ["FINANCE_ADMIN"];
 }
-

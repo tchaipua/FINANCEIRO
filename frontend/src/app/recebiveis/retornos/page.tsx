@@ -1352,7 +1352,29 @@ export default function FinanceiroBankReturnsPage() {
 
   function renderReturnColumnHeader(column: ReturnGridColumnDefinition) {
     if (column.key === 'createdAt') {
-      return renderReturnCreatedAtPeriodHeader(column);
+      const isActive = Boolean(createdAtPeriodFilter.start || createdAtPeriodFilter.end) || returnGridSort.key === column.key;
+      return (
+        <GridColumnFilterHeader
+          label={column.label}
+          filterType="date-range"
+          isOpen={activeReturnFilterColumn === column.key}
+          isActive={isActive}
+          filterValue={`${createdAtPeriodDraft.start}|${createdAtPeriodDraft.end}`}
+          align="right"
+          sortDirection={returnGridSort.key === column.key ? returnGridSort.direction : null}
+          onToggle={() => openReturnColumnFilter(column.key)}
+          onSort={(direction) => {
+            setReturnGridSort({ key: column.key, direction });
+            setActiveReturnFilterColumn(null);
+          }}
+          onFilterValueChange={(value) => {
+            const [start = '', end = ''] = value.split('|');
+            setCreatedAtPeriodDraft({ start, end });
+          }}
+          onApply={() => applyReturnColumnFilter(column.key)}
+          onClear={() => clearReturnColumnFilter(column.key)}
+        />
+      );
     }
 
     const isActive =

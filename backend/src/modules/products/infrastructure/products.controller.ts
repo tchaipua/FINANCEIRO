@@ -8,6 +8,7 @@ import {
   ListProductsDto,
   ListStockMovementsDto,
   SaveProductDto,
+  UpdateProductClassificationDto,
 } from "../application/dto/products.dto";
 
 @ApiTags("Products")
@@ -48,6 +49,17 @@ export class ProductsController {
     @Body() payload: CreateManualStockMovementDto,
   ) {
     return this.productsService.createManualStockMovement(productId, payload);
+  }
+
+  @Patch(":productId/classification")
+  @ApiOperation({
+    summary: "Atualiza somente o grupo e o subgrupo do produto informado",
+  })
+  updateClassification(
+    @Param("productId") productId: string,
+    @Body() payload: UpdateProductClassificationDto,
+  ) {
+    return this.productsService.updateClassification(productId, payload);
   }
 
   @Post()

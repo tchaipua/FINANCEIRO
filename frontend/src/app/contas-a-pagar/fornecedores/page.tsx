@@ -4,7 +4,7 @@ import { postMessageToTrustedParent } from '@/app/lib/trusted-messaging';
 
 import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import GridColumnFilterHeader from '@/app/components/grid-column-filter-header';
+import GridColumnFilterHeader, { matchesGridDateRange } from '@/app/components/grid-column-filter-header';
 import GridExportModal from '@/app/components/grid-export-modal';
 import GridStandardFooter, { type GridStatusFilterValue } from '@/app/components/grid-standard-footer';
 import InactivationConfirmationPopup from '@/app/components/inactivation-confirmation-popup';
@@ -159,7 +159,8 @@ function normalizeGridText(value: unknown) {
     .trim();
 }
 
-function matchesGridText(value: string, filter: string) {
+function matchesGridText(value: string, filter: string, isDate = false) {
+  if (isDate) return matchesGridDateRange(value, filter);
   const normalizedFilter = normalizeGridText(filter);
   if (!normalizedFilter) return true;
   return normalizeGridText(value).includes(normalizedFilter);
@@ -247,7 +248,7 @@ export default function FinanceiroFornecedoresPage() {
   const filteredItems = useMemo(() => {
     return items.filter((item) =>
       (Object.keys(columnFilters) as SupplierColumnFilterKey[]).every((key) =>
-        matchesGridText(getColumnValue(item, key), columnFilters[key]),
+        matchesGridText(getColumnValue(item, key), columnFilters[key], key === 'updatedAt'),
       ),
     );
   }, [columnFilters, getColumnValue, items]);
@@ -429,6 +430,7 @@ export default function FinanceiroFornecedoresPage() {
           isOpen={activeFilterColumn === column.key}
           isActive={isActive}
           filterValue={columnFilterDrafts[column.key]}
+          filterType={column.key === 'updatedAt' ? 'date-range' : 'text'}
           placeholder={`DIGITE ${column.label.toUpperCase()}`}
           align={['invoiceImportsCount', 'payableTitlesCount', 'updatedAt'].includes(column.key) ? 'right' : 'left'}
           sortDirection={gridSort.key === column.key ? gridSort.direction : null}
