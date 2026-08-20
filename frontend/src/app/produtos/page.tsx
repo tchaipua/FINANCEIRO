@@ -2469,12 +2469,24 @@ export default function FinanceiroProdutosPage() {
 
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                        Tipo do produto
+                        Tipo do item
                       </span>
                       <select
                         value={formState.productType}
                         onChange={(event) =>
-                          setFormState((current) => ({ ...current, productType: event.target.value }))
+                          setFormState((current) => ({
+                            ...current,
+                            productType: event.target.value,
+                            ...(event.target.value === 'SERVICE'
+                              ? {
+                                  tracksInventory: false,
+                                  usesColorSize: false,
+                                  usesLotControl: false,
+                                  usesExpirationControl: false,
+                                  allowsNegativeStock: false,
+                                }
+                              : {}),
+                          }))
                         }
                         className={FINANCE_GRID_PAGE_LAYOUT.input}
                       >
@@ -2488,7 +2500,10 @@ export default function FinanceiroProdutosPage() {
                     <StockParameterButton
                       label="Controlar quantidade do estoque"
                       value={formState.tracksInventory}
-                      editable={branchInventoryConfig.stockControlMode === 'BY_PRODUCT'}
+                      editable={
+                        formState.productType !== 'SERVICE' &&
+                        branchInventoryConfig.stockControlMode === 'BY_PRODUCT'
+                      }
                       enabledText="Sim, este produto movimenta estoque."
                       disabledText="Não, apenas cadastro comercial/fiscal."
                       onToggle={() =>
@@ -2502,7 +2517,7 @@ export default function FinanceiroProdutosPage() {
                     <StockParameterButton
                       label="Tratar apenas quantidade inteira"
                       value={!formState.allowFraction}
-                      editable={branchInventoryConfig.stockIntegerQuantityMode === 'BY_PRODUCT'}
+                      editable={formState.productType !== 'SERVICE' && branchInventoryConfig.stockIntegerQuantityMode === 'BY_PRODUCT'}
                       enabledText="Sim, aceita somente quantidade inteira."
                       disabledText="Não, permite quantidade fracionada."
                       onToggle={() =>
@@ -2516,7 +2531,7 @@ export default function FinanceiroProdutosPage() {
                     <StockParameterButton
                       label="Controla lote"
                       value={formState.usesLotControl}
-                      editable={branchInventoryConfig.stockLotControlMode === 'BY_PRODUCT'}
+                      editable={formState.productType !== 'SERVICE' && branchInventoryConfig.stockLotControlMode === 'BY_PRODUCT'}
                       enabledText="Sim, este produto controla lote."
                       disabledText="Não, produto sem controle de lote."
                       onToggle={() =>
@@ -2530,7 +2545,7 @@ export default function FinanceiroProdutosPage() {
                     <StockParameterButton
                       label="Controla validade"
                       value={formState.usesExpirationControl}
-                      editable={branchInventoryConfig.stockExpirationControlMode === 'BY_PRODUCT'}
+                      editable={formState.productType !== 'SERVICE' && branchInventoryConfig.stockExpirationControlMode === 'BY_PRODUCT'}
                       enabledText="Sim, este produto controla validade."
                       disabledText="Não, produto sem controle de validade."
                       onToggle={() =>
@@ -2544,7 +2559,7 @@ export default function FinanceiroProdutosPage() {
                     <StockParameterButton
                       label="Controla grade"
                       value={formState.usesColorSize}
-                      editable={branchInventoryConfig.stockGridControlMode === 'BY_PRODUCT'}
+                      editable={formState.productType !== 'SERVICE' && branchInventoryConfig.stockGridControlMode === 'BY_PRODUCT'}
                       enabledText="Sim, este produto usa grade."
                       disabledText="Não, produto sem grade."
                       onToggle={() =>
@@ -2558,7 +2573,7 @@ export default function FinanceiroProdutosPage() {
                     <StockParameterButton
                       label="Permite estoque negativo"
                       value={formState.allowsNegativeStock}
-                      editable={branchInventoryConfig.stockNegativeControlMode === 'BY_PRODUCT'}
+                      editable={formState.productType !== 'SERVICE' && branchInventoryConfig.stockNegativeControlMode === 'BY_PRODUCT'}
                       enabledText="Sim, este produto pode ficar com saldo negativo."
                       disabledText="Não, saída sem saldo será bloqueada."
                       onToggle={() =>

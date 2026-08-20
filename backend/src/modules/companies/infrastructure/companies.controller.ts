@@ -32,6 +32,14 @@ export class CompaniesController {
     return this.companiesService.list(query);
   }
 
+  @Get("sales-screen-selection")
+  @ApiOperation({
+    summary: "Consulta a tela de vendas definida para a filial na Central MSINFOR",
+  })
+  getSalesScreenSelection() {
+    return this.companiesService.getSalesScreenSelection();
+  }
+
   @Post("sync-source-integration-settings")
   @ApiOperation({
     summary:

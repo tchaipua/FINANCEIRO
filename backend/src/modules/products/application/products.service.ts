@@ -24,6 +24,7 @@ import {
   ListStockMovementsDto,
   SaveProductDto,
   UpdateProductClassificationDto,
+  UpdateProductTypeDto,
 } from "./dto/products.dto";
 
 type NormalizedProductPayload = {
@@ -353,11 +354,14 @@ export class ProductsService {
       throw new BadRequestException("Informe o nome do produto.");
     }
 
-    const tracksInventory = this.resolveBranchBoolean(
-      branchConfig.stockControlMode,
-      payload.tracksInventory,
-      true,
-    );
+    const productType = normalizeText(payload.productType) || "GOODS";
+    const tracksInventory = ["SERVICE", "PACKAGE"].includes(productType)
+      ? false
+      : this.resolveBranchBoolean(
+          branchConfig.stockControlMode,
+          payload.tracksInventory,
+          true,
+        );
     const allowFraction =
       branchConfig.stockIntegerQuantityMode === "YES"
         ? false
@@ -427,7 +431,7 @@ export class ProductsService {
       sku: normalizeText(payload.sku),
       barcode: normalizeDigits(payload.barcode) || normalizeText(payload.barcode),
       unitCode: normalizeText(payload.unitCode) || "UN",
-      productType: normalizeText(payload.productType) || "GOODS",
+      productType,
       tracksInventory,
       allowFraction,
       usesColorSize: tracksInventory ? usesColorSize : false,
@@ -940,6 +944,7 @@ export class ProductsService {
     const normalizedName = normalizeText(query.name);
     const normalizedInternalCode = normalizeText(query.internalCode);
     const normalizedStatus = normalizeText(query.status);
+    const normalizedProductType = normalizeText(query.productType);
     const normalizedGroupId = String(query.groupId || '').trim();
     const normalizedSubgroupId = String(query.subgroupId || '').trim();
 
@@ -950,6 +955,9 @@ export class ProductsService {
         ...(normalizedSubgroupId ? { subgroupId: normalizedSubgroupId } : {}),
         ...(normalizedStatus && normalizedStatus !== "ALL"
           ? { status: normalizedStatus }
+          : {}),
+        ...(normalizedProductType && normalizedProductType !== "ALL"
+          ? { productType: normalizedProductType }
           : {}),
         ...(normalizedName
           ? {
@@ -1483,6 +1491,44 @@ export class ProductsService {
     });
 
     return this.mapProduct(updatedProduct, branchConfig);
+  }
+
+  async updateProductType(productId: string, payload: UpdateProductTypeDto) {
+    const { product } = await this.loadScopedProduct(
+      productId,
+      payload.sourceSystem,
+      payload.sourceTenantId,
+    );
+    const productType = normalizeText(payload.productType) || "GOODS";
+    const disablesInventory = ["SERVICE", "PACKAGE"].includes(productType);
+    const updatedProduct = await this.prisma.product.update({
+      where: { id: product.id },
+      data: {
+        productType,
+        ...(disablesInventory
+          ? {
+              tracksInventory: false,
+              usesColorSize: false,
+              usesLotControl: false,
+              usesExpirationControl: false,
+              allowsNegativeStock: false,
+            }
+          : {}),
+        updatedBy: payload.requestedBy || null,
+      },
+      include: {
+        company: true,
+        group: true,
+        subgroup: true,
+      },
+    });
+    return this.mapProduct(
+      updatedProduct,
+      await this.loadBranchConfigByCode(
+        updatedProduct.companyId,
+        updatedProduct.branchCode,
+      ),
+    );
   }
 
   async activate(productId: string, payload: ChangeProductStatusDto) {

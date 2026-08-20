@@ -183,6 +183,9 @@ async function resetDatabase(prisma) {
   await prisma.screenParameter.deleteMany();
   await prisma.cashOperatorPolicy.deleteMany();
   await prisma.financeAccessAuditEvent.deleteMany();
+  await prisma.financialNotificationDelivery.deleteMany();
+  await prisma.financialNotificationPreference.deleteMany();
+  await prisma.financialNotificationAuditEvent.deleteMany();
   await prisma.financeAccessAssignment.deleteMany();
   await prisma.financeAccessSubject.deleteMany();
   await prisma.productSubgroup.deleteMany();
@@ -1312,6 +1315,60 @@ async function main() {
     });
 
     assert.equal(productWithDefaultNegativeStock.allowsNegativeStock, true);
+
+    const financialService = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "SERVICO SEM ESTOQUE",
+      internalCode: "9008",
+      productType: "SERVICE",
+      tracksInventory: true,
+      usesLotControl: true,
+      allowsNegativeStock: true,
+      currentStock: 0,
+      minimumStock: 0,
+    });
+    assert.equal(financialService.productType, "SERVICE");
+    assert.equal(financialService.tracksInventory, false);
+    assert.equal(financialService.usesLotControl, false);
+    assert.equal(financialService.allowsNegativeStock, false);
+    const serviceCatalog = await productsService.list({
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      sourceBranchCode: 1,
+      productType: "SERVICE",
+      status: "ACTIVE",
+    });
+    assert.deepEqual(
+      serviceCatalog.map((item) => item.id),
+      [financialService.id],
+    );
+
+    const legacyPackageProduct = await productsService.create({
+      requestedBy: "CODEX",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT_ESCOLA_TESTE",
+      name: "PACOTE PETSHOP - TESTE",
+      internalCode: "9009",
+      productType: "SERVICE",
+      salePrice: 250,
+      notes: "DADOS QUE DEVEM SER PRESERVADOS",
+    });
+    const convertedPackage = await productsService.updateProductType(
+      legacyPackageProduct.id,
+      {
+        requestedBy: "CODEX",
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT_ESCOLA_TESTE",
+        productType: "PACKAGE",
+      },
+    );
+    assert.equal(convertedPackage.productType, "PACKAGE");
+    assert.equal(convertedPackage.internalCode, "9009");
+    assert.equal(convertedPackage.salePrice, 250);
+    assert.equal(convertedPackage.notes, "DADOS QUE DEVEM SER PRESERVADOS");
+    assert.equal(convertedPackage.tracksInventory, false);
 
     const manualEntry = await productsService.createManualStockMovement(
       productWithCodes.id,

@@ -53,6 +53,10 @@ export class ListProductsDto {
 
   @IsOptional()
   @IsString()
+  productType?: string;
+
+  @IsOptional()
+  @IsString()
   search?: string;
 
   @IsOptional()
@@ -208,6 +212,22 @@ export class UpdateProductClassificationDto {
   @IsOptional()
   @IsString()
   subgroupId?: string | null;
+}
+
+export class UpdateProductTypeDto {
+  @IsOptional()
+  @IsString()
+  requestedBy?: string;
+
+  @IsString()
+  sourceSystem!: string;
+
+  @IsString()
+  sourceTenantId!: string;
+
+  @IsString()
+  @IsIn(["GOODS", "PRODUCT", "SERVICE", "PACKAGE"])
+  productType!: string;
 }
 
 export class SaveProductDto {

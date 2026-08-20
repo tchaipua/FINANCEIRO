@@ -25,6 +25,26 @@ import { authorizeSuperTefCardPayment } from '@/app/lib/supertef-payment';
 import { createAndDispatchPrintJob } from '@/app/lib/local-print-agent';
 import { withFinanceBasePath } from '@/app/lib/public-path';
 
+const CENTRAL_API_BASE_URL = String(
+  process.env.NEXT_PUBLIC_MSINFOR_CENTRAL_API_URL || 'http://localhost:3201/api/v1',
+).replace(/\/+$/, '');
+
+function resolvePopupLogoUrl(value?: string | null) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (/^(?:data:|https?:\/\/|blob:)/i.test(normalized)) return normalized;
+
+  const key = normalized.replace(/^\/+/, '');
+  if (/^logos\/filiais\//i.test(key)) {
+    return `${CENTRAL_API_BASE_URL}/public/branch-logo?key=${encodeURIComponent(key)}`;
+  }
+  if (/^logos\/empresas\//i.test(key)) {
+    return `${CENTRAL_API_BASE_URL}/public/company-logo?key=${encodeURIComponent(key)}`;
+  }
+
+  return withFinanceBasePath(normalized.startsWith('/') ? normalized : `/${normalized}`);
+}
+
 type ProductItem = {
   id: string;
   name: string;
@@ -42,6 +62,8 @@ type ProductItem = {
   salePrice?: number | null;
   inventorySituation: 'OK' | 'LOW' | 'OUT' | 'WITHOUT_CONTROL';
 };
+
+type ProductLookupTypeFilter = 'ALL' | 'PRODUCTS' | 'SERVICES';
 
 type SaleCompanyItem = {
   id: string;
@@ -331,13 +353,13 @@ type SubmitSaleOptions = {
 
 const SCREEN_ID = 'FINANCEIRO_VENDAS_PDV_GERAL';
 const EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS';
-const V2_SCREEN_ID = 'FINANCEIRO_VENDAS_2_PDV_GERAL';
-const V2_EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS_2';
+const V2_SCREEN_ID = 'FINANCEIRO_VENDAS_PRODUTOS_SERVICOS_PDV_GERAL';
+const V2_EMBEDDED_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS_PRODUTOS_SERVIÇOS';
 const CHECKOUT_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS_FINALIZACAO';
 const QUICK_CASH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA';
 const QUICK_CASH_PEOPLE_SEARCH_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_ATALHO_A_VISTA_PESQUISAR_PESSOAS';
 const PIX_QR_CODE_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_PIX_SICOOB_QRCODE';
-const PRODUCT_LOOKUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_2_PESQUISAR_PRODUTO';
+const PRODUCT_LOOKUP_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_PRODUTOS_SERVIÇOS_PESQUISAR_PRODUTO';
 const PRODUCT_IMAGE_SELECTION_SCREEN_ID = 'FINANCEIRO_ESTOQUE_SELECIONAR_IMAGEM';
 const VP_CUSTOMER_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_VP_SELECIONAR_CLIENTE';
 const VP_CONFIRMATION_SCREEN_ID = 'POPUP_PRINCIPAL_FINANCEIRO_VENDAS_VP_CONFIRMAR_VENDA';
@@ -712,9 +734,13 @@ function isGenericProduct(product: ProductItem) {
   return String(product.internalCode || '').trim() === '1';
 }
 
-function isPhysicalSaleProduct(product: ProductItem) {
+function isProductOrServiceSaleItem(product: ProductItem) {
   const productType = String(product.productType || 'GOODS').trim().toUpperCase();
-  return !['SERVICE', 'PACKAGE'].includes(productType);
+  return productType !== 'PACKAGE';
+}
+
+function isServiceSaleItem(product: ProductItem) {
+  return String(product.productType || '').trim().toUpperCase() === 'SERVICE';
 }
 
 function parseProductSearchCommand(value: string) {
@@ -1110,6 +1136,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const [productLookupOpen, setProductLookupOpen] = useState(false);
   const [productLookupSearch, setProductLookupSearch] = useState('');
   const [productLookupQuantity, setProductLookupQuantity] = useState(1);
+  const [productLookupTypeFilter, setProductLookupTypeFilter] = useState<ProductLookupTypeFilter>('ALL');
+  const [productLookupLogoFailed, setProductLookupLogoFailed] = useState(false);
   const [genericProductDraft, setGenericProductDraft] = useState<GenericProductDraft | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutTab, setCheckoutTab] = useState<CheckoutTab>('payment');
@@ -1143,8 +1171,6 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     : runtimeContext.embedded
       ? EMBEDDED_SCREEN_ID
       : SCREEN_ID;
-  const productsOnly = screenId === V2_EMBEDDED_SCREEN_ID;
-
   const focusProductSearchInput = useCallback(() => {
     window.setTimeout(() => {
       productSearchInputRef.current?.focus();
@@ -1303,14 +1329,14 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         }
       }
 
-      setProducts(productsOnly ? loadedProducts.filter(isPhysicalSaleProduct) : loadedProducts);
+      setProducts(loadedProducts.filter(isProductOrServiceSaleItem));
       setBranchSaleConfig(nextBranchSaleConfig);
     } catch (error) {
       setErrorMessage(
         getFriendlyRequestErrorMessage(error, 'Não foi possível carregar produtos.'),
       );
     }
-  }, [canLoadContext, productsOnly, queryString, runtimeContext]);
+  }, [canLoadContext, queryString, runtimeContext]);
 
   useEffect(() => {
     const handleSalesParametersUpdate = async (event: MessageEvent) => {
@@ -1408,9 +1434,9 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     if (!saleDraftStorageKey) return;
 
     const draftItems = readSaleDraftCart(saleDraftStorageKey);
-    setCartItems(productsOnly ? draftItems.filter((item) => isPhysicalSaleProduct(item.product)) : draftItems);
+    setCartItems(draftItems.filter((item) => isProductOrServiceSaleItem(item.product)));
     setHydratedSaleDraftKey(saleDraftStorageKey);
-  }, [productsOnly, saleDraftStorageKey]);
+  }, [saleDraftStorageKey]);
 
   useEffect(() => {
     if (!saleDraftStorageKey || hydratedSaleDraftKey !== saleDraftStorageKey) return;
@@ -1426,9 +1452,16 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const productLookupResults = useMemo(() => {
     const search = productLookupSearch.trim().toUpperCase();
     const searchDigits = productLookupSearch.replace(/\D+/g, '');
-    if (!search) return products.slice(0, 80);
+    const filteredByType = products.filter((product) =>
+      productLookupTypeFilter === 'SERVICES'
+        ? isServiceSaleItem(product)
+        : productLookupTypeFilter === 'PRODUCTS'
+          ? !isServiceSaleItem(product)
+          : true,
+    );
+    if (!search) return filteredByType.slice(0, 80);
 
-    return products
+    return filteredByType
       .filter((product) => {
         const searchableValues = [
           product.name,
@@ -1448,7 +1481,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         );
       })
       .slice(0, 80);
-  }, [productLookupSearch, products]);
+  }, [productLookupSearch, productLookupTypeFilter, products]);
 
   const cartTotals = useMemo(() => {
     const subtotal = cartItems.reduce(
@@ -1463,11 +1496,30 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
         )
       : 0;
     const total = Math.max(0, subtotal - itemDiscount - parseDecimal(saleDiscount));
+    const categoryTotals = cartItems.reduce(
+      (totals, item) => {
+        const quantity = parseDecimal(item.quantity);
+        const unitPrice = parseDecimal(item.unitPrice);
+        const unitDiscount = branchSaleConfig.allowSaleItemDiscount ? parseDecimal(item.discountAmount) : 0;
+        const lineTotal = Math.max(0, quantity * (unitPrice - unitDiscount));
+
+        if (isServiceSaleItem(item.product)) {
+          totals.services += lineTotal;
+        } else {
+          totals.products += lineTotal;
+        }
+
+        return totals;
+      },
+      { products: 0, services: 0 },
+    );
 
     return {
       subtotal,
       discount: itemDiscount + parseDecimal(saleDiscount),
       total,
+      productsTotal: categoryTotals.products,
+      servicesTotal: categoryTotals.services,
       paymentTotal: paymentRows.reduce((sum, payment) => sum + parseDecimal(payment.amount), 0),
       immediateTotal: paymentRows
         .filter((payment) => isImmediatePayment(payment.paymentMethod))
@@ -1652,8 +1704,8 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   }, []);
 
   const addProductToCart = useCallback((product: ProductItem, quantity = 1) => {
-    if (productsOnly && !isPhysicalSaleProduct(product)) {
-      setErrorMessage('Esta tela aceita somente produtos. Serviços e pacotes devem ser vendidos pelos módulos de origem.');
+    if (!isProductOrServiceSaleItem(product)) {
+      setErrorMessage('Esta tela aceita produtos e serviços. Pacotes devem ser vendidos pelo módulo de pacotes.');
       return;
     }
 
@@ -1722,7 +1774,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
     setSelectedCartLineId(lineId);
     setErrorMessage('');
     focusProductSearchInput();
-  }, [branchSaleConfig.groupSameProduct, cartItems, focusProductSearchInput, getNextCartItemNumber, productsOnly]);
+  }, [branchSaleConfig.groupSameProduct, cartItems, focusProductSearchInput, getNextCartItemNumber]);
 
   const addGenericProductToCart = useCallback(() => {
     if (!genericProductDraft) return;
@@ -1778,6 +1830,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
   const openProductLookup = useCallback((quantity: number, searchTerm: string) => {
     setProductLookupQuantity(quantity > 0 ? quantity : 1);
     setProductLookupSearch(searchTerm.trim() === '0' ? '' : searchTerm.trim());
+    setProductLookupTypeFilter('ALL');
     setProductLookupOpen(true);
     setErrorMessage('');
   }, []);
@@ -3247,7 +3300,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
               {activeCartItem ? (
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-baseline justify-between gap-4 text-[clamp(1.35rem,3vw,2.7rem)] font-black uppercase leading-none tracking-tight">
-                    <span className="min-w-0 flex-1 truncate">
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      title={activeCartItem.description || activeCartItem.product.name}
+                    >
                       {activeCartItem.description || activeCartItem.product.name}
                     </span>
                     <span className="shrink-0 whitespace-nowrap tracking-normal text-blue-100">
@@ -3266,23 +3322,23 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
             </div>
 
             <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(230px,0.72fr)_minmax(310px,0.9fr)_minmax(460px,1.38fr)]">
-              <section className="flex min-h-[250px] flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex h-full min-h-[210px] w-full items-center justify-center rounded-xl bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f8fafc_58%,_#e2e8f0_100%)]">
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-5 text-center">
-                    {vendas2ProductImageElement ? (
+              <section className="flex min-h-[250px] flex-col items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex h-full min-h-[210px] w-full items-start justify-center rounded-xl bg-[radial-gradient(circle_at_center,_#ffffff_0%,_#f8fafc_58%,_#e2e8f0_100%)] p-3">
+                  <div className="flex h-full w-full flex-col items-center justify-start gap-3 text-center">
+                    {activeCartItem && vendas2ProductImageElement ? (
                       branchSaleConfig.allowProductImageEdit ? (
                         <button
                           type="button"
                           onClick={() => void openVendas2ProductImageSelection()}
                           className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet-500"
-                          title="Alterar foto do produto"
-                          aria-label={`Alterar foto do produto ${activeCartItem?.description || activeCartItem?.product.name || ''}`}
+                          title="Alterar foto do produto ou serviço"
+                          aria-label={`Alterar foto do produto ou serviço ${activeCartItem.description || activeCartItem.product.name || ''}`}
                         >
                           {vendas2ProductImageElement}
                         </button>
                       ) : vendas2ProductImageElement
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-4 text-center">
+                    ) : !activeCartItem ? (
+                      <div className="flex flex-col items-center justify-start gap-3 text-center">
                         <img
                           src={withFinanceBasePath('/logo-msinfor.jpg')}
                           alt="Logotipo da tela de login"
@@ -3293,14 +3349,31 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                           <div>LIBERADO</div>
                         </div>
                       </div>
+                    ) : (
+                      <div className="flex h-[240px] w-[240px] items-center justify-center rounded-[32px] border border-slate-200 bg-white p-5 text-[10px] font-black uppercase tracking-[0.08em] text-slate-400">
+                        Imagem não disponível
+                      </div>
                     )}
+
+                    {cartItems.length > 0 ? (
+                      <div className="flex w-full flex-col gap-2">
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-center shadow-sm">
+                          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-blue-700">Total produtos</div>
+                          <div className="mt-1 text-lg font-black leading-none text-[#061c3f]">{formatCurrency(cartTotals.productsTotal)}</div>
+                        </div>
+                        <div className="rounded-xl border border-violet-200 bg-violet-50 px-2 py-2 text-center shadow-sm">
+                          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-violet-700">Total serviços</div>
+                          <div className="mt-1 text-lg font-black leading-none text-[#061c3f]">{formatCurrency(cartTotals.servicesTotal)}</div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </section>
 
               <section className="min-h-0 overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <label className="block">
-                  <span className="text-xs font-black text-[#061c3f]">Código de Barras / Produto</span>
+                  <span className="text-xs font-black text-[#061c3f]">Código de Barras / Produto / Serviço</span>
                   <div className="mt-2 flex overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
                     <input
                       ref={productSearchInputRef}
@@ -3445,7 +3518,12 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                       >
                         <div className="font-black text-blue-700">{item.itemNumber}</div>
                         <div className="min-w-0">
-                          <div className="truncate font-black text-slate-900">{item.description || item.product.name}</div>
+                          <div
+                            className="truncate font-black text-slate-900"
+                            title={item.description || item.product.name}
+                          >
+                            {item.description || item.product.name}
+                          </div>
                           <div className="mt-1 flex min-w-0 items-center gap-2 truncate text-[9px] font-bold uppercase tracking-[0.1em]">
                             <span className="shrink-0 text-slate-400">{item.product.internalCode || item.product.sku || 'PRODUTO'}</span>
                             <span className={`truncate ${stockTextTone}`}>ESTOQUE: {getStockLabel(item.product)}</span>
@@ -3637,9 +3715,10 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                                 value={item.description}
                                 onChange={(event) => updateCartItem(item.lineId, 'description', event.target.value)}
                                 placeholder="DESCRIÇÃO DO ITEM"
+                                title={item.description || item.product.name}
                               />
                             ) : (
-                              <div className="truncate text-sm font-black text-slate-900">{itemName}</div>
+                              <div className="truncate text-sm font-black text-slate-900" title={itemName}>{itemName}</div>
                             )}
                             <div className="mt-1 truncate text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                               {genericItem ? 'PRODUTO GENÉRICO' : item.product.internalCode || item.product.sku || 'PRODUTO'} · Estoque: {getStockLabel(item.product)}
@@ -5063,30 +5142,57 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
       {productLookupOpen && (
         <section className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
           <div className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 pb-4 pt-5">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm">
-                  {runtimeContext.logoUrl ? (
+            <div className="border-b border-blue-900/30 bg-gradient-to-r from-[#0b3d91] via-[#1556b8] to-[#0b3d91] px-5 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/60 bg-white shadow-sm">
+                  {resolvePopupLogoUrl(runtimeContext.logoUrl) && !productLookupLogoFailed ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={runtimeContext.logoUrl} alt="Logotipo" className="h-full w-full object-contain p-1" />
+                    <img
+                      src={resolvePopupLogoUrl(runtimeContext.logoUrl) || undefined}
+                      alt="Logotipo da empresa e filial"
+                      onError={() => setProductLookupLogoFailed(true)}
+                      className="h-full w-full object-contain p-1"
+                    />
                   ) : (
-                    <span className="text-[10px] font-black tracking-[0.14em] text-blue-700">MS</span>
+                    <img
+                      src={withFinanceBasePath('/logo-msinfor.jpg')}
+                      alt="Logotipo MSINFOR"
+                      className="h-full w-full object-contain p-1"
+                    />
                   )}
                 </div>
-                <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Pesquisa de produto</div>
-                <h2 className="mt-1 text-xl font-black text-slate-950">Selecionar produto</h2>
-                </div>
+
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  aria-pressed={productLookupTypeFilter === 'PRODUCTS'}
+                  onClick={() => setProductLookupTypeFilter((current) => (current === 'PRODUCTS' ? 'ALL' : 'PRODUCTS'))}
+                  className={`rounded-xl border px-3 py-2 text-left transition ${productLookupTypeFilter === 'PRODUCTS' ? 'border-emerald-200 bg-emerald-500 text-white shadow-sm' : 'border-white/70 bg-white text-blue-900'}`}
+                >
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em]">Produto</div>
+                  <div className="mt-1 text-xs font-bold">{productLookupTypeFilter === 'PRODUCTS' ? 'Somente produtos' : 'Produtos ativos'}</div>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={productLookupTypeFilter === 'SERVICES'}
+                  onClick={() => setProductLookupTypeFilter((current) => (current === 'SERVICES' ? 'ALL' : 'SERVICES'))}
+                  className={`rounded-xl border px-3 py-2 text-left transition ${productLookupTypeFilter === 'SERVICES' ? 'border-emerald-200 bg-emerald-500 text-white shadow-sm' : 'border-white/70 bg-white text-blue-900'}`}
+                >
+                  <div className="text-[10px] font-black uppercase tracking-[0.16em]">Serviço</div>
+                  <div className="mt-1 text-xs font-bold">{productLookupTypeFilter === 'SERVICES' ? 'Somente serviços' : 'Serviços ativos'}</div>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setProductLookupOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
-                title="Fechar"
-                aria-label="Fechar"
-              >
-                ×
-              </button>
+
+                <button
+                  type="button"
+                  onClick={() => setProductLookupOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-300 bg-red-600 text-xl font-black text-white shadow-sm transition hover:bg-red-700"
+                  title="Fechar"
+                  aria-label="Fechar"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             <div className="grid gap-2 px-5 pt-4 lg:grid-cols-[1fr_auto]">
@@ -5095,7 +5201,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                 value={productLookupSearch}
                 onChange={(event) => setProductLookupSearch(event.target.value)}
                 onKeyDown={handleProductLookupKeyDown}
-                placeholder="Pesquisar por nome, código interno, SKU ou barras"
+                placeholder="Pesquisar produto ou serviço por nome, código, SKU ou barras"
               />
               <label className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-blue-700">
                 <span className="shrink-0">Qtd:</span>
@@ -5108,7 +5214,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                   onChange={(event) => setProductLookupQuantity(Number(event.target.value) || 0)}
                   onBlur={() => setProductLookupQuantity((current) => (current > 0 ? current : 1))}
                   className="w-20 min-w-0 rounded-lg border border-blue-200 bg-white px-2 py-1 text-center text-sm font-black text-blue-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                  aria-label="Quantidade do produto"
+                  aria-label="Quantidade do produto ou serviço"
                 />
               </label>
             </div>
@@ -5123,9 +5229,12 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-black text-slate-900">{product.name}</div>
-                      <div className="mt-1 truncate text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                        {product.internalCode || product.sku || product.barcode || 'SEM CÓDIGO'}
+                      <div className="truncate text-sm font-black text-slate-900" title={product.name}>{product.name}</div>
+                      <div className="mt-1 flex min-w-0 items-center gap-2 truncate text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black tracking-[0.1em] ${isServiceSaleItem(product) ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
+                          {isServiceSaleItem(product) ? 'SERVIÇO' : 'PRODUTO'}
+                        </span>
+                        <span className="truncate">{product.internalCode || product.sku || product.barcode || 'SEM CÓDIGO'}</span>
                       </div>
                     </div>
                     <div className="text-right">
@@ -5140,7 +5249,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
 
               {!productLookupResults.length && (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">
-                  Nenhum produto encontrado.
+                  Nenhum produto ou serviço encontrado.
                 </div>
               )}
             </div>
@@ -5149,7 +5258,7 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
                 screenId={PRODUCT_LOOKUP_SCREEN_ID}
                 className="max-w-full justify-end rounded-xl bg-white px-2 py-1 text-right"
                 originText="Origem: Sistema Financeiro - caminho físico: C:/Sistemas/IA/Financeiro/frontend/src/app/vendas/page.tsx"
-                auditText="Popup de pesquisa de produtos da tela Vendas 2, com quantidade informada antes da seleção do produto."
+                auditText="Popup de pesquisa de produtos e serviços da tela PRINCIPAL_FINANCEIRO_VENDAS_PRODUTOS_SERVIÇOS, com filtros por tipo e quantidade informada antes da seleção."
                 sqlText={auditSql}
               />
             </div>
@@ -5428,5 +5537,5 @@ export function SalesWorkspace({ visualVariant = 'classic' }: { visualVariant?: 
 }
 
 export default function SalesPage() {
-  return <SalesWorkspace />;
+  return <SalesWorkspace visualVariant="v2" />;
 }

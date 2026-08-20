@@ -22,6 +22,7 @@ export type CentralCommerceConfiguration = {
   groupSameProduct: boolean;
   allowProductImageEdit: boolean;
   requirePasswordToRemoveSaleItems: boolean;
+  defaultSalesScreenId?: string;
   businessType: string;
 };
 

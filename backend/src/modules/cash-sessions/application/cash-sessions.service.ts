@@ -1623,6 +1623,7 @@ export class CashSessionsService {
       where: {
         id: normalizedMovementId,
         companyId: company.id,
+        branchCode: this.getOperationalBranchCode(),
         canceledAt: null,
       },
       include: {
@@ -1649,6 +1650,7 @@ export class CashSessionsService {
       const settlement = await this.prisma.installmentSettlement.findFirst({
         where: {
           companyId: company.id,
+          branchCode: this.getOperationalBranchCode(),
           cashSessionId: movement.cashSessionId,
           installmentId: String(movement.referenceId || ""),
           paymentMethod: movementPaymentMethod,
@@ -1657,6 +1659,11 @@ export class CashSessionsService {
           ...(movement.bankMovementGroupId
             ? { bankMovementGroupId: movement.bankMovementGroupId }
             : {}),
+        },
+        include: {
+          installment: {
+            include: { title: true },
+          },
         },
         orderBy: [{ settledAt: "desc" }, { createdAt: "desc" }],
       });
@@ -1785,7 +1792,22 @@ export class CashSessionsService {
         title: "MOVIMENTO DE CAIXA CANCELADO",
         message: `O MOVIMENTO ${movement.description || movement.id} FOI CANCELADO.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { movementId: movement.id, reason, requestedBy: canceledBy },
+        metadata: {
+          sourceEntityType: movement.referenceType || "CASH_MOVEMENT",
+          sourceEntityId: movement.referenceId || movement.id,
+          sourceEntityName: movement.description || movement.id,
+          businessKey: `CASH_MOVEMENT:${movement.id}`,
+          movementId: movement.id,
+          movementType: movement.movementType,
+          description: movement.description,
+          amount,
+          currentAmount: amount,
+          paymentMethod: movement.paymentMethod,
+          referenceType: movement.referenceType,
+          referenceId: movement.referenceId,
+          reason,
+          requestedBy: canceledBy,
+        },
       }).catch(() => undefined);
 
       return {
@@ -1886,7 +1908,22 @@ export class CashSessionsService {
       title: "MOVIMENTO DE CAIXA CANCELADO",
       message: `O MOVIMENTO ${movement.description || movement.id} FOI CANCELADO.`,
       actionUrl: "/principal/notificacoes",
-      metadata: { movementId: movement.id, reason: payload.reason || payload.notes || null, requestedBy: canceledBy },
+      metadata: {
+        sourceEntityType: movement.referenceType || "CASH_MOVEMENT",
+        sourceEntityId: movement.referenceId || movement.id,
+        sourceEntityName: movement.description || movement.id,
+        businessKey: `CASH_MOVEMENT:${movement.id}`,
+        movementId: movement.id,
+        movementType: movement.movementType,
+        description: movement.description,
+        amount,
+        currentAmount: amount,
+        paymentMethod: movement.paymentMethod,
+        referenceType: movement.referenceType,
+        referenceId: movement.referenceId,
+        reason: payload.reason || payload.notes || null,
+        requestedBy: canceledBy,
+      },
     }).catch(() => undefined);
 
     return {
@@ -2146,6 +2183,7 @@ export class CashSessionsService {
     const settlements = await this.prisma.installmentSettlement.findMany({
       where: {
         companyId: company.id,
+        branchCode: this.getOperationalBranchCode(),
         canceledAt: null,
         OR: legacyWhere
           ? [legacyWhere]
@@ -2155,7 +2193,9 @@ export class CashSessionsService {
             ],
       },
       include: {
-        installment: true,
+        installment: {
+          include: { title: true },
+        },
       },
       orderBy: [{ settledAt: "desc" }, { createdAt: "desc" }],
     });
@@ -2168,6 +2208,7 @@ export class CashSessionsService {
       const latestSettlement = await this.prisma.installmentSettlement.findFirst({
         where: {
           companyId: company.id,
+          branchCode: this.getOperationalBranchCode(),
           installmentId: settlement.installmentId,
           canceledAt: null,
         },
@@ -2190,16 +2231,20 @@ export class CashSessionsService {
     const result = await this.prisma.$transaction(async (tx: any) => {
       let reversedAmount = 0;
       let reversedCount = 0;
+      let restoredOpenAmount = 0;
 
       for (const settlement of settlements) {
         const currentSettlement = await tx.installmentSettlement.findFirst({
           where: {
             id: settlement.id,
             companyId: company.id,
+            branchCode: this.getOperationalBranchCode(),
             canceledAt: null,
           },
           include: {
-            installment: true,
+            installment: {
+              include: { title: true },
+            },
           },
         });
 
@@ -2408,13 +2453,35 @@ export class CashSessionsService {
           reversedAmount + Number(currentSettlement.receivedAmount || 0),
         );
         reversedCount += 1;
+        restoredOpenAmount = roundMoney(restoredOpenAmount + restoreOpenAmount);
       }
 
       return {
         reversedAmount,
         reversedCount,
+        restoredOpenAmount,
       };
     });
+
+    const firstSettlement = settlements[0];
+    const firstInstallment = firstSettlement?.installment;
+    const firstTitle = firstInstallment?.title;
+    const settlementInstallments = settlements.map((settlement: any) => ({
+      installmentId: settlement.installmentId,
+      installmentNumber: settlement.installment?.installmentNumber,
+      installmentCount: settlement.installment?.installmentCount,
+      customerName: settlement.installment?.payerNameSnapshot || null,
+      payerNameSnapshot: settlement.installment?.payerNameSnapshot || null,
+      titleId: settlement.installment?.titleId || null,
+      titleName: settlement.installment?.title?.sourceEntityName || null,
+      saleNumber:
+        normalizeText(settlement.installment?.title?.sourceEntityType) === "SALE"
+          ? settlement.installment?.title?.sourceEntityName || null
+          : null,
+      amount: settlement.installment?.amount,
+      dueDate: settlement.installment?.dueDate,
+      reversedAmount: settlement.receivedAmount,
+    }));
 
     void this.financialNotifications.dispatch({
       eventType: "RECEIVABLE_SETTLEMENT_REVERSED",
@@ -2422,7 +2489,34 @@ export class CashSessionsService {
       title: "RECEBIMENTO ESTORNADO",
       message: `${result.reversedCount} BAIXA(S) DO CONTAS A RECEBER FORAM ESTORNADAS, NO TOTAL DE R$ ${result.reversedAmount.toFixed(2)}.`,
       actionUrl: "/principal/notificacoes",
-      metadata: { settlementGroupId: normalizedSettlementGroupId, reversedCount: result.reversedCount, reversedAmount: result.reversedAmount, reason: payload.reason || payload.notes || null, requestedBy: canceledBy },
+      metadata: {
+        sourceEntityType: firstTitle?.sourceEntityType || null,
+        sourceEntityId: firstTitle?.sourceEntityId || firstTitle?.id || null,
+        sourceEntityName: firstTitle?.sourceEntityName || null,
+        businessKey: firstTitle?.businessKey || null,
+        customerName: firstInstallment?.payerNameSnapshot || null,
+        payerNameSnapshot: firstInstallment?.payerNameSnapshot || null,
+        saleNumber:
+          normalizeText(firstTitle?.sourceEntityType) === "SALE"
+            ? firstTitle?.sourceEntityName || null
+            : null,
+        titleId: firstTitle?.id || firstInstallment?.titleId || null,
+        titleName: firstTitle?.sourceEntityName || firstTitle?.description || null,
+        receivableTitleId: firstInstallment?.titleId || null,
+        installmentId: settlements.length === 1 ? firstSettlement?.installmentId : null,
+        installmentNumber: settlements.length === 1 ? firstInstallment?.installmentNumber : null,
+        installmentCount: settlements.length === 1 ? firstInstallment?.installmentCount : settlements.length,
+        amount: result.reversedAmount,
+        currentAmount: result.reversedAmount,
+        receivedAmount: result.reversedAmount,
+        reversedAmount: result.reversedAmount,
+        reversedCount: result.reversedCount,
+        restoredOpenAmount: result.restoredOpenAmount,
+        settlementGroupId: normalizedSettlementGroupId,
+        installments: settlementInstallments,
+        reason: payload.reason || payload.notes || null,
+        requestedBy: canceledBy,
+      },
     }).catch(() => undefined);
 
     return {
@@ -2944,11 +3038,14 @@ export class CashSessionsService {
     const settlement = await this.prisma.installmentSettlement.findFirst({
       where: {
         companyId: company.id,
+        branchCode: this.getOperationalBranchCode(),
         installmentId: normalizedInstallmentId,
         canceledAt: null,
       },
       include: {
-        installment: true,
+        installment: {
+          include: { title: true },
+        },
       },
       orderBy: [{ settledAt: "desc" }, { createdAt: "desc" }],
     });
@@ -3173,7 +3270,41 @@ export class CashSessionsService {
       title: "RECEBIMENTO DE PARCELA ESTORNADO",
       message: `A BAIXA DA PARCELA ${settlement.installmentId} NO VALOR DE R$ ${Number(settlement.receivedAmount || 0).toFixed(2)} FOI ESTORNADA.`,
       actionUrl: "/principal/notificacoes",
-      metadata: { settlementId: settlement.id, installmentId: settlement.installmentId, restoredOpenAmount: restoreOpenAmount, reason: payload.reason || payload.notes || null, requestedBy: canceledBy },
+      metadata: {
+        sourceEntityType: settlement.installment?.title?.sourceEntityType || null,
+        sourceEntityId:
+          settlement.installment?.title?.sourceEntityId ||
+          settlement.installment?.title?.id ||
+          null,
+        sourceEntityName: settlement.installment?.title?.sourceEntityName || null,
+        businessKey: settlement.installment?.title?.businessKey || null,
+        customerName: settlement.installment?.payerNameSnapshot || null,
+        payerNameSnapshot: settlement.installment?.payerNameSnapshot || null,
+        saleNumber:
+          normalizeText(settlement.installment?.title?.sourceEntityType) === "SALE"
+            ? settlement.installment?.title?.sourceEntityName || null
+            : null,
+        titleId: settlement.installment?.titleId || null,
+        titleName:
+          settlement.installment?.title?.sourceEntityName ||
+          settlement.installment?.title?.description ||
+          null,
+        receivableTitleId: settlement.installment?.titleId || null,
+        installmentId: settlement.installmentId,
+        installmentNumber: settlement.installment?.installmentNumber || null,
+        installmentCount: settlement.installment?.installmentCount || null,
+        amount: settlement.installment?.amount || null,
+        currentAmount: settlement.installment?.amount || null,
+        dueDate: settlement.installment?.dueDate || null,
+        currentDueDate: settlement.installment?.dueDate || null,
+        receivedAmount: settlement.receivedAmount,
+        reversedAmount: settlement.receivedAmount,
+        reversedCount: 1,
+        restoredOpenAmount: restoreOpenAmount,
+        settlementId: settlement.id,
+        reason: payload.reason || payload.notes || null,
+        requestedBy: canceledBy,
+      },
     }).catch(() => undefined);
 
     return {

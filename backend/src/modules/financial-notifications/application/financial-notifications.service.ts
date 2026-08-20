@@ -8,6 +8,10 @@ import {
   getFinancialNotificationEvent,
 } from "../domain/financial-notification-events";
 import {
+  formatFinancialNotificationMessage,
+  sanitizeFinancialNotificationMetadata,
+} from "./financial-notification-message";
+import {
   DispatchFinancialNotificationDto,
   SaveFinancialNotificationPreferencesDto,
   SimulateFinancialNotificationDto,
@@ -28,6 +32,18 @@ function requiredContext() {
 function assertAdmin() {
   if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
     throw new ForbiddenException("PERFIL ADMINISTRADOR FINANCEIRO É OBRIGATÓRIO.");
+  }
+}
+
+function readPersistedMetadata(metadataJson: string | null | undefined) {
+  if (!metadataJson) return undefined;
+  try {
+    const parsed = JSON.parse(metadataJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -172,6 +188,12 @@ export class FinancialNotificationsService {
         return Array.isArray(branchCodes) && branchCodes.includes(context.sourceBranchCode);
       } catch { return false; }
     })) {
+      const metadata = sanitizeFinancialNotificationMetadata(input.metadata);
+      const message = formatFinancialNotificationMessage(
+        input.eventType,
+        metadata,
+        input.message,
+      );
       let delivery = await this.prisma.financialNotificationDelivery.upsert({
         where: { companyId_branchCode_sourceSystem_sourceTenantId_subjectId_eventKey: {
           companyId: context.companyId, branchCode: context.sourceBranchCode,
@@ -183,8 +205,8 @@ export class FinancialNotificationsService {
           sourceSystem: context.sourceSystem, sourceTenantId: context.sourceTenantId,
           subjectId: preference.subjectId, eventType: input.eventType,
           eventKey: input.eventKey, title: input.title.toUpperCase(),
-          message: input.message.toUpperCase(), actionUrl: input.actionUrl || "/principal/notificacoes",
-          metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
+          message, actionUrl: input.actionUrl || "/principal/notificacoes",
+          metadataJson: metadata ? JSON.stringify(metadata) : null,
           sendInternal: preference.sendInternal, sendEmail: preference.sendEmail,
           sendTelegram: preference.sendTelegram,
           createdBy: context.sourceUserId, updatedBy: context.sourceUserId,
@@ -195,6 +217,7 @@ export class FinancialNotificationsService {
         results.push(delivery);
         continue;
       }
+      const persistedMetadata = readPersistedMetadata(delivery.metadataJson);
       try {
         const callback = await sendFinancialNotificationToSource({
           deliveryId: delivery.id, eventType: delivery.eventType,
@@ -203,7 +226,8 @@ export class FinancialNotificationsService {
           recipientEmail: preference.subject.email,
           sendInternal: delivery.sendInternal, sendEmail: delivery.sendEmail,
           sendTelegram: delivery.sendTelegram, actionUrl: delivery.actionUrl,
-          metadata: input.metadata, simulationEmailOverride: input.simulationEmailOverride,
+          metadata: persistedMetadata,
+          simulationEmailOverride: input.simulationEmailOverride,
         });
         delivery = await this.prisma.financialNotificationDelivery.update({
           where: { id: delivery.id }, data: {
@@ -245,7 +269,21 @@ export class FinancialNotificationsService {
         title: `SIMULAÇÃO - ${event.name}`,
         message: `EVENTO DE TESTE DO FINANCEIRO: ${event.name}. EMPRESA ${context.companyId}, FILIAL ${context.sourceBranchCode}.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { simulation: true, group: event.group, targetSubjectId: subject.id },
+        metadata: {
+          simulation: true,
+          group: event.group,
+          targetSubjectId: subject.id,
+          customerName: "CLIENTE DE TESTE CEC",
+          saleNumber: "SIMULAÇÃO V-0001",
+          installmentNumber: 1,
+          installmentCount: 3,
+          previousAmount: 100,
+          nextAmount: 125,
+          previousDueDate: "2026-08-10",
+          nextDueDate: "2026-08-20",
+          reversedAmount: 125,
+          reason: "SIMULAÇÃO CONTROLADA",
+        },
         targetSubjectId: subject.id,
         simulationEmailOverride: payload.recipientEmailOverride,
       }),

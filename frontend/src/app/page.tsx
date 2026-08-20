@@ -3,11 +3,27 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ScreenNameCopy from '@/app/components/screen-name-copy';
-import { financeApiFetch } from '@/app/lib/api';
-import { buildFinanceNavigationQueryString, hasCashierOperationAccess, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
+import { financeApiFetch, getJson } from '@/app/lib/api';
+import { buildFinanceApiQueryString, buildFinanceNavigationQueryString, hasCashierOperationAccess, useFinanceRuntimeContext } from '@/app/lib/runtime-context';
 import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const cardClass = 'rounded-3xl border border-slate-200 bg-white shadow-sm';
+const DEFAULT_SALES_SCREEN_ID = 'PRINCIPAL_FINANCEIRO_VENDAS';
+const SALES_SCREEN_IDS = new Set([
+  'PRINCIPAL_FINANCEIRO_VENDAS',
+  'PRINCIPAL_FINANCEIRO_VENDAS_2',
+  'PRINCIPAL_FINANCEIRO_VENDAS_PRODUTOS_SERVICOS',
+]);
+const SALES_MENU_SCREEN_BY_ITEM_ID: Record<string, string> = {
+  vendas: 'PRINCIPAL_FINANCEIRO_VENDAS',
+  'vendas-2': 'PRINCIPAL_FINANCEIRO_VENDAS_2',
+  'vendas-produtos-servicos': 'PRINCIPAL_FINANCEIRO_VENDAS_PRODUTOS_SERVICOS',
+};
+
+function normalizeSalesScreenId(value: unknown) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return SALES_SCREEN_IDS.has(normalized) ? normalized : DEFAULT_SALES_SCREEN_ID;
+}
 
 type MenuItem = {
   id: string;
@@ -103,6 +119,15 @@ const MENU_ITEMS: MenuItem[] = [
     href: '/vendas-2',
     hostPath: '/principal/financeiro/vendas-2',
     description: 'Novo fluxo de vendas com consulta visual e foto dos produtos.',
+    image: '/principal-financeiro/vendas.svg?v=1',
+    adminOnly: true,
+  },
+  {
+    id: 'vendas-produtos-servicos',
+    label: 'Vendas Produtos e Serviços',
+    href: '/vendas-produtos-servicos',
+    hostPath: '/principal/financeiro/vendas-produtos-servicos',
+    description: 'Venda integrada de produtos e serviços.',
     image: '/principal-financeiro/vendas.svg?v=1',
     adminOnly: true,
   },
@@ -219,6 +244,7 @@ export default function FinanceiroHomePage() {
   const financeAccessContextKey = `${runtimeContext.cashierUserId || ''}:${runtimeContext.userRole || ''}`;
   const [hostBaseUrl, setHostBaseUrl] = useState<string | null>(null);
   const [hasFinanceAdmin, setHasFinanceAdmin] = useState(false);
+  const [selectedSalesScreenId, setSelectedSalesScreenId] = useState(DEFAULT_SALES_SCREEN_ID);
 
   useEffect(() => {
     setHostBaseUrl(resolveHostBaseUrl());
@@ -267,6 +293,31 @@ export default function FinanceiroHomePage() {
     return () => controller.abort();
   }, [runtimeContext.sourceTenantId, runtimeContext.sourceBranchCode, financeAccessContextKey]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    setSelectedSalesScreenId(DEFAULT_SALES_SCREEN_ID);
+
+    if (!runtimeContext.sourceTenantId) {
+      return () => controller.abort();
+    }
+
+    void getJson<{ screenId?: string }>(
+      `/companies/sales-screen-selection${buildFinanceApiQueryString(runtimeContext)}`,
+    )
+      .then((payload) => {
+        if (!controller.signal.aborted) {
+          setSelectedSalesScreenId(normalizeSalesScreenId(payload?.screenId));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSelectedSalesScreenId(DEFAULT_SALES_SCREEN_ID);
+        }
+      });
+
+    return () => controller.abort();
+  }, [runtimeContext.sourceTenantId, runtimeContext.sourceBranchCode]);
+
   return (
     <div className="space-y-6">
       {!runtimeContext.embedded ? (
@@ -291,6 +342,8 @@ export default function FinanceiroHomePage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {MENU_ITEMS.filter(
             (item) =>
+              (!SALES_MENU_SCREEN_BY_ITEM_ID[item.id] ||
+                SALES_MENU_SCREEN_BY_ITEM_ID[item.id] === selectedSalesScreenId) &&
               (!item.adminOnly || hasFinanceAdmin) &&
               (!item.cashierOnly || cashierAccess) &&
               (item.id !== 'msinfor' || hasFinanceAdmin) &&

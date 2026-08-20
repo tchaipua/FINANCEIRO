@@ -2,11 +2,32 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import DependencyRecoveryScreen from './dependency-recovery-screen';
+import { API_BASE_URL } from '@/app/lib/api';
 import { withFinanceBasePath } from '@/app/lib/public-path';
 
 const SHOW_DELAY_MS = 180;
 const MIN_VISIBLE_MS = 320;
 const MAX_VISIBLE_MS = 15_000;
+const RECOVERY_MAX_ATTEMPTS = 5;
+
+function isServiceUnavailableMessage(value: unknown) {
+  return /failed to fetch|networkerror|err_connection_refused|bad gateway|service unavailable|temporariamente indispon[ií]vel|internal server error|application error/i.test(String(value || ''));
+}
+
+async function responseMessage(response: Response) {
+  try {
+    const raw = (await response.clone().text()).trim();
+    if (!raw) return `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+    const payload = JSON.parse(raw) as { message?: unknown; error?: unknown };
+    const message = payload?.message ?? payload?.error;
+    return Array.isArray(message)
+      ? message.map(String).join('; ')
+      : String(message || raw).slice(0, 600);
+  } catch {
+    return `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+  }
+}
 
 export default function GlobalProcessingOverlay() {
   const pathname = usePathname();
@@ -16,7 +37,9 @@ export default function GlobalProcessingOverlay() {
   const maximumVisibleTimer = useRef<number | null>(null);
   const visibleSince = useRef(0);
   const visibleRef = useRef(false);
+  const recoveryRef = useRef<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
+  const [recovery, setRecovery] = useState<string | null>(null);
 
   const clearShowTimer = () => {
     if (showTimer.current !== null) {
@@ -83,7 +106,30 @@ export default function GlobalProcessingOverlay() {
       pendingCount.current += 1;
       show();
       try {
-        return await originalFetch(...args);
+        const response = await originalFetch(...args);
+        if (!response.ok && (response.status >= 500 || isServiceUnavailableMessage(await responseMessage(response)))) {
+          const message = await responseMessage(response);
+          recoveryRef.current = message;
+          setRecovery(message);
+          clearShowTimer();
+          clearHideTimer();
+          clearMaximumVisibleTimer();
+          visibleRef.current = true;
+          visibleSince.current = Date.now();
+          setIsVisible(true);
+        }
+        return response;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Não foi possível alcançar o serviço Financeiro.';
+        recoveryRef.current = message;
+        setRecovery(message);
+        clearShowTimer();
+        clearHideTimer();
+        clearMaximumVisibleTimer();
+        visibleRef.current = true;
+        visibleSince.current = Date.now();
+        setIsVisible(true);
+        throw error;
       } finally {
         pendingCount.current -= 1;
         if (pendingCount.current <= 0) hide();
@@ -115,7 +161,28 @@ export default function GlobalProcessingOverlay() {
     };
   }, []);
 
-  useEffect(() => { hide(); }, [pathname]);
+  useEffect(() => {
+    recoveryRef.current = null;
+    setRecovery(null);
+    hide();
+  }, [pathname]);
+
+  if (recovery) {
+    return (
+      <div aria-live="polite" aria-busy="true" className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-950/90">
+        <DependencyRecoveryScreen
+          dependencyName="Financeiro"
+          dependencyUrl={`${API_BASE_URL}/health/ready`}
+          maxAttempts={RECOVERY_MAX_ATTEMPTS}
+          fallbackTitle="O Financeiro continua indisponível"
+          fallbackMessage="O Financeiro tentou restabelecer a conexão automaticamente, mas o serviço ainda não respondeu. Verifique se o serviço está ligado e tente novamente."
+          onAvailable={() => window.location.reload()}
+          onCancel={() => window.location.reload()}
+          cancelLabel="Tentar novamente agora"
+        />
+      </div>
+    );
+  }
 
   if (!isVisible) return null;
 

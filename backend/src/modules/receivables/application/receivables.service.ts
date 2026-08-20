@@ -1526,7 +1526,12 @@ export class ReceivablesService {
     const installment = await this.prisma.receivableInstallment.findFirst({
       where: {
         id: normalizedInstallmentId,
+        branchCode: this.branchCode(),
         canceledAt: null,
+        company: {
+          sourceSystem: normalizedSourceSystem,
+          sourceTenantId: normalizedSourceTenantId,
+        },
         batch: {
           sourceSystem: normalizedSourceSystem,
           sourceTenantId: normalizedSourceTenantId,
@@ -1535,7 +1540,12 @@ export class ReceivablesService {
       include: {
         title: {
           select: {
+            id: true,
             sourceEntityName: true,
+            sourceEntityType: true,
+            sourceEntityId: true,
+            businessKey: true,
+            payerNameSnapshot: true,
           },
         },
       },
@@ -1600,9 +1610,11 @@ export class ReceivablesService {
         },
         title: {
           select: {
+            id: true,
             sourceEntityType: true,
             sourceEntityId: true,
             sourceEntityName: true,
+            payerNameSnapshot: true,
             classLabel: true,
             businessKey: true,
           },
@@ -1619,8 +1631,29 @@ export class ReceivablesService {
     });
 
     const notificationBase = {
+      customerName:
+        updatedInstallment.payerNameSnapshot ||
+        updatedInstallment.title.payerNameSnapshot ||
+        null,
+      payerNameSnapshot: updatedInstallment.payerNameSnapshot || null,
+      sourceEntityType: updatedInstallment.title.sourceEntityType,
+      sourceEntityId: updatedInstallment.title.sourceEntityId,
+      sourceEntityName: updatedInstallment.title.sourceEntityName || updatedInstallment.title.sourceEntityId,
+      businessKey: updatedInstallment.title.businessKey,
+      titleId: updatedInstallment.title.id || updatedInstallment.titleId,
+      receivableTitleId: updatedInstallment.titleId,
       titleName: updatedInstallment.title.sourceEntityName || updatedInstallment.title.sourceEntityId,
+      saleNumber:
+        normalizeText(updatedInstallment.title.sourceEntityType) === "SALE"
+          ? updatedInstallment.title.sourceEntityName || updatedInstallment.title.sourceEntityId
+          : null,
+      installmentId: updatedInstallment.id,
       installmentNumber: updatedInstallment.installmentNumber,
+      installmentCount: updatedInstallment.installmentCount,
+      amount: nextAmount,
+      currentAmount: nextAmount,
+      dueDate: dueDate.toISOString(),
+      currentDueDate: dueDate.toISOString(),
       requestedBy: payload.requestedBy || null,
     };
     if (roundMoney(Number(installment.amount || 0)) !== nextAmount) {
@@ -1628,9 +1661,13 @@ export class ReceivablesService {
         eventType: "RECEIVABLE_INSTALLMENT_AMOUNT_CHANGED",
         eventKey: `RECEIVABLE_INSTALLMENT:${updatedInstallment.id}:AMOUNT:${updatedInstallment.updatedAt.getTime()}`,
         title: "VALOR DE PARCELA DO CONTAS A RECEBER ALTERADO",
-        message: `A PARCELA ${updatedInstallment.installmentNumber} DE ${notificationBase.titleName} FOI ALTERADA DE R$ ${roundMoney(Number(installment.amount || 0)).toFixed(2)} PARA R$ ${nextAmount.toFixed(2)}.`,
+        message: `A PARCELA ${updatedInstallment.installmentNumber} FOI ALTERADA DE R$ ${roundMoney(Number(installment.amount || 0)).toFixed(2)} PARA R$ ${nextAmount.toFixed(2)}.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { ...notificationBase, installmentId: updatedInstallment.id, previousAmount: installment.amount, nextAmount },
+        metadata: {
+          ...notificationBase,
+          previousAmount: roundMoney(Number(installment.amount || 0)),
+          nextAmount,
+        },
       }).catch(() => undefined);
     }
     if (installment.dueDate.getTime() !== dueDate.getTime()) {
@@ -1638,9 +1675,13 @@ export class ReceivablesService {
         eventType: "RECEIVABLE_INSTALLMENT_DUE_DATE_CHANGED",
         eventKey: `RECEIVABLE_INSTALLMENT:${updatedInstallment.id}:DUE_DATE:${updatedInstallment.updatedAt.getTime()}`,
         title: "VENCIMENTO DE PARCELA DO CONTAS A RECEBER ALTERADO",
-        message: `O VENCIMENTO DA PARCELA ${updatedInstallment.installmentNumber} DE ${notificationBase.titleName} FOI ALTERADO.`,
+        message: `O VENCIMENTO DA PARCELA ${updatedInstallment.installmentNumber} FOI ALTERADO.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { ...notificationBase, installmentId: updatedInstallment.id, previousDueDate: installment.dueDate.toISOString(), nextDueDate: dueDate.toISOString() },
+        metadata: {
+          ...notificationBase,
+          previousDueDate: installment.dueDate.toISOString(),
+          nextDueDate: dueDate.toISOString(),
+        },
       }).catch(() => undefined);
     }
 

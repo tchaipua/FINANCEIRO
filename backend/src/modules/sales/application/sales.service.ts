@@ -2974,6 +2974,7 @@ export class SalesService {
       where: {
         id: normalizedSaleId,
         companyId: company.id,
+        branchCode,
         sourceSystem: normalizeText(payload.sourceSystem)!,
         sourceTenantId: normalizeText(payload.sourceTenantId)!,
         canceledAt: null,
@@ -2981,6 +2982,14 @@ export class SalesService {
       include: {
         items: { where: { canceledAt: null }, orderBy: { lineNumber: "asc" } },
         payments: { where: { canceledAt: null } },
+        receivableTitle: {
+          include: {
+            installments: {
+              where: { canceledAt: null },
+              orderBy: [{ installmentNumber: "asc" }],
+            },
+          },
+        },
       },
     });
 
@@ -3432,22 +3441,83 @@ export class SalesService {
       };
     });
 
+    const receivableInstallments = sale.receivableTitle?.installments || [];
+    const saleNotificationMetadata = {
+      sourceEntityType:
+        sale.receivableTitle?.sourceEntityType || sale.sourceEntityType || "SALE",
+      sourceEntityId:
+        sale.receivableTitle?.sourceEntityId || sale.sourceEntityId || sale.id,
+      sourceEntityName:
+        sale.receivableTitle?.sourceEntityName || sale.sourceEntityName || sale.saleNumber,
+      businessKey: sale.receivableTitle?.businessKey || `SALE:${sale.id}`,
+      customerName: sale.customerNameSnapshot,
+      customerNameSnapshot: sale.customerNameSnapshot,
+      payerNameSnapshot: sale.customerNameSnapshot,
+      saleNumber: sale.saleNumber,
+      saleId: sale.id,
+      titleId: sale.receivableTitle?.id || sale.receivableTitleId || null,
+      receivableTitleId: sale.receivableTitleId,
+      titleName: sale.receivableTitle?.description || sale.saleNumber,
+      totalAmount: sale.totalAmount,
+      paidAmount: sale.paidAmount,
+      receivableAmount: sale.receivableAmount,
+      amount: sale.totalAmount,
+      currentAmount: sale.totalAmount,
+      installmentCount: receivableInstallments.length || null,
+      installments: receivableInstallments.map((installment: any) => ({
+        installmentId: installment.id,
+        installmentNumber: installment.installmentNumber,
+        installmentCount: installment.installmentCount,
+        customerName: installment.payerNameSnapshot || sale.customerNameSnapshot,
+        payerNameSnapshot: installment.payerNameSnapshot || sale.customerNameSnapshot,
+        amount: installment.amount,
+        currentAmount: installment.amount,
+        dueDate: installment.dueDate,
+      })),
+      cancellationReason: cancellationNote,
+      cancellationNote,
+      reason: cancellationNote,
+      requestedBy: canceledBy,
+    };
+
     void this.financialNotifications.dispatch({
       eventType: "RECEIVABLE_MOVEMENT_CANCELED",
       eventKey: `RECEIVABLE_MOVEMENT:SALE:${sale.id}:CANCELED`,
       title: "MOVIMENTO DO CONTAS A RECEBER CANCELADO",
       message: `A VENDA ${sale.saleNumber} E SEU MOVIMENTO FINANCEIRO FORAM CANCELADOS. MOTIVO: ${cancellationNote}.`,
       actionUrl: "/principal/notificacoes",
-      metadata: { saleId: sale.id, receivableTitleId: sale.receivableTitleId, cancellationNote, requestedBy: canceledBy },
+      metadata: saleNotificationMetadata,
     }).catch(() => undefined);
     for (const installmentId of result.canceledReceivableInstallmentIds) {
+      const canceledInstallment = receivableInstallments.find(
+        (installment: any) => installment.id === installmentId,
+      );
       void this.financialNotifications.dispatch({
         eventType: "RECEIVABLE_INSTALLMENT_CANCELED",
         eventKey: `RECEIVABLE_INSTALLMENT:${installmentId}:CANCELED`,
         title: "PARCELA DO CONTAS A RECEBER CANCELADA",
         message: `UMA PARCELA DA VENDA ${sale.saleNumber} FOI CANCELADA COM O MOVIMENTO FINANCEIRO.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { saleId: sale.id, installmentId, cancellationNote, requestedBy: canceledBy },
+        metadata: {
+          ...saleNotificationMetadata,
+          installmentId,
+          installmentNumber: canceledInstallment?.installmentNumber || null,
+          installmentCount: canceledInstallment?.installmentCount || receivableInstallments.length || null,
+          amount: canceledInstallment?.amount || null,
+          currentAmount: canceledInstallment?.amount || null,
+          dueDate: canceledInstallment?.dueDate || null,
+          installments: canceledInstallment
+            ? [{
+                installmentId: canceledInstallment.id,
+                installmentNumber: canceledInstallment.installmentNumber,
+                installmentCount: canceledInstallment.installmentCount,
+                customerName: canceledInstallment.payerNameSnapshot || sale.customerNameSnapshot,
+                payerNameSnapshot: canceledInstallment.payerNameSnapshot || sale.customerNameSnapshot,
+                amount: canceledInstallment.amount,
+                dueDate: canceledInstallment.dueDate,
+              }]
+            : saleNotificationMetadata.installments,
+        },
       }).catch(() => undefined);
     }
 

@@ -9,6 +9,7 @@ import {
   ListStockMovementsDto,
   SaveProductDto,
   UpdateProductClassificationDto,
+  UpdateProductTypeDto,
 } from "../application/dto/products.dto";
 
 @ApiTags("Products")
@@ -60,6 +61,17 @@ export class ProductsController {
     @Body() payload: UpdateProductClassificationDto,
   ) {
     return this.productsService.updateClassification(productId, payload);
+  }
+
+  @Patch(":productId/product-type")
+  @ApiOperation({
+    summary: "Atualiza somente o tipo comercial do produto informado",
+  })
+  updateProductType(
+    @Param("productId") productId: string,
+    @Body() payload: UpdateProductTypeDto,
+  ) {
+    return this.productsService.updateProductType(productId, payload);
   }
 
   @Post()

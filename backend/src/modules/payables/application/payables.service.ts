@@ -764,6 +764,7 @@ export class PayablesService {
     const invoiceImport = await this.prisma.payableInvoiceImport.findFirst({
       where: {
         id: normalizedImportId,
+        branchCode: this.currentBranchCode(),
         canceledAt: null,
         company: {
           sourceSystem: normalizedSourceSystem,
@@ -1781,6 +1782,43 @@ export class PayablesService {
       return existing && normalizeText(existing.status) === "PAID" && item.status !== "PAID";
     });
 
+    const supplierName =
+      invoiceImport.supplier?.legalName ||
+      invoiceImport.supplier?.tradeName ||
+      invoiceImport.payableTitle?.supplierNameSnapshot ||
+      null;
+    const payableNotificationBase = {
+      sourceEntityType: "PAYABLE_INVOICE",
+      sourceEntityId: invoiceImport.id,
+      sourceEntityName: invoiceImport.invoiceNumber || invoiceImport.id,
+      businessKey: `PAYABLE:${invoiceImport.id}`,
+      supplierName,
+      invoiceNumber: invoiceImport.invoiceNumber,
+      invoiceSeries: invoiceImport.series,
+      invoiceImportId: invoiceImport.id,
+      titleId: invoiceImport.payableTitle?.id || null,
+      payableTitleId: invoiceImport.payableTitle?.id || null,
+      titleName: invoiceImport.payableTitle?.description || invoiceImport.invoiceNumber || invoiceImport.id,
+      installmentCount: Math.max(invoiceImport.installments.length, normalizedInstallments.length),
+      requestedBy: payload.requestedBy || null,
+    };
+
+    const buildPayableInstallmentMetadata = (
+      installment: any,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      ...payableNotificationBase,
+      installmentId: installment?.id || null,
+      installmentNumber: installment?.installmentNumber || null,
+      installmentCount:
+        installment?.installmentCount || payableNotificationBase.installmentCount,
+      amount: installment?.amount ?? null,
+      currentAmount: installment?.amount ?? null,
+      dueDate: installment?.dueDate || null,
+      currentDueDate: installment?.dueDate || null,
+      ...overrides,
+    });
+
     for (const installment of normalizedInstallments) {
       if (installment.id && !existingById.has(installment.id)) {
         throw new BadRequestException(
@@ -1897,7 +1935,10 @@ export class PayablesService {
         title: "VALOR DE PARCELA DO CONTAS A PAGAR ALTERADO",
         message: `A ${installment.installmentLabel} FOI ALTERADA DE R$ ${roundMoney(Number(previous?.amount || 0)).toFixed(2)} PARA R$ ${installment.amount.toFixed(2)}.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, previousAmount: previous?.amount, nextAmount: installment.amount, requestedBy: payload.requestedBy || null },
+        metadata: buildPayableInstallmentMetadata(installment, {
+          previousAmount: roundMoney(Number(previous?.amount || 0)),
+          nextAmount: installment.amount,
+        }),
       }).catch(() => undefined);
     }
     for (const installment of changedDueDates) {
@@ -1908,7 +1949,10 @@ export class PayablesService {
         title: "VENCIMENTO DE PARCELA DO CONTAS A PAGAR ALTERADO",
         message: `O VENCIMENTO DA ${installment.installmentLabel} FOI ALTERADO.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, previousDueDate: previous?.dueDate.toISOString(), nextDueDate: installment.dueDate.toISOString(), requestedBy: payload.requestedBy || null },
+        metadata: buildPayableInstallmentMetadata(installment, {
+          previousDueDate: previous?.dueDate.toISOString(),
+          nextDueDate: installment.dueDate.toISOString(),
+        }),
       }).catch(() => undefined);
     }
     for (const installment of removedInstallments) {
@@ -1918,7 +1962,10 @@ export class PayablesService {
         title: "PARCELA DO CONTAS A PAGAR CANCELADA",
         message: `A ${installment.installmentLabel} FOI CANCELADA DURANTE A ALTERAÇÃO DA NOTA.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, requestedBy: payload.requestedBy || null },
+        metadata: buildPayableInstallmentMetadata(installment, {
+          cancellationReason: "PARCELA REMOVIDA DURANTE A ALTERAÇÃO DA NOTA",
+          reason: "PARCELA REMOVIDA DURANTE A ALTERAÇÃO DA NOTA",
+        }),
       }).catch(() => undefined);
     }
     for (const installment of reversedSettlements) {
@@ -1928,7 +1975,11 @@ export class PayablesService {
         title: "PAGAMENTO DE PARCELA ESTORNADO",
         message: `O PAGAMENTO DA ${installment.installmentLabel} FOI ESTORNADO.`,
         actionUrl: "/principal/notificacoes",
-        metadata: { invoiceImportId: invoiceImport.id, installmentId: installment.id, requestedBy: payload.requestedBy || null },
+        metadata: buildPayableInstallmentMetadata(installment, {
+          reversedAmount: installment.amount,
+          reversedCount: 1,
+          reason: "PAGAMENTO DA PARCELA REVERTIDO",
+        }),
       }).catch(() => undefined);
     }
 
@@ -1972,13 +2023,53 @@ export class PayablesService {
       },
     });
 
+    const cancellationSupplierName =
+      invoiceImport.supplier?.legalName ||
+      invoiceImport.supplier?.tradeName ||
+      invoiceImport.payableTitle?.supplierNameSnapshot ||
+      null;
+    const cancellationNotificationBase = {
+      sourceEntityType: "PAYABLE_INVOICE",
+      sourceEntityId: invoiceImport.id,
+      sourceEntityName: invoiceImport.invoiceNumber || invoiceImport.id,
+      businessKey: `PAYABLE:${invoiceImport.id}`,
+      supplierName: cancellationSupplierName,
+      invoiceNumber: invoiceImport.invoiceNumber,
+      invoiceSeries: invoiceImport.series,
+      invoiceImportId: invoiceImport.id,
+      titleId: invoiceImport.payableTitle?.id || null,
+      payableTitleId: invoiceImport.payableTitle?.id || null,
+      titleName: invoiceImport.payableTitle?.description || invoiceImport.invoiceNumber || invoiceImport.id,
+      installmentCount: invoiceImport.installments.length,
+      requestedBy: payload.requestedBy || null,
+    };
+
     void this.financialNotifications.dispatch({
       eventType: "PAYABLE_MOVEMENT_CANCELED",
       eventKey: `PAYABLE_MOVEMENT:${invoiceImport.id}:CANCELED`,
       title: "MOVIMENTO DO CONTAS A PAGAR CANCELADO",
       message: `A NOTA ${invoiceImport.invoiceNumber || invoiceImport.id} FOI CANCELADA. MOTIVO: ${cancellationReason}.`,
       actionUrl: "/principal/notificacoes",
-      metadata: { invoiceImportId: invoiceImport.id, cancellationReason, requestedBy: payload.requestedBy || null },
+      metadata: {
+        ...cancellationNotificationBase,
+        totalAmount: invoiceImport.totalInvoiceAmount,
+        amount: invoiceImport.totalInvoiceAmount,
+        currentAmount: invoiceImport.totalInvoiceAmount,
+        cancellationReason,
+        cancellationNote: cancellationReason,
+        reason: cancellationReason,
+        installments: invoiceImport.installments.map((installment: any) =>
+          ({
+            ...cancellationNotificationBase,
+            installmentId: installment.id,
+            installmentNumber: installment.installmentNumber,
+            installmentCount: cancellationNotificationBase.installmentCount,
+            amount: installment.amount,
+            currentAmount: installment.amount,
+            dueDate: installment.dueDate,
+          }),
+        ),
+      },
     }).catch(() => undefined);
 
     return {

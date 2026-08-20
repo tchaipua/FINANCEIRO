@@ -49,12 +49,60 @@ export class CompaniesService {
   ) {}
 
   private readonly salesScreenId = "PRINCIPAL_FINANCEIRO_VENDAS";
+  private readonly defaultSalesScreenId = "PRINCIPAL_FINANCEIRO_VENDAS";
+  private readonly allowedSalesScreenIds = new Set([
+    "PRINCIPAL_FINANCEIRO_VENDAS",
+    "PRINCIPAL_FINANCEIRO_VENDAS_2",
+    "PRINCIPAL_FINANCEIRO_VENDAS_PRODUTOS_SERVICOS",
+  ]);
 
   private assertFinanceAdmin() {
     if (!hasAuthenticatedFinanceScope("FINANCE_ADMIN")) {
       throw new ForbiddenException(
         "A ALTERAÇÃO DE PARÂMETROS EXIGE O ESCOPO FINANCE_ADMIN.",
       );
+    }
+  }
+
+  private normalizeSalesScreenId(value?: string | null) {
+    const normalized = normalizeText(value);
+    if (normalized && this.allowedSalesScreenIds.has(normalized)) {
+      return normalized;
+    }
+    return this.defaultSalesScreenId;
+  }
+
+  async getSalesScreenSelection() {
+    const context = getFinanceContext();
+    const centralTenantId = normalizeText(context?.centralTenantId);
+    const branchCode = Number(context?.sourceBranchCode || context?.branchCode || 0);
+
+    if (!centralTenantId || !Number.isInteger(branchCode) || branchCode < 1) {
+      return {
+        screenId: this.defaultSalesScreenId,
+        source: "LEGACY_FALLBACK",
+        branchCode: Number.isInteger(branchCode) && branchCode >= 1 ? branchCode : 1,
+      };
+    }
+
+    try {
+      const configuration = await this.centralBranchEditor.findConfiguration(
+        centralTenantId,
+        branchCode,
+      );
+      return {
+        screenId: this.normalizeSalesScreenId(
+          configuration.effective.commerce?.defaultSalesScreenId,
+        ),
+        source: "CENTRAL",
+        branchCode,
+      };
+    } catch {
+      return {
+        screenId: this.defaultSalesScreenId,
+        source: "LEGACY_FALLBACK",
+        branchCode,
+      };
     }
   }
 
