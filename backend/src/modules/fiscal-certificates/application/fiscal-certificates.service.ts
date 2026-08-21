@@ -445,7 +445,7 @@ export class FiscalCertificatesService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
-    assertInactivationConfirmation(payload);
+    await assertInactivationConfirmation(payload);
 
     const updated = await this.prisma.fiscalCertificate.update({
       where: { id: certificate.id },

@@ -2605,7 +2605,7 @@ export class BanksService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
-    assertInactivationConfirmation(payload);
+    await assertInactivationConfirmation(payload);
 
     const updatedBank = await this.prisma.bankAccount.update({
       where: { id: bank.id },

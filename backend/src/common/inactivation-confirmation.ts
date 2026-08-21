@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { confirmSourceSystemOperationCredential } from "./source-system-users.client";
 
 type InactivationConfirmationPayload = {
   password?: unknown;
@@ -10,7 +11,7 @@ type InactivationConfirmationPayload = {
  * by the standard inactivation popup. Credential verification remains owned by
  * the source system; the Financeiro API rejects incomplete confirmations.
  */
-export function assertInactivationConfirmation(
+export async function assertInactivationConfirmation(
   payload: InactivationConfirmationPayload,
 ) {
   if (!String(payload?.password ?? "").trim()) {
@@ -20,4 +21,6 @@ export function assertInactivationConfirmation(
   if (!String(payload?.reason ?? "").trim()) {
     throw new BadRequestException("Informe o motivo da inativação.");
   }
+
+  await confirmSourceSystemOperationCredential(String(payload.password));
 }

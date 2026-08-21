@@ -604,7 +604,7 @@ Motivo: separar acesso ao sistema de origem de autorização financeira e impedi
 Decisão:
 
 - Escola e Projeto Inicial não mantêm uma segunda tela de cadastro de usuário do sistema;
-- `PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA` localiza a pessoa por CPF no tenant de origem, permite completar o cadastro e atribui os perfis da origem e do Financeiro;
+- `PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA` localiza a pessoa por CPF no tenant de origem, permite completar dados básicos e endereço completo e atribui os perfis da origem e do Financeiro;
 - o sistema de origem reutiliza ou cria sua pessoa e mantém apenas a projeção técnica necessária ao login e às regras locais; a credencial única é vinculada à Central e a senha não é persistida pelo Financeiro;
 - o Financeiro persiste o sujeito, o perfil e as permissões por empresa/filial, com auditoria append-only e soft delete;
 - o papel `ADMIN` da origem não abre a área MSINFOR: o card e a entrada direta exigem também `FINANCE_ADMIN`; assim, `ADMIN_TOTAL` + `GERENTE_FINANCEIRO` representa o administrador operacional completo sem acesso ao módulo MSINFOR;

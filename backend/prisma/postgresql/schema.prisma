@@ -284,6 +284,7 @@ model FinanceAccessSubject {
   sourceUserId             String
   centralIdentityAccountId String?
   registeredPersonId       String?
+  document                 String?
   displayName              String
   email                    String?
   sourceRole               String?

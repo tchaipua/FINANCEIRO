@@ -287,7 +287,7 @@ export class ProductClassificationsService {
     this.assertFinanceAdmin();
     const scope = await this.resolveCompany(payload.sourceSystem, payload.sourceTenantId);
     const status = this.normalizeStatus(payload.status);
-    if (status === "INACTIVE") assertInactivationConfirmation(payload);
+    if (status === "INACTIVE") await assertInactivationConfirmation(payload);
     if (type === "GROUP") {
       const current = await this.prisma.productGroup.findFirst({ where: { id, companyId: scope.companyId, branchCode: scope.branchCode, canceledAt: null } });
       if (!current) throw new NotFoundException("Grupo não encontrado nesta filial.");

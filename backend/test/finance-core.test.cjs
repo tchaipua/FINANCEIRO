@@ -11,6 +11,19 @@ if (fs.existsSync(testDbPath)) {
 
 fs.copyFileSync(sourceDbPath, testDbPath);
 process.env.DATABASE_URL = "file:../test/finance-core.test.db";
+process.env.SOURCE_SYSTEM_ESCOLA_API_URL = "http://escola.internal:3001/api/v1";
+process.env.SOURCE_SYSTEM_ESCOLA_HMAC_SECRET = "finance-core-callback-secret-with-at-least-32-characters";
+
+const originalFetch = global.fetch;
+global.fetch = async (url) => {
+  if (String(url).endsWith("/integrations/financeiro/system-users/confirm-operation-credential")) {
+    return new Response(
+      JSON.stringify({ authenticated: true, authorizedBy: "CODEX" }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+  throw new Error(`Unexpected HTTP request in finance-core test: ${url}`);
+};
 
 const {
   PrismaService,
@@ -1884,6 +1897,7 @@ async function main() {
 
     console.log("TOTAL 1 TEST PASSING");
   } finally {
+    global.fetch = originalFetch;
     await resetDatabase(prisma);
     await prisma.onModuleDestroy();
     if (fs.existsSync(testDbPath)) {

@@ -7,6 +7,8 @@ import {
 } from "../../../common/finance-access-policy";
 import {
   resolveSourceSystemPerson,
+  updateSourceSystemUserConfirmationPin,
+  updateSourceSystemUserPassword,
   upsertSourceSystemUser,
 } from "../../../common/source-system-users.client";
 import { PrismaService } from "../../../prisma/prisma.service";
@@ -15,6 +17,8 @@ import {
   ResolveFinanceSystemPersonDto,
   SaveFinanceAccessAssignmentDto,
   SynchronizeFinanceAccessSubjectsDto,
+  UpdateFinanceSystemUserPasswordDto,
+  UpdateFinanceSystemUserPinDto,
 } from "./dto/finance-access.dto";
 
 function requiredContext() {
@@ -99,19 +103,28 @@ export class FinanceAccessService {
       email: payload.email,
       login: payload.login,
       password: payload.password,
+      confirmationPin: payload.confirmationPin,
       sourceRole: payload.sourceRole,
       sourceAccessProfile: payload.sourceAccessProfile,
       phone: payload.phone,
       whatsapp: payload.whatsapp,
+      zipCode: payload.zipCode,
+      street: payload.street,
+      number: payload.number,
+      neighborhood: payload.neighborhood,
+      complement: payload.complement,
+      city: payload.city,
+      state: payload.state,
       branchCodes: [context.sourceBranchCode],
     });
-    const confirmedSourcePerson = sourceUser.centralIdentityAccountId || !payload.document
+    const confirmedSourcePerson = sourceUser.centralIdentityAccountId
       ? null
       : await resolveSourceSystemPerson(payload.document);
     const centralIdentityAccountId =
       sourceUser.centralIdentityAccountId?.trim() ||
       confirmedSourcePerson?.centralIdentityAccountId?.trim() ||
       null;
+    const document = payload.document.trim();
     const actor = context.sourceUserId;
     const now = new Date();
 
@@ -132,6 +145,7 @@ export class FinanceAccessService {
           sourceUserId: sourceUser.sourceUserId,
           centralIdentityAccountId,
           registeredPersonId: sourceUser.registeredPersonId?.trim() || null,
+          document,
           displayName: sourceUser.displayName.trim().toUpperCase(),
           email: sourceUser.email?.trim().toUpperCase() || null,
           sourceRole: sourceUser.sourceRole.trim().toUpperCase(),
@@ -145,6 +159,7 @@ export class FinanceAccessService {
         update: {
           centralIdentityAccountId,
           registeredPersonId: sourceUser.registeredPersonId?.trim() || null,
+          document,
           displayName: sourceUser.displayName.trim().toUpperCase(),
           email: sourceUser.email?.trim().toUpperCase() || null,
           sourceRole: sourceUser.sourceRole.trim().toUpperCase(),
@@ -210,6 +225,99 @@ export class FinanceAccessService {
     });
   }
 
+  async updateSystemUserConfirmationPin(
+    subjectId: string,
+    payload: UpdateFinanceSystemUserPinDto,
+  ) {
+    assertFinanceAdmin();
+    const context = requiredContext();
+    const subject = await this.prisma.financeAccessSubject.findFirst({
+      where: {
+        id: subjectId,
+        companyId: context.companyId,
+        sourceSystem: context.sourceSystem,
+        sourceTenantId: context.sourceTenantId,
+        canceledAt: null,
+      },
+    });
+    if (!subject) throw new NotFoundException("USUÁRIO FINANCEIRO NÃO ENCONTRADO.");
+    let sourceBranchCodes: number[] = [];
+    try {
+      const parsed = JSON.parse(subject.sourceBranchCodesJson);
+      sourceBranchCodes = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      sourceBranchCodes = [];
+    }
+    if (!sourceBranchCodes.includes(context.sourceBranchCode)) {
+      throw new ForbiddenException("USUÁRIO SEM VÍNCULO COM A FILIAL AUTENTICADA.");
+    }
+    if (!subject.sourceActive) {
+      throw new BadRequestException("USUÁRIO INATIVO NA ORIGEM NÃO PODE ALTERAR O PIN.");
+    }
+    await updateSourceSystemUserConfirmationPin(
+      subject.sourceUserId,
+      payload.confirmationPin,
+    );
+    await this.prisma.financeAccessAuditEvent.create({
+      data: {
+        companyId: context.companyId,
+        branchCode: context.sourceBranchCode,
+        subjectId: subject.id,
+        action: "SYSTEM_USER_CONFIRMATION_PIN_UPDATED",
+        summary: `PIN DE CONFIRMAÇÃO DE ${subject.displayName} ATUALIZADO.`,
+        metadataJson: JSON.stringify({ sourceSystem: context.sourceSystem }),
+        performedBy: context.sourceUserId,
+        createdBy: context.sourceUserId,
+      },
+    });
+    return { updated: true };
+  }
+
+  async updateSystemUserPassword(
+    subjectId: string,
+    payload: UpdateFinanceSystemUserPasswordDto,
+  ) {
+    assertFinanceAdmin();
+    const context = requiredContext();
+    const subject = await this.prisma.financeAccessSubject.findFirst({
+      where: {
+        id: subjectId,
+        companyId: context.companyId,
+        sourceSystem: context.sourceSystem,
+        sourceTenantId: context.sourceTenantId,
+        canceledAt: null,
+      },
+    });
+    if (!subject) throw new NotFoundException("USUÁRIO FINANCEIRO NÃO ENCONTRADO.");
+    let sourceBranchCodes: number[] = [];
+    try {
+      const parsed = JSON.parse(subject.sourceBranchCodesJson);
+      sourceBranchCodes = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      sourceBranchCodes = [];
+    }
+    if (!sourceBranchCodes.includes(context.sourceBranchCode)) {
+      throw new ForbiddenException("USUÁRIO SEM VÍNCULO COM A FILIAL AUTENTICADA.");
+    }
+    if (!subject.sourceActive) {
+      throw new BadRequestException("USUÁRIO INATIVO NA ORIGEM NÃO PODE ALTERAR A SENHA.");
+    }
+    await updateSourceSystemUserPassword(subject.sourceUserId, payload.password);
+    await this.prisma.financeAccessAuditEvent.create({
+      data: {
+        companyId: context.companyId,
+        branchCode: context.sourceBranchCode,
+        subjectId: subject.id,
+        action: "SYSTEM_USER_PASSWORD_UPDATED",
+        summary: `SENHA DE ACESSO DE ${subject.displayName} REDEFINIDA.`,
+        metadataJson: JSON.stringify({ sourceSystem: context.sourceSystem }),
+        performedBy: context.sourceUserId,
+        createdBy: context.sourceUserId,
+      },
+    });
+    return { updated: true };
+  }
+
   async listSubjects() {
     assertFinanceAdmin();
     const context = requiredContext();
@@ -264,6 +372,7 @@ export class FinanceAccessService {
         const data = {
           centralIdentityAccountId: subject.centralIdentityAccountId?.trim() || null,
           registeredPersonId: subject.registeredPersonId?.trim() || null,
+          document: subject.document?.trim() || null,
           displayName: subject.displayName.trim().toUpperCase(),
           email: subject.email?.trim().toUpperCase() || null,
           sourceRole: subject.sourceRole?.trim().toUpperCase() || null,

@@ -25,6 +25,13 @@ export type SourceSystemPerson = {
   document?: string | null;
   phone?: string | null;
   whatsapp?: string | null;
+  zipCode?: string | null;
+  street?: string | null;
+  number?: string | null;
+  neighborhood?: string | null;
+  complement?: string | null;
+  city?: string | null;
+  state?: string | null;
   roles?: string[];
 };
 
@@ -40,7 +47,12 @@ export type SourceSystemUserResult = {
   active: boolean;
 };
 
-type SourceUserOperation = "resolve" | "upsert";
+type SourceUserOperation =
+  | "resolve"
+  | "upsert"
+  | "confirmation-pin"
+  | "password"
+  | "confirm-operation-credential";
 
 async function requestSourceSystemUsers<T>(
   operation: SourceUserOperation,
@@ -151,4 +163,41 @@ export function resolveSourceSystemPerson(document: string) {
 
 export function upsertSourceSystemUser(payload: Record<string, unknown>) {
   return requestSourceSystemUsers<SourceSystemUserResult>("upsert", payload);
+}
+
+export function updateSourceSystemUserConfirmationPin(
+  sourceUserId: string,
+  confirmationPin: string,
+) {
+  return requestSourceSystemUsers<{ updated: boolean }>("confirmation-pin", {
+    sourceUserId,
+    confirmationPin,
+  });
+}
+
+export function updateSourceSystemUserPassword(
+  sourceUserId: string,
+  password: string,
+) {
+  return requestSourceSystemUsers<{ updated: boolean }>("password", {
+    sourceUserId,
+    password,
+  });
+}
+
+export async function confirmSourceSystemOperationCredential(credential: string) {
+  const confirmation = await requestSourceSystemUsers<{
+    authenticated: true;
+    authorizedBy: string;
+    supervisorName?: string;
+  }>("confirm-operation-credential", { credential });
+  if (
+    confirmation?.authenticated !== true
+    || !String(confirmation.authorizedBy || "").trim()
+  ) {
+    throw new BadGatewayException(
+      "O SISTEMA DE ORIGEM RETORNOU UMA CONFIRMAÇÃO DE CREDENCIAL INVÁLIDA.",
+    );
+  }
+  return confirmation;
 }

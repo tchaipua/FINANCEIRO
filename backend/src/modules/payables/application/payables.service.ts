@@ -1452,7 +1452,7 @@ export class PayablesService {
         "Não é possível inativar este fornecedor enquanto existirem parcelas em aberto. Baixe ou cancele todas as parcelas antes de inativar.",
       );
     }
-    assertInactivationConfirmation(payload);
+    await assertInactivationConfirmation(payload);
     const updated = await this.prisma.supplier.update({
       where: { id: supplier.id },
       data: {

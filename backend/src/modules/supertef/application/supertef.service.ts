@@ -1027,7 +1027,7 @@ export class SuperTefService {
       include: this.checkoutInclude(),
     });
     if (!existing) throw new NotFoundException("CHECKOUT NÃO ENCONTRADO.");
-    assertInactivationConfirmation(payload);
+    await assertInactivationConfirmation(payload);
 
     const duplicatedCode = await this.prisma.superTefCheckout.findFirst({
       where: {

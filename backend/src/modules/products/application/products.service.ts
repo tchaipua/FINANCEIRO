@@ -1574,7 +1574,7 @@ export class ProductsService {
       payload.sourceSystem,
       payload.sourceTenantId,
     );
-    assertInactivationConfirmation(payload);
+    await assertInactivationConfirmation(payload);
 
     const updatedProduct = await this.prisma.product.update({
       where: { id: product.id },

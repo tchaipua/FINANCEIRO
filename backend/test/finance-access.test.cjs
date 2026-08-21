@@ -19,6 +19,10 @@ const {
 } = require("../dist/modules/finance-access/application/finance-access.service.js");
 const {
   resolveSourceSystemPerson,
+  confirmSourceSystemOperationCredential,
+  updateSourceSystemUserConfirmationPin,
+  updateSourceSystemUserPassword,
+  upsertSourceSystemUser,
 } = require("../dist/common/source-system-users.client.js");
 
 async function runAs(context, operation) {
@@ -43,7 +47,12 @@ async function testSourceSystemUserCallback() {
   let call;
   global.fetch = async (url, init) => {
     call = { url: String(url), init };
-    return new Response(JSON.stringify({ found: true, name: "PESSOA TESTE" }), {
+    const responseBody = String(url).endsWith(
+      "/integrations/financeiro/system-users/confirm-operation-credential",
+    )
+      ? { authenticated: true, authorizedBy: "ADMIN-CALLBACK" }
+      : { found: true, name: "PESSOA TESTE" };
+    return new Response(JSON.stringify(responseBody), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -89,6 +98,123 @@ async function testSourceSystemUserCallback() {
     );
     assert.deepEqual(JSON.parse(body.toString("utf8")), {
       document: "52998224725",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT-CALLBACK",
+      sourceBranchCode: 3,
+      requestedBy: "ADMIN-CALLBACK",
+    });
+    await runAs(
+      {
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT-CALLBACK",
+        sourceBranchCode: 3,
+        sourceUserId: "ADMIN-CALLBACK",
+        companyId: "COMPANY-CALLBACK",
+      },
+      () => upsertSourceSystemUser({
+        document: "52998224725",
+        name: "PESSOA TESTE",
+        email: "PESSOA@TESTE.LOCAL",
+        login: "PESSOA.TESTE",
+        password: "SenhaForte123!",
+        confirmationPin: "1234",
+        sourceRole: "ADMIN",
+        sourceAccessProfile: "ADMIN_TOTAL",
+        zipCode: "14020000",
+        street: "RUA TESTE",
+        number: "100",
+        neighborhood: "CENTRO",
+        complement: "SALA 2",
+        city: "RIBEIRAO PRETO",
+        state: "SP",
+        branchCodes: [3],
+      }),
+    );
+    assert.equal(
+      call.url,
+      "http://escola.internal:3001/api/v1/integrations/financeiro/system-users/upsert",
+    );
+    const upsertBody = JSON.parse(Buffer.from(call.init.body).toString("utf8"));
+    assert.deepEqual(
+      {
+        zipCode: upsertBody.zipCode,
+        street: upsertBody.street,
+        number: upsertBody.number,
+        neighborhood: upsertBody.neighborhood,
+        complement: upsertBody.complement,
+        city: upsertBody.city,
+        state: upsertBody.state,
+      },
+      {
+        zipCode: "14020000",
+        street: "RUA TESTE",
+        number: "100",
+        neighborhood: "CENTRO",
+        complement: "SALA 2",
+        city: "RIBEIRAO PRETO",
+        state: "SP",
+      },
+    );
+    await runAs(
+      {
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT-CALLBACK",
+        sourceBranchCode: 3,
+        sourceUserId: "ADMIN-CALLBACK",
+        companyId: "COMPANY-CALLBACK",
+      },
+      () => updateSourceSystemUserConfirmationPin("USER-9", "1234"),
+    );
+    assert.equal(
+      call.url,
+      "http://escola.internal:3001/api/v1/integrations/financeiro/system-users/confirmation-pin",
+    );
+    assert.deepEqual(JSON.parse(Buffer.from(call.init.body).toString("utf8")), {
+      sourceUserId: "USER-9",
+      confirmationPin: "1234",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT-CALLBACK",
+      sourceBranchCode: 3,
+      requestedBy: "ADMIN-CALLBACK",
+    });
+    await runAs(
+      {
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT-CALLBACK",
+        sourceBranchCode: 3,
+        sourceUserId: "ADMIN-CALLBACK",
+        companyId: "COMPANY-CALLBACK",
+      },
+      () => updateSourceSystemUserPassword("USER-9", "NovaSenha123!"),
+    );
+    assert.equal(
+      call.url,
+      "http://escola.internal:3001/api/v1/integrations/financeiro/system-users/password",
+    );
+    assert.deepEqual(JSON.parse(Buffer.from(call.init.body).toString("utf8")), {
+      sourceUserId: "USER-9",
+      password: "NovaSenha123!",
+      sourceSystem: "ESCOLA",
+      sourceTenantId: "TENANT-CALLBACK",
+      sourceBranchCode: 3,
+      requestedBy: "ADMIN-CALLBACK",
+    });
+    await runAs(
+      {
+        sourceSystem: "ESCOLA",
+        sourceTenantId: "TENANT-CALLBACK",
+        sourceBranchCode: 3,
+        sourceUserId: "ADMIN-CALLBACK",
+        companyId: "COMPANY-CALLBACK",
+      },
+      () => confirmSourceSystemOperationCredential("1234"),
+    );
+    assert.equal(
+      call.url,
+      "http://escola.internal:3001/api/v1/integrations/financeiro/system-users/confirm-operation-credential",
+    );
+    assert.deepEqual(JSON.parse(Buffer.from(call.init.body).toString("utf8")), {
+      credential: "1234",
       sourceSystem: "ESCOLA",
       sourceTenantId: "TENANT-CALLBACK",
       sourceBranchCode: 3,
@@ -148,6 +274,7 @@ async function main() {
         subjects: [
           {
             externalUserId: actorId,
+            document: "52998224725",
             displayName: "ADMINISTRADOR TESTE",
             email: "ADMIN@TESTE.LOCAL",
             sourceRole: "ADMIN",
@@ -157,6 +284,7 @@ async function main() {
           {
             externalUserId: `CAIXA_${suffix}`,
             registeredPersonId: `PERSON:CAIXA_${suffix}`,
+            document: "11144477735",
             displayName: "OPERADOR TESTE",
             sourceRole: "SECRETARIA",
             active: true,
@@ -174,6 +302,7 @@ async function main() {
     assert.equal(admin.assignment.profileCode, "ADMIN_FINANCEIRO");
     assert.equal(admin.assignment.permissionCodes.includes("FINANCE_ADMIN"), true);
     assert.equal(cashier.assignment, null);
+    assert.equal(cashier.document, "11144477735");
 
     const foreignCompany = await prisma.company.create({
       data: {
@@ -221,6 +350,7 @@ async function main() {
         subjects: [
           {
             externalUserId: actorId,
+            document: "52998224725",
             displayName: "ADMINISTRADOR TESTE",
             sourceRole: "ADMIN",
             active: true,
@@ -228,6 +358,7 @@ async function main() {
           },
           {
             externalUserId: `CAIXA_${suffix}`,
+            document: "11144477735",
             displayName: "OPERADOR TESTE",
             sourceRole: "SECRETARIA",
             active: true,

@@ -33,6 +33,11 @@ export class SynchronizeFinanceAccessSubjectDto {
   @MaxLength(128)
   registeredPersonId?: string;
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{11}$/, { message: "INFORME UM CPF COM 11 DÍGITOS." })
+  document?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(160)
@@ -89,10 +94,9 @@ export class ResolveFinanceSystemPersonDto {
 }
 
 export class CreateFinanceSystemUserDto {
-  @IsOptional()
   @IsString()
   @Matches(/^\d{11}$/, { message: "INFORME UM CPF COM 11 DÍGITOS." })
-  document?: string;
+  document!: string;
 
   @IsString()
   @MinLength(2)
@@ -113,6 +117,11 @@ export class CreateFinanceSystemUserDto {
   @MinLength(8)
   @MaxLength(200)
   password!: string;
+
+  @IsString()
+  @MinLength(4)
+  @MaxLength(10)
+  confirmationPin!: string;
 
   @IsString()
   @IsIn(["ADMIN", "SECRETARIA", "COORDENACAO"])
@@ -140,4 +149,53 @@ export class CreateFinanceSystemUserDto {
   @IsString()
   @MaxLength(40)
   whatsapp?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{8}$/, { message: "INFORME UM CEP COM 8 DÍGITOS." })
+  zipCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  number?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  neighborhood?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  complement?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{2}$/, { message: "INFORME A UF COM 2 LETRAS." })
+  state?: string;
+}
+
+export class UpdateFinanceSystemUserPinDto {
+  @IsString()
+  @MinLength(4)
+  @MaxLength(10)
+  confirmationPin!: string;
+}
+
+export class UpdateFinanceSystemUserPasswordDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(200)
+  password!: string;
 }

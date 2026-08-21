@@ -31,6 +31,7 @@ type FinanceAssignment = {
 type SystemUser = {
   id: string;
   sourceUserId: string;
+  document: string;
   name: string;
   email: string;
   role: string;
@@ -53,8 +54,17 @@ type NewSystemUserForm = {
   email: string;
   login: string;
   password: string;
+  confirmationPin: string;
+  confirmationPinRepeat: string;
   phone: string;
   whatsapp: string;
+  zipCode: string;
+  street: string;
+  number: string;
+  neighborhood: string;
+  complement: string;
+  city: string;
+  state: string;
   sourceProfileCode: string;
   sourceRole: string;
   financeProfileCode: string;
@@ -70,6 +80,7 @@ type CashOperatorPolicy = {
   updatedAt: string | null;
 };
 type SelectedUserTab = "ACCESS" | "CASH";
+type NewUserTab = 1 | 2 | 3 | 4;
 type FinancialNotificationPreference = {
   code: string;
   group: string;
@@ -85,6 +96,8 @@ type Sort = { key: GridKey | null; direction: "ASC" | "DESC" };
 type Filters = Record<GridKey, string>;
 
 const SCREEN_ID = "PRINCIPAL_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA";
+const ORIENTATION_POPUP_SCREEN_ID =
+  "POPUP_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA_ORIENTACAO";
 const POPUP_SCREEN_ID =
   "POPUP_FINANCEIRO_MSINFOR_USUARIOS_SISTEMA_CONFIGURACOES_USUARIO";
 const NEW_USER_POPUP_SCREEN_ID =
@@ -116,6 +129,12 @@ const GRID_COLUMNS: GridColumnDefinition<SystemUser, GridKey>[] = [
   },
 ];
 const EMPTY_FILTERS: Filters = { name: "", email: "", role: "", status: "" };
+const NEW_USER_TABS: Array<{ id: NewUserTab; label: string }> = [
+  { id: 1, label: "1. DADOS BÁSICOS" },
+  { id: 2, label: "2. ENDEREÇO" },
+  { id: 3, label: "3. ACESSO DO SISTEMA" },
+  { id: 4, label: "4. PERFIS E PERMISSÕES" },
+];
 
 function normalizedText(value: unknown) {
   return String(value || "")
@@ -150,6 +169,11 @@ function displayDate(value: string) {
         dateStyle: "short",
         timeStyle: "short",
       }).format(date);
+}
+function displayCpf(value: string) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length !== 11) return "NÃO INFORMADO";
+  return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
 }
 function readVisibleColumns() {
   const defaults = GRID_COLUMNS.map((column) => column.key);
@@ -286,6 +310,10 @@ export default function FinanceSystemUsersPage() {
   const [closingMode, setClosingMode] = useState<CashClosingMode>("MANUAL");
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyFeedback, setPolicyFeedback] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordRepeat, setPasswordRepeat] = useState("");
+  const [confirmationPin, setConfirmationPin] = useState("");
+  const [confirmationPinRepeat, setConfirmationPinRepeat] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<GridStatusFilterValue>("ACTIVE");
   const [columnFilters, setColumnFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -303,7 +331,10 @@ export default function FinanceSystemUsersPage() {
   );
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [orientationOpen, setOrientationOpen] = useState(true);
+  const [orientationFeedback, setOrientationFeedback] = useState("");
   const [newUserOpen, setNewUserOpen] = useState(false);
+  const [newUserTab, setNewUserTab] = useState<NewUserTab>(1);
   const [newUserFeedback, setNewUserFeedback] = useState("");
   const [resolvingDocument, setResolvingDocument] = useState(false);
   const [savingNewUser, setSavingNewUser] = useState(false);
@@ -313,8 +344,17 @@ export default function FinanceSystemUsersPage() {
     email: "",
     login: "",
     password: "",
+    confirmationPin: "",
+    confirmationPinRepeat: "",
     phone: "",
     whatsapp: "",
+    zipCode: "",
+    street: "",
+    number: "",
+    neighborhood: "",
+    complement: "",
+    city: "",
+    state: "",
     sourceProfileCode: "ADMIN_TOTAL",
     sourceRole: "ADMIN",
     financeProfileCode: "GERENTE_FINANCEIRO",
@@ -337,6 +377,22 @@ export default function FinanceSystemUsersPage() {
     selectedFinanceProfile?.permissionCodes.includes("OPERATE_CASHIER"),
   );
   const isCashierOperator = selectedPermissionCodes.includes("OPERATE_CASHIER");
+  const isPetshopOrigin = runtimeContext.sourceSystem === "PROJETO_INICIAL";
+
+  function openPetshopEmployees() {
+    setOrientationFeedback("");
+    const messageSent = postMessageToTrustedParent({
+      type: "MSINFOR_OPEN_SOURCE_SCREEN",
+      screenId: "PRINCIPAL_PETSHOP_FUNCIONARIOS",
+    });
+    if (!messageSent) {
+      setOrientationFeedback(
+        "NÃO FOI POSSÍVEL ABRIR FUNCIONÁRIOS FORA DO PROJETO INICIAL.",
+      );
+      return;
+    }
+    setOrientationOpen(false);
+  }
 
   useEffect(() => {
     if (!runtimeContext.embedded || window.parent === window) return;
@@ -378,6 +434,7 @@ export default function FinanceSystemUsersPage() {
               .map((user) => ({
                 id: String(user?.id || ""),
                 sourceUserId: String(user?.sourceUserId || ""),
+                document: String(user?.document || ""),
                 name: String(user?.displayName || ""),
                 email: String(user?.email || ""),
                 role: String(user?.sourceRole || ""),
@@ -473,6 +530,10 @@ export default function FinanceSystemUsersPage() {
       )?.closingMode || "MANUAL",
     );
     setPolicyFeedback("");
+    setPassword("");
+    setPasswordRepeat("");
+    setConfirmationPin("");
+    setConfirmationPinRepeat("");
   }, [policies, profiles, selectedUser]);
 
   async function saveCashOperatorPolicy() {
@@ -482,6 +543,34 @@ export default function FinanceSystemUsersPage() {
       !runtimeContext.sourceTenantId
     )
       return;
+    if (confirmationPin || confirmationPinRepeat) {
+      if (confirmationPin.length < 4 || confirmationPin.length > 10) {
+        setPolicyFeedback("O PIN DE CONFIRMAÇÃO DEVE TER ENTRE 4 E 10 CARACTERES.");
+        return;
+      }
+      if (confirmationPin !== confirmationPinRepeat) {
+        setPolicyFeedback("A CONFIRMAÇÃO DO PIN NÃO CONFERE.");
+        return;
+      }
+    }
+    if (password || passwordRepeat) {
+      if (
+        password.length < 8
+        || password.length > 200
+        || !/[A-Z]/.test(password)
+        || !/[a-z]/.test(password)
+        || !/[^A-Za-z0-9\s]/.test(password)
+      ) {
+        setPolicyFeedback(
+          "A NOVA SENHA DEVE TER NO MÍNIMO 8 CARACTERES, COM LETRAS MAIÚSCULAS, MINÚSCULAS E CARACTERE ESPECIAL.",
+        );
+        return;
+      }
+      if (password !== passwordRepeat) {
+        setPolicyFeedback("A CONFIRMAÇÃO DA NOVA SENHA NÃO CONFERE.");
+        return;
+      }
+    }
     try {
       setSavingPolicy(true);
       setPolicyFeedback("");
@@ -532,6 +621,30 @@ export default function FinanceSystemUsersPage() {
           ),
           saved,
         ]);
+      }
+      if (confirmationPin) {
+        await requestJson<{ updated: boolean }>(
+          `/finance-access/system-users/${selectedUser.id}/confirmation-pin`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ confirmationPin }),
+            fallbackMessage: "Não foi possível atualizar o PIN de confirmação.",
+          },
+        );
+        setConfirmationPin("");
+        setConfirmationPinRepeat("");
+      }
+      if (password) {
+        await requestJson<{ updated: boolean }>(
+          `/finance-access/system-users/${selectedUser.id}/password`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ password }),
+            fallbackMessage: "Não foi possível redefinir a senha de acesso.",
+          },
+        );
+        setPassword("");
+        setPasswordRepeat("");
       }
       setPolicyFeedback("CONFIGURAÇÃO SALVA COM SUCESSO.");
     } catch (requestError: unknown) {
@@ -658,14 +771,24 @@ export default function FinanceSystemUsersPage() {
       email: "",
       login: "",
       password: "",
+      confirmationPin: "",
+      confirmationPinRepeat: "",
       phone: "",
       whatsapp: "",
+      zipCode: "",
+      street: "",
+      number: "",
+      neighborhood: "",
+      complement: "",
+      city: "",
+      state: "",
       sourceProfileCode: sourceProfile?.code || "ADMIN_TOTAL",
       sourceRole: sourceProfile?.role || "ADMIN",
       financeProfileCode: financeProfile?.code || "GERENTE_FINANCEIRO",
       financePermissionCodes: [...(financeProfile?.permissionCodes || [])],
     });
     setNewUserFeedback("");
+    setNewUserTab(1);
     setNewUserOpen(true);
   }
 
@@ -698,6 +821,13 @@ export default function FinanceSystemUsersPage() {
         login: String(person.login || current.login || person.email || ""),
         phone: String(person.phone || current.phone),
         whatsapp: String(person.whatsapp || current.whatsapp),
+        zipCode: String(person.zipCode || current.zipCode),
+        street: String(person.street || current.street),
+        number: String(person.number || current.number),
+        neighborhood: String(person.neighborhood || current.neighborhood),
+        complement: String(person.complement || current.complement),
+        city: String(person.city || current.city),
+        state: String(person.state || current.state),
       }));
       setNewUserFeedback(
         `PESSOA LOCALIZADA${Array.isArray(person.roles) && person.roles.length ? `: ${person.roles.join(", ")}` : ""}.`,
@@ -715,6 +845,47 @@ export default function FinanceSystemUsersPage() {
 
   async function createNewSystemUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (newUserForm.document.replace(/\D/g, "").length !== 11) {
+      setNewUserTab(1);
+      setNewUserFeedback("INFORME UM CPF COM 11 DÍGITOS.");
+      return;
+    }
+    if (!newUserForm.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUserForm.email.trim())) {
+      setNewUserTab(1);
+      setNewUserFeedback("INFORME NOME COMPLETO E UM E-MAIL VÁLIDO.");
+      return;
+    }
+    if (!newUserForm.login.trim() || /\s/.test(newUserForm.login)) {
+      setNewUserTab(3);
+      setNewUserFeedback("INFORME UM LOGIN SEM ESPAÇOS.");
+      return;
+    }
+    if (
+      newUserForm.password.length < 8
+      || newUserForm.password.length > 200
+      || !/[A-Z]/.test(newUserForm.password)
+      || !/[a-z]/.test(newUserForm.password)
+      || !/[^A-Za-z0-9\s]/.test(newUserForm.password)
+    ) {
+      setNewUserTab(3);
+      setNewUserFeedback("A SENHA DEVE TER NO MÍNIMO 8 CARACTERES, COM LETRAS MAIÚSCULAS, MINÚSCULAS E CARACTERE ESPECIAL.");
+      return;
+    }
+    if (
+      newUserForm.confirmationPin.length < 4
+      || newUserForm.confirmationPin.length > 10
+      || newUserForm.confirmationPinRepeat.length < 4
+      || newUserForm.confirmationPinRepeat.length > 10
+    ) {
+      setNewUserTab(3);
+      setNewUserFeedback("O PIN DEVE TER ENTRE 4 E 10 CARACTERES.");
+      return;
+    }
+    if (newUserForm.confirmationPin !== newUserForm.confirmationPinRepeat) {
+      setNewUserTab(3);
+      setNewUserFeedback("A CONFIRMAÇÃO DO PIN NÃO CONFERE.");
+      return;
+    }
     try {
       setSavingNewUser(true);
       setNewUserFeedback("");
@@ -726,8 +897,16 @@ export default function FinanceSystemUsersPage() {
           email: newUserForm.email,
           login: newUserForm.login,
           password: newUserForm.password,
+          confirmationPin: newUserForm.confirmationPin,
           phone: newUserForm.phone || undefined,
           whatsapp: newUserForm.whatsapp || undefined,
+          zipCode: newUserForm.zipCode.replace(/\D/g, "") || undefined,
+          street: newUserForm.street || undefined,
+          number: newUserForm.number || undefined,
+          neighborhood: newUserForm.neighborhood || undefined,
+          complement: newUserForm.complement || undefined,
+          city: newUserForm.city || undefined,
+          state: newUserForm.state || undefined,
           sourceRole: newUserForm.sourceRole,
           sourceAccessProfile: newUserForm.sourceProfileCode,
           financeProfileCode: newUserForm.financeProfileCode,
@@ -738,6 +917,7 @@ export default function FinanceSystemUsersPage() {
       const mapped: SystemUser = {
         id: String(created.id || ""),
         sourceUserId: String(created.sourceUserId || ""),
+        document: String(created.document || newUserForm.document || ""),
         name: String(created.displayName || newUserForm.name),
         email: String(created.email || newUserForm.email),
         role: String(created.sourceRole || newUserForm.sourceRole),
@@ -1043,6 +1223,136 @@ export default function FinanceSystemUsersPage() {
           setExportOpen(false);
         }}
       />
+      {orientationOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          onMouseDown={() => setOrientationOpen(false)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="system-user-orientation-title"
+            aria-describedby="system-user-orientation-description"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center gap-4 border-b border-blue-900 bg-[#153a6a] px-5 py-4 text-white">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1">
+                <img
+                  src={normalizeFinanceLogoUrl(runtimeContext.logoUrl)}
+                  alt="LOGOTIPO INSTITUCIONAL"
+                  className="h-full w-full object-contain"
+                  onError={(event) => {
+                    event.currentTarget.onerror = null;
+                    event.currentTarget.src = withFinanceBasePath(
+                      "/logo-msinfor.jpg",
+                    );
+                  }}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-black tracking-[.2em] text-blue-100">
+                  ORIENTAÇÃO DE CADASTRO
+                </div>
+                <h2
+                  id="system-user-orientation-title"
+                  className="text-lg font-black"
+                >
+                  USUÁRIO DO SISTEMA E FUNÇÃO PROFISSIONAL
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrientationOpen(false)}
+                aria-label="FECHAR"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 text-2xl font-black text-white transition hover:bg-red-700"
+              >
+                ×
+              </button>
+            </header>
+            <div className="space-y-4 overflow-y-auto bg-slate-50 p-5">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
+                  O QUE É CADASTRADO NESTA TELA
+                </div>
+                <p
+                  id="system-user-orientation-description"
+                  className="mt-2 text-sm font-bold leading-6 text-slate-700"
+                >
+                  AQUI VOCÊ CADASTRA A IDENTIDADE E A CONTA DE QUEM VAI
+                  ACESSAR E OPERAR O SISTEMA: CPF, NOME, CONTATOS, ENDEREÇO,
+                  LOGIN, SENHA, PIN, PERFIS, FILIAIS E PERMISSÕES.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <div className="text-[10px] font-black tracking-[.16em] text-amber-700">
+                  {isPetshopOrigin
+                    ? "ONDE INFORMAR A FUNÇÃO PROFISSIONAL"
+                    : runtimeContext.sourceSystem === "ESCOLA"
+                      ? "COMO FUNCIONA NA ESCOLA"
+                      : "ONDE INFORMAR A ATUAÇÃO DA PESSOA"}
+                </div>
+                {isPetshopOrigin ? (
+                  <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
+                    O QUE A PESSOA FAZ NO PETSHOP — CARGO, DEPARTAMENTO,
+                    ADMISSÃO, COMISSÃO E SERVIÇOS — DEVE SER INFORMADO EM
+                    FUNCIONÁRIOS. USE O MESMO CPF PARA VINCULAR OS DOIS
+                    CADASTROS.
+                  </p>
+                ) : runtimeContext.sourceSystem === "ESCOLA" ? (
+                  <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
+                    NA ESCOLA, ADMIN, SECRETARIA E COORDENAÇÃO SÃO PERFIS DE
+                    ACESSO DEFINIDOS AQUI. PROFESSORES, ALUNOS E RESPONSÁVEIS
+                    CONTINUAM EM SEUS CADASTROS ESPECÍFICOS.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm font-bold leading-6 text-slate-700">
+                    DADOS PROFISSIONAIS, ACADÊMICOS OU OPERACIONAIS DA PESSOA
+                    DEVEM SER INFORMADOS NO CADASTRO ESPECÍFICO DO SISTEMA DE
+                    ORIGEM.
+                  </p>
+                )}
+              </div>
+              {orientationFeedback ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-black text-red-700">
+                  {orientationFeedback}
+                </div>
+              ) : null}
+            </div>
+            <footer className="flex flex-col gap-3 border-t border-slate-200 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-[9px] font-black tracking-wide text-slate-400">
+                  AUDITORIA VISUAL · ORIGEM E CONTEXTO AUTENTICADOS
+                </div>
+                <ScreenNameCopy
+                  screenId={ORIENTATION_POPUP_SCREEN_ID}
+                  compact
+                  originText="Sistema Financeiro - orientação sobre usuários do sistema."
+                  auditText="Orientação exibida conforme o sistema de origem autenticado."
+                />
+              </div>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                {isPetshopOrigin ? (
+                  <button
+                    type="button"
+                    onClick={openPetshopEmployees}
+                    className="rounded-xl border-2 border-blue-700 bg-white px-4 py-3 text-xs font-black text-blue-700 transition hover:bg-blue-50"
+                  >
+                    CADASTRAR FUNCIONÁRIO
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setOrientationOpen(false)}
+                  className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-black text-white transition hover:bg-blue-800"
+                >
+                  ENTENDI
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      ) : null}
       {newUserOpen ? (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4"
@@ -1080,134 +1390,278 @@ export default function FinanceSystemUsersPage() {
                 onClick={() => setNewUserOpen(false)}
                 disabled={savingNewUser}
                 aria-label="FECHAR"
-                className="rounded-lg px-2 py-1 text-2xl leading-none disabled:opacity-50"
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 px-2 py-1 text-2xl font-black leading-none text-white transition hover:bg-red-700 disabled:opacity-50"
               >
                 ×
               </button>
             </header>
+            <div
+              className="grid grid-cols-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-5 sm:grid-cols-4"
+              role="tablist"
+              aria-label="Etapas do cadastro do usuário do sistema"
+            >
+              {NEW_USER_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={newUserTab === tab.id}
+                  onClick={() => setNewUserTab(tab.id)}
+                  className={`border-b-2 px-3 py-3 text-[10px] font-black tracking-[.1em] transition ${newUserTab === tab.id ? "border-blue-700 text-blue-700" : "border-transparent text-slate-400 hover:border-slate-300 hover:text-slate-700"}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
             <form
               id="finance-system-user-form"
               onSubmit={createNewSystemUser}
               className="space-y-5 overflow-y-auto p-6"
             >
-              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
-                <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
-                  LOCALIZAR PESSOA EXISTENTE
+              {newUserTab === 1 ? (
+                <div className="space-y-5">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+                    <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
+                      LOCALIZAR PESSOA EXISTENTE PELO CPF
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        required
+                        value={newUserForm.document}
+                        onChange={(event) =>
+                          setNewUserForm((current) => ({
+                            ...current,
+                            document: event.target.value.replace(/\D/g, "").slice(0, 11),
+                          }))
+                        }
+                        placeholder="CPF"
+                        inputMode="numeric"
+                        className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void resolveNewUserDocument()}
+                        disabled={resolvingDocument}
+                        className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-black text-white disabled:opacity-60"
+                      >
+                        {resolvingDocument ? "CONSULTANDO..." : "BUSCAR CPF"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">NOME COMPLETO</span>
+                      <input
+                        required
+                        value={newUserForm.name}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, name: event.target.value.toUpperCase() }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">E-MAIL</span>
+                      <input
+                        required
+                        type="email"
+                        value={newUserForm.email}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, email: event.target.value.toUpperCase() }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">TELEFONE</span>
+                      <input
+                        value={newUserForm.phone}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, phone: event.target.value.toUpperCase() }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">WHATSAPP</span>
+                      <input
+                        value={newUserForm.whatsapp}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, whatsapp: event.target.value.toUpperCase() }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <input
-                    value={newUserForm.document}
-                    onChange={(event) =>
-                      setNewUserForm((current) => ({
-                        ...current,
-                        document: event.target.value.replace(/\D/g, "").slice(0, 11),
-                      }))
-                    }
-                    placeholder="CPF"
-                    inputMode="numeric"
-                    className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void resolveNewUserDocument()}
-                    disabled={resolvingDocument}
-                    className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-black text-white disabled:opacity-60"
-                  >
-                    {resolvingDocument ? "CONSULTANDO..." : "BUSCAR CPF"}
-                  </button>
+              ) : null}
+
+              {newUserTab === 2 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
+                    ENDEREÇO COMPLETO
+                  </div>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    {([
+                      { key: "zipCode", label: "CEP", maxLength: 9, inputMode: "numeric" },
+                      { key: "street", label: "LOGRADOURO", maxLength: 200 },
+                      { key: "number", label: "NÚMERO", maxLength: 30 },
+                      { key: "neighborhood", label: "BAIRRO", maxLength: 120 },
+                      { key: "complement", label: "COMPLEMENTO", maxLength: 120 },
+                      { key: "city", label: "CIDADE", maxLength: 120 },
+                      { key: "state", label: "ESTADO (UF)", maxLength: 2 },
+                    ] as const).map((field) => (
+                      <label key={field.key} className="block">
+                        <span className="text-[10px] font-black text-slate-500">{field.label}</span>
+                        <input
+                          value={newUserForm[field.key]}
+                          maxLength={field.maxLength}
+                          inputMode={"inputMode" in field ? field.inputMode : undefined}
+                          onChange={(event) => {
+                            const nextValue = field.key === "zipCode"
+                              ? event.target.value.replace(/\D/g, "").slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2")
+                              : event.target.value.toUpperCase();
+                            setNewUserForm((current) => ({ ...current, [field.key]: nextValue }));
+                          }}
+                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                        />
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {[
-                  ["name", "NOME COMPLETO", "text"],
-                  ["email", "E-MAIL", "email"],
-                  ["login", "LOGIN", "text"],
-                  ["password", "SENHA INICIAL", "password"],
-                  ["phone", "TELEFONE", "text"],
-                  ["whatsapp", "WHATSAPP", "text"],
-                ].map(([key, label, type]) => (
-                  <label key={key} className="block">
-                    <span className="text-[10px] font-black text-slate-500">{label}</span>
-                    <input
-                      type={type}
-                      required={["name", "email", "login", "password"].includes(key)}
-                      value={newUserForm[key as keyof NewSystemUserForm] as string}
-                      onChange={(event) =>
-                        setNewUserForm((current) => ({
-                          ...current,
-                          [key]: key === "password" ? event.target.value : event.target.value.toUpperCase(),
-                        }))
-                      }
-                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
-                    />
-                  </label>
-                ))}
-                <label className="block">
-                  <span className="text-[10px] font-black text-slate-500">PERFIL NO SISTEMA</span>
-                  <select
-                    value={newUserForm.sourceProfileCode}
-                    onChange={(event) => {
-                      const sourceProfile = sourceProfiles.find((profile) => profile.code === event.target.value);
-                      setNewUserForm((current) => ({
-                        ...current,
-                        sourceProfileCode: event.target.value,
-                        sourceRole: sourceProfile?.role || current.sourceRole,
-                      }));
-                    }}
-                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold"
-                  >
-                    {sourceProfiles.map((profile) => (
-                      <option key={profile.code} value={profile.code}>{profile.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-[10px] font-black text-slate-500">PERFIL FINANCEIRO</span>
-                  <select
-                    value={newUserForm.financeProfileCode}
-                    onChange={(event) => {
-                      const financeProfile = profiles.find((profile) => profile.code === event.target.value);
-                      setNewUserForm((current) => ({
-                        ...current,
-                        financeProfileCode: event.target.value,
-                        financePermissionCodes: [...(financeProfile?.permissionCodes || [])],
-                      }));
-                    }}
-                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold"
-                  >
-                    {profiles.map((profile) => (
-                      <option key={profile.code} value={profile.code}>{profile.name}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              ) : null}
+
+              {newUserTab === 3 ? (
+                <div className="space-y-5">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-xs font-semibold leading-5 text-slate-600">
+                    ESTES DADOS SÃO EXCLUSIVOS PARA O ACESSO AO SISTEMA. A SENHA E O PIN NUNCA SÃO EXIBIDOS DEPOIS DO SALVAMENTO.
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block sm:col-span-2">
+                      <span className="text-[10px] font-black text-slate-500">LOGIN</span>
+                      <input
+                        required
+                        value={newUserForm.login}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, login: event.target.value.toUpperCase() }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">SENHA INICIAL</span>
+                      <input
+                        required
+                        type="password"
+                        minLength={8}
+                        maxLength={200}
+                        autoComplete="new-password"
+                        value={newUserForm.password}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, password: event.target.value }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">PIN DE CONFIRMAÇÃO</span>
+                      <input
+                        required
+                        type="password"
+                        minLength={4}
+                        maxLength={10}
+                        value={newUserForm.confirmationPin}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, confirmationPin: event.target.value }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">CONFIRMAR PIN</span>
+                      <input
+                        required
+                        type="password"
+                        minLength={4}
+                        maxLength={10}
+                        value={newUserForm.confirmationPinRepeat}
+                        onChange={(event) => setNewUserForm((current) => ({ ...current, confirmationPinRepeat: event.target.value }))}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
+              {newUserTab === 4 ? (
+                <div className="space-y-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">PERFIL NO SISTEMA DE ORIGEM</span>
+                      <select
+                        value={newUserForm.sourceProfileCode}
+                        onChange={(event) => {
+                          const sourceProfile = sourceProfiles.find((profile) => profile.code === event.target.value);
+                          setNewUserForm((current) => ({
+                            ...current,
+                            sourceProfileCode: event.target.value,
+                            sourceRole: sourceProfile?.role || current.sourceRole,
+                          }));
+                        }}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold"
+                      >
+                        {sourceProfiles.map((profile) => <option key={profile.code} value={profile.code}>{profile.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-black text-slate-500">PERFIL FINANCEIRO</span>
+                      <select
+                        value={newUserForm.financeProfileCode}
+                        onChange={(event) => {
+                          const financeProfile = profiles.find((profile) => profile.code === event.target.value);
+                          setNewUserForm((current) => ({
+                            ...current,
+                            financeProfileCode: event.target.value,
+                            financePermissionCodes: [...(financeProfile?.permissionCodes || [])],
+                          }));
+                        }}
+                        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold"
+                      >
+                        {profiles.map((profile) => <option key={profile.code} value={profile.code}>{profile.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold leading-5 text-slate-600">
+                    O CPF É CONSULTADO SOMENTE NA EMPRESA AUTENTICADA. AO SALVAR, O FINANCEIRO GRAVA OS PERFIS E SINCRONIZA A IDENTIDADE E A PROJEÇÃO TÉCNICA NO SISTEMA DE ORIGEM.
+                  </div>
+                </div>
+              ) : null}
+
               {newUserFeedback ? (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-black text-blue-800">
                   {newUserFeedback}
                 </div>
               ) : null}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold leading-5 text-slate-600">
-                O CPF É CONSULTADO SOMENTE NA EMPRESA AUTENTICADA. AO SALVAR, O FINANCEIRO GRAVA OS PERFIS E SINCRONIZA A IDENTIDADE E A PROJEÇÃO TÉCNICA NO SISTEMA DE ORIGEM.
-              </div>
             </form>
-            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3">
-              <div>
-                <div className="text-[9px] font-black tracking-wide text-slate-400">AUDITORIA VISUAL · TENANT E FILIAL AUTENTICADOS</div>
-                <ScreenNameCopy
-                  screenId={NEW_USER_POPUP_SCREEN_ID}
-                  compact
-                  originText="Sistema Financeiro - cadastro central de usuário do sistema."
-                  auditText="CPF, identidade Central, projeção de origem, perfis e filiais auditados."
-                />
-              </div>
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 sm:flex-nowrap">
               <button
                 type="submit"
                 form="finance-system-user-form"
                 disabled={savingNewUser}
-                className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-black text-white disabled:opacity-60"
+                className="order-first flex h-12 min-w-[136px] shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-emerald-500 bg-white px-5 py-2.5 text-xs font-black uppercase tracking-[.08em] text-emerald-700 shadow-sm transition hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:cursor-wait disabled:opacity-60"
               >
-                {savingNewUser ? "SALVANDO..." : "SALVAR USUÁRIO"}
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 3h11l3 3v15H5z" />
+                  <path d="M8 3v6h8V3" />
+                  <path d="M8 21v-7h8v7" />
+                </svg>
+                {savingNewUser ? "SALVANDO..." : "SALVAR"}
               </button>
+              <div className="ml-auto flex min-w-0 flex-1 justify-end text-right">
+                <ScreenNameCopy
+                  screenId={NEW_USER_POPUP_SCREEN_ID}
+                  compact
+                  screenIdRightAligned
+                  className="min-w-0 max-w-full justify-end whitespace-nowrap"
+                  originText="Sistema Financeiro - cadastro central de usuário do sistema."
+                  auditText="CPF, identidade Central, projeção de origem, perfis e filiais auditados."
+                />
+              </div>
             </footer>
           </section>
         </div>
@@ -1452,7 +1906,18 @@ export default function FinanceSystemUsersPage() {
             <div className="min-h-0 overflow-y-auto p-6">
               {selectedUserTab === "ACCESS" ? (
                 <div className="space-y-5">
-                  <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+                  <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+                    <div>
+                      <div className="text-[10px] font-black text-slate-400">
+                        CPF DO VÍNCULO
+                      </div>
+                      <div className="mt-1 truncate text-xs font-black text-slate-700">
+                        {displayCpf(selectedUser.document)}
+                      </div>
+                      <div className="mt-1 text-[9px] font-bold text-slate-400">
+                        SOMENTE LEITURA
+                      </div>
+                    </div>
                     <div>
                       <div className="text-[10px] font-black text-slate-400">
                         E-MAIL
@@ -1469,6 +1934,51 @@ export default function FinanceSystemUsersPage() {
                         {normalizedText(selectedUser.role)}
                       </div>
                     </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
+                      SENHA DE ACESSO
+                    </div>
+                    <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">
+                      A SENHA ATUAL NUNCA É EXIBIDA. DEIXE OS CAMPOS VAZIOS
+                      PARA MANTÊ-LA OU INFORME UMA NOVA SENHA PARA REDEFINI-LA.
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-[10px] font-black text-slate-500">
+                          NOVA SENHA
+                        </span>
+                        <input
+                          type="password"
+                          minLength={8}
+                          maxLength={200}
+                          autoComplete="new-password"
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                          disabled={!selectedUser.sourceActive}
+                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[10px] font-black text-slate-500">
+                          CONFIRMAR NOVA SENHA
+                        </span>
+                        <input
+                          type="password"
+                          minLength={8}
+                          maxLength={200}
+                          autoComplete="new-password"
+                          value={passwordRepeat}
+                          onChange={(event) => setPasswordRepeat(event.target.value)}
+                          disabled={!selectedUser.sourceActive}
+                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100"
+                        />
+                      </label>
+                    </div>
+                    <p className="mt-3 text-[10px] font-bold text-slate-400">
+                      MÍNIMO DE 8 CARACTERES, COM LETRAS MAIÚSCULAS,
+                      MINÚSCULAS E CARACTERE ESPECIAL.
+                    </p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-5">
                     <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
@@ -1554,6 +2064,40 @@ export default function FinanceSystemUsersPage() {
                           </span>
                         </label>
                         ))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-5">
+                    <div className="text-[10px] font-black tracking-[.16em] text-blue-700">
+                      PIN DE CONFIRMAÇÃO
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">
+                      ENTRE 4 E 10 CARACTERES. A SENHA DE LOGIN CONTINUA VÁLIDA NAS CONFIRMAÇÕES.
+                    </p>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="text-[10px] font-black text-slate-500">NOVO PIN</span>
+                        <input
+                          type="password"
+                          minLength={4}
+                          maxLength={10}
+                          value={confirmationPin}
+                          onChange={(event) => setConfirmationPin(event.target.value)}
+                          disabled={!selectedUser.sourceActive}
+                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[10px] font-black text-slate-500">CONFIRMAR PIN</span>
+                        <input
+                          type="password"
+                          minLength={4}
+                          maxLength={10}
+                          value={confirmationPinRepeat}
+                          onChange={(event) => setConfirmationPinRepeat(event.target.value)}
+                          disabled={!selectedUser.sourceActive}
+                          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 disabled:bg-slate-100"
+                        />
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1686,7 +2230,7 @@ export default function FinanceSystemUsersPage() {
                   compact
                   className="min-w-0 justify-end"
                   originText="Sistema Financeiro - configurações individuais de usuário."
-                  auditText="Configuração auditada do perfil, permissões e fechamento de caixa."
+                  auditText="CPF de vínculo, redefinições de credenciais, perfil, permissões e fechamento de caixa auditados."
                 />
               </div>
             </footer>

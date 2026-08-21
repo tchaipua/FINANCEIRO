@@ -6,6 +6,8 @@ import {
   ResolveFinanceSystemPersonDto,
   SaveFinanceAccessAssignmentDto,
   SynchronizeFinanceAccessSubjectsDto,
+  UpdateFinanceSystemUserPasswordDto,
+  UpdateFinanceSystemUserPinDto,
 } from "../application/dto/finance-access.dto";
 
 @ApiTags("Finance Access")
@@ -35,6 +37,30 @@ export class FinanceAccessController {
   @ApiOperation({ summary: "Cria ou vincula um usuário do sistema pelo Financeiro" })
   createSystemUser(@Body() payload: CreateFinanceSystemUserDto) {
     return this.financeAccessService.createSystemUser(payload);
+  }
+
+  @Patch("system-users/:subjectId/confirmation-pin")
+  @ApiOperation({ summary: "Atualiza o PIN de confirmação do usuário na origem" })
+  updateSystemUserConfirmationPin(
+    @Param("subjectId") subjectId: string,
+    @Body() payload: UpdateFinanceSystemUserPinDto,
+  ) {
+    return this.financeAccessService.updateSystemUserConfirmationPin(
+      subjectId,
+      payload,
+    );
+  }
+
+  @Patch("system-users/:subjectId/password")
+  @ApiOperation({ summary: "Redefine a senha de acesso do usuário na origem" })
+  updateSystemUserPassword(
+    @Param("subjectId") subjectId: string,
+    @Body() payload: UpdateFinanceSystemUserPasswordDto,
+  ) {
+    return this.financeAccessService.updateSystemUserPassword(
+      subjectId,
+      payload,
+    );
   }
 
   @Get("subjects")

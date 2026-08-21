@@ -1171,12 +1171,15 @@ O pacote portátil usa `format=MSINFOR_REPORT_PACKAGE` e `schemaVersion=1`. Ele 
 - `GET /finance-access/profiles`: catálogo de perfis e permissões financeiras;
 - `GET /finance-access/source-profiles`: catálogo de perfis administrativos aceitos pelo sistema de origem;
 - `GET /finance-access/subjects`: usuários projetados da origem e atribuição da filial autenticada;
-- `POST /finance-access/system-users/resolve-person`: consulta o CPF no tenant/filial autenticados do sistema de origem;
-- `POST /finance-access/system-users`: cria ou vincula o usuário do sistema na origem, provisiona sua identidade e grava o perfil financeiro na mesma operação;
+- `POST /finance-access/system-users/resolve-person`: consulta o CPF no tenant/filial autenticados do sistema de origem e devolve também o endereço existente da pessoa;
+- `POST /finance-access/system-users`: cria ou vincula o usuário do sistema na origem, envia telefone, WhatsApp e endereço completo para a pessoa mestre, provisiona sua identidade e grava o perfil financeiro na mesma operação;
+- `PATCH /finance-access/system-users/:subjectId/password`: redefine administrativamente a senha na identidade Central por callback autenticado; a senha atual nunca é retornada ou persistida pelo Financeiro;
+- `PATCH /finance-access/system-users/:subjectId/confirmation-pin`: redefine o PIN de confirmação por callback autenticado, sem retornar o valor anterior;
+- a projeção `FinanceAccessSubject` conserva o CPF como referência visual somente leitura e usa `sourceUserId`/`registeredPersonId` como vínculo técnico durável com a pessoa da origem;
 - `POST /finance-access/subjects/synchronize`: sincronização idempotente feita somente pelo backend da origem;
 - `PATCH /finance-access/subjects/:subjectId/assignment`: grava perfil, permissões e situação por filial.
 
-As rotas exigem `FINANCE_ADMIN`. As chamadas de retorno à Escola ou ao Projeto Inicial são assinadas com o escopo exclusivo `SYSTEM_USERS_WRITE`; CPF, tenant, filial e ator são validados nos dois lados. A senha é transportada somente no corpo backend a backend até a identidade Central, nunca é gravada ou auditada no Financeiro. A primeira sincronização inicializa o ator administrativo como `ADMIN_FINANCEIRO`; depois disso, o RBAC persistido no Financeiro passa a ser a segunda camada obrigatória de autorização.
+As rotas exigem `FINANCE_ADMIN`. As chamadas de retorno à Escola ou ao Projeto Inicial são assinadas com o escopo exclusivo `SYSTEM_USERS_WRITE`; CPF, tenant, filial e ator são validados nos dois lados. `zipCode`, `street`, `number`, `neighborhood`, `complement`, `city` e `state` são persistidos somente na pessoa mestre da origem. A senha é transportada somente no corpo backend a backend até a identidade Central, nunca é gravada ou auditada no Financeiro. A primeira sincronização inicializa o ator administrativo como `ADMIN_FINANCEIRO`; depois disso, o RBAC persistido no Financeiro passa a ser a segunda camada obrigatória de autorização.
 
 O portal consulta `GET /finance-access/profiles` para exibir a área MSINFOR. Um `ADMIN` da origem com perfil `GERENTE_FINANCEIRO` não recebe `FINANCE_ADMIN`, não vê o card e tem a entrada direta negada.
 
